@@ -18,6 +18,7 @@ The output is a PowerShell script that:
 -   Creates a scheduled task action using `powershell.exe`
 -   Sets the working directory to this repository
 -   Runs `python -m assistant.src.run_clarity_cycle`
+-   Writes the latest cycle report to `reports/clarity-cycle.md`
 -   Registers a daily trigger at the requested time
 
 Inspect the printed script before running it. Registering the task is a local
@@ -40,8 +41,15 @@ python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai
 ```
 
 The scheduled cycle reads approved mailbox metadata, updates local Clarity
-memory, writes the local brief, and prints review and pending-action sections.
-It does not send, move, archive, or delete email.
+memory, writes the local brief, writes `reports/clarity-cycle.md`, and prints
+review and pending-action sections. It does not send, move, archive, or delete
+email.
+
+To choose a different cycle report path:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30 --cycle-report reports/morning-clarity-cycle.md
+```
 
 Email moves remain separate. They require a locally approved action and an
 explicit `python -m assistant.src.execute_email_moves --graph --execute` run.

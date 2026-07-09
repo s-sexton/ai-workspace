@@ -25,6 +25,7 @@ def build_windows_task_scheduler_script(
     use_sample_graph: bool = False,
     memory_path: Path | str | None = None,
     brief_path: Path | str | None = None,
+    cycle_report_path: Path | str | None = None,
 ) -> str:
     """Return PowerShell commands that register one local scheduled task."""
 
@@ -43,6 +44,7 @@ def build_windows_task_scheduler_script(
         use_sample_graph=use_sample_graph,
         memory_path=memory_path,
         brief_path=brief_path,
+        cycle_report_path=cycle_report_path,
     )
     scheduled_argument = (
         "-NoProfile -ExecutionPolicy Bypass -Command "
@@ -86,6 +88,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             use_sample_graph=args.sample_graph,
             memory_path=args.memory,
             brief_path=args.brief,
+            cycle_report_path=args.cycle_report,
         ),
         end="",
     )
@@ -99,6 +102,7 @@ def _cycle_command(
     use_sample_graph: bool,
     memory_path: Path | str | None,
     brief_path: Path | str | None,
+    cycle_report_path: Path | str | None,
 ) -> str:
     parts = ["python", "-m", "assistant.src.run_clarity_cycle"]
     if mailbox:
@@ -113,6 +117,8 @@ def _cycle_command(
         parts.extend(("--memory", _ps_single_quote(str(memory_path))))
     if brief_path is not None:
         parts.extend(("--brief", _ps_single_quote(str(brief_path))))
+    if cycle_report_path is not None:
+        parts.extend(("--cycle-report", _ps_single_quote(str(cycle_report_path))))
     return " ".join(parts)
 
 
@@ -149,6 +155,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--memory", default=None)
     parser.add_argument("--brief", default=None)
+    parser.add_argument("--cycle-report", default="reports/clarity-cycle.md")
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")

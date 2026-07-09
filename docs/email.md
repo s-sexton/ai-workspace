@@ -251,7 +251,8 @@ python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --gr
 ```
 
 The cycle performs a read-only refresh and prints safe review and pending-action
-sections. It does not create the scheduled task itself.
+sections. It also writes `reports/clarity-cycle.md` by default. It does not
+create the scheduled task itself.
 
 To print PowerShell commands for registering that daily task with Windows Task
 Scheduler:

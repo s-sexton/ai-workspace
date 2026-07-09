@@ -13,7 +13,11 @@ from assistant.src.run_email_review import (
     run_email_review,
 )
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
+from common.configuration import find_workspace_root
 from common.email import EmailTransport
+
+
+DEFAULT_CYCLE_REPORT_PATH = Path("reports") / "clarity-cycle.md"
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,7 @@ class ClarityCycleResult:
     noise_count: int
     trash_count: int
     proposed_action_count: int
+    cycle_report_path: Path
     review_answer: str
     pending_answer: str
 
@@ -39,6 +44,7 @@ def run_clarity_cycle(
     limit: int = 25,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     brief_path: Path | str | None = None,
+    cycle_report_path: Path | str = DEFAULT_CYCLE_REPORT_PATH,
     transport: EmailTransport | None = None,
     use_sample_graph: bool = False,
 ) -> ClarityCycleResult:
@@ -65,6 +71,19 @@ def run_clarity_cycle(
         memory_path=review_result.memory_path,
         limit=limit,
     )
+    resolved_cycle_report_path = _write_cycle_report(
+        root=root,
+        output_path=cycle_report_path,
+        mailbox=review_result.mailbox,
+        message_count=review_result.message_count,
+        review_count=review_result.review_count,
+        noise_count=review_result.noise_count,
+        trash_count=review_result.trash_count,
+        proposed_action_count=review_result.proposed_action_count,
+        brief_path=review_result.brief_path,
+        review_answer=review_answer,
+        pending_answer=pending_answer,
+    )
     return ClarityCycleResult(
         memory_path=review_result.memory_path,
         brief_path=review_result.brief_path,
@@ -74,6 +93,7 @@ def run_clarity_cycle(
         noise_count=review_result.noise_count,
         trash_count=review_result.trash_count,
         proposed_action_count=review_result.proposed_action_count,
+        cycle_report_path=resolved_cycle_report_path,
         review_answer=review_answer,
         pending_answer=pending_answer,
     )
@@ -93,6 +113,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         limit=args.limit,
         memory_path=args.memory,
         brief_path=args.brief,
+        cycle_report_path=args.cycle_report,
         transport=transport,
         use_sample_graph=args.sample_graph,
     )
@@ -105,6 +126,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Trash: {result.trash_count}")
     print(f"Proposed actions: {result.proposed_action_count}")
     print(f"Brief: {result.brief_path}")
+    print(f"Cycle report: {result.cycle_report_path}")
     print()
     print(result.review_answer)
     print()
@@ -147,10 +169,59 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help="Local brief output path.",
     )
+    parser.add_argument(
+        "--cycle-report",
+        default=str(DEFAULT_CYCLE_REPORT_PATH),
+        help="Local cycle report output path.",
+    )
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
     return args
+
+
+def _write_cycle_report(
+    *,
+    root: Path | str | None,
+    output_path: Path | str,
+    mailbox: str,
+    message_count: int,
+    review_count: int,
+    noise_count: int,
+    trash_count: int,
+    proposed_action_count: int,
+    brief_path: Path,
+    review_answer: str,
+    pending_answer: str,
+) -> Path:
+    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    resolved_output_path = _resolve_path(workspace_root, Path(output_path))
+    report = "\n".join(
+        (
+            "# Clarity Cycle",
+            "",
+            f"Mailbox: {mailbox}",
+            f"Read: {message_count}",
+            f"Review: {review_count}",
+            f"Noise: {noise_count}",
+            f"Trash: {trash_count}",
+            f"Proposed actions: {proposed_action_count}",
+            f"Brief: {brief_path}",
+            "",
+            review_answer,
+            "",
+            pending_answer,
+        )
+    ).rstrip() + "\n"
+    resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_output_path.write_text(report, encoding="utf-8")
+    return resolved_output_path
+
+
+def _resolve_path(workspace_root: Path, path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return workspace_root / path
 
 
 if __name__ == "__main__":

@@ -10,12 +10,14 @@ def test_run_clarity_cycle_refreshes_email_and_returns_answers(tmp_path):
     _write_config(tmp_path)
     memory_path = tmp_path / "logs" / "memory.duckdb"
     brief_path = tmp_path / "reports" / "brief.md"
+    cycle_report_path = tmp_path / "reports" / "cycle.md"
 
     result = run_clarity_cycle(
         root=tmp_path,
         mailbox="inbox@example.invalid",
         memory_path=memory_path,
         brief_path=brief_path,
+        cycle_report_path=cycle_report_path,
         transport=StaticEmailTransport(
             (
                 {
@@ -43,6 +45,11 @@ def test_run_clarity_cycle_refreshes_email_and_returns_answers(tmp_path):
     assert "Please review this [review]" in result.review_answer
     assert "# Pending Actions" in result.pending_answer
     assert result.brief_path == brief_path
+    assert result.cycle_report_path == cycle_report_path
+    report = cycle_report_path.read_text(encoding="utf-8")
+    assert "# Clarity Cycle" in report
+    assert "Mailbox: inbox@example.invalid" in report
+    assert "Please review this [review]" in report
 
 
 def test_main_prints_safe_cycle_summary(tmp_path, monkeypatch, capsys):
@@ -55,6 +62,8 @@ def test_main_prints_safe_cycle_summary(tmp_path, monkeypatch, capsys):
             str(tmp_path / "logs" / "memory.duckdb"),
             "--brief",
             str(tmp_path / "reports" / "brief.md"),
+            "--cycle-report",
+            str(tmp_path / "reports" / "cycle.md"),
         ]
     )
 
@@ -63,8 +72,11 @@ def test_main_prints_safe_cycle_summary(tmp_path, monkeypatch, capsys):
     assert "Mailbox: inbox@example.invalid" in output
     assert "Read: 2" in output
     assert "Proposed actions: 2" in output
+    assert "Cycle report:" in output
     assert "# Items Marked For Review" in output
     assert "# Pending Actions" in output
+    cycle_report = (tmp_path / "reports" / "cycle.md").read_text(encoding="utf-8")
+    assert "# Clarity Cycle" in cycle_report
 
 
 def test_main_can_use_graph_read_transport(tmp_path, monkeypatch, capsys):
@@ -97,6 +109,8 @@ def test_main_can_use_graph_read_transport(tmp_path, monkeypatch, capsys):
             str(tmp_path / "logs" / "memory.duckdb"),
             "--brief",
             str(tmp_path / "reports" / "brief.md"),
+            "--cycle-report",
+            str(tmp_path / "reports" / "cycle.md"),
         ]
     )
 

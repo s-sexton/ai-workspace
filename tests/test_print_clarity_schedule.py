@@ -17,6 +17,7 @@ def test_build_windows_task_scheduler_script_uses_workspace_root(tmp_path):
         use_graph=True,
         memory_path="logs/clarity-memory.duckdb",
         brief_path="reports/clarity-brief.md",
+        cycle_report_path="reports/clarity-cycle.md",
     )
 
     assert "New-ScheduledTaskAction" in script
@@ -29,6 +30,7 @@ def test_build_windows_task_scheduler_script_uses_workspace_root(tmp_path):
     assert "--graph" in script
     assert "--memory 'logs/clarity-memory.duckdb'" in script
     assert "--brief 'reports/clarity-brief.md'" in script
+    assert "--cycle-report 'reports/clarity-cycle.md'" in script
 
 
 def test_build_windows_task_scheduler_script_escapes_single_quotes(tmp_path):
@@ -71,6 +73,7 @@ def test_main_prints_schedule_script(tmp_path, monkeypatch, capsys):
     assert '-At "08:15"' in output
     assert "--mailbox 'clarity@sendthisfile.ai'" in output
     assert "--sample-graph" in output
+    assert "--cycle-report 'reports/clarity-cycle.md'" in output
 
 
 def test_main_rejects_graph_bearer_without_graph():
