@@ -89,19 +89,36 @@ the first Jira report milestone:
 -   `assistant.jira.sortOrder`: non-empty string
 -   `assistant.jira.reportFields`: non-empty list of strings
 -   `assistant.email.approvedMailboxes`: non-empty list of mailbox objects with
-    `address` and `accessMode`
+    `address` and `accessMode`; optional `allowedSenders` may restrict a
+    mailbox to specific senders
 -   `assistant.email.defaultMailbox`: non-empty string listed in
     `approvedMailboxes`
+-   `assistant.email.folderNamespace`: single folder name for assistant-managed
+    move destinations
 -   `assistant.email.folderPolicy`: non-empty object mapping classification
-    labels to proposed folder destinations; must include `review` and `noise`
+    labels to proposed folder destinations; must include `review`, `noise`, and
+    `trash`
 -   `assistant.email.maxMessages`: positive integer
 
 Email `accessMode` must be either `read` or `read_write`. Current email
 workflows only read fake metadata; `read_write` is reserved for future approved
 mailbox actions.
 
-Email folder policy is used only to record proposed local actions. The current
+Email folder policy is used only to record proposed local actions. Non-trash
+destinations must live under `assistant.email.folderNamespace`, such as
+`Clarity/Review`. The trash destination must be `Deleted Items`. The current
 workflow does not move messages.
+
+Folder destinations are interpreted inside the source mailbox being reviewed.
+For example, moving a message from `scott.sexton@sendthisfile.com` to
+`Clarity/Review` means the `Clarity/Review` folder in that mailbox.
+
+For the shared `clarity@sendthisfile.ai` mailbox, configure `allowedSenders`
+with `scott.sexton@sendthisfile.com` and `sesexton@gmail.com`. Unauthorized
+senders are classified as `trash` before content-based rules are applied.
+Restricted mailbox messages must also pass authentication checks: DMARC must
+pass, and either SPF or DKIM must pass. Messages with missing or failing
+authentication metadata are classified as `trash`.
 
 Missing `config/.env` is allowed. Missing Jira credentials are allowed until a
 caller asks for required Jira credentials.

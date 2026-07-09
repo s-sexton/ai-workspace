@@ -51,6 +51,8 @@ Current components:
     memory.
 -   `assistant.src.update_task`: updates delegated task status in local Clarity
     memory.
+-   `assistant.src.update_action`: updates local approval status for proposed
+    assistant actions.
 -   `assistant.src.generate_brief`: generates a local Markdown brief from
     Clarity memory.
 -   `assistant.src.run_email_review`: runs the first local read-only email
@@ -103,6 +105,9 @@ python -m assistant.src.ask_memory review-items
 python -m assistant.src.ask_memory noise-items
 python -m assistant.src.ask_memory feedback
 python -m assistant.src.ask_memory actions
+python -m assistant.src.ask_memory pending-actions
+python -m assistant.src.ask_memory approved-actions
+python -m assistant.src.ask_memory email-move-plan
 python -m assistant.src.ask_memory open-tasks
 ```
 
@@ -126,6 +131,35 @@ python -m assistant.src.update_task TASK_ID in_progress --next-step "Draft the r
 python -m assistant.src.update_task TASK_ID completed
 ```
 
+To approve or reject a proposed local action:
+
+``` powershell
+python -m assistant.src.update_action ACTION_ID approved
+python -m assistant.src.update_action ACTION_ID rejected
+```
+
+Approved local actions can be reviewed with:
+
+``` powershell
+python -m assistant.src.ask_memory approved-actions
+```
+
+Approved email move proposals can be previewed without execution with:
+
+``` powershell
+python -m assistant.src.ask_memory email-move-plan
+```
+
+To dry-run approved email moves and record a local audit action:
+
+``` powershell
+python -m assistant.src.execute_email_moves
+```
+
+Dry-run move planning re-checks current configuration. The source mailbox must
+be approved with `read_write` access, and the destination folder must still be in
+`assistant.email.folderPolicy`.
+
 To generate a local brief from memory:
 
 ``` powershell
@@ -142,8 +176,22 @@ This uses fake mailbox data. It does not connect to Exchange, Gmail, or any live
 mailbox, and it does not send, move, archive, or delete email. The mailbox must
 be listed in `config/config.json` under `assistant.email.approvedMailboxes` with
 `read` or `read_write` access. The workflow records proposed review/noise folder
-actions from `assistant.email.folderPolicy`, but those proposals do not move
-messages.
+actions from `assistant.email.folderPolicy`, and non-trash targets must be under
+the configured `assistant.email.folderNamespace`, but those proposals do not
+move messages. Proposed folder moves are scoped to the mailbox being reviewed,
+so `Clarity/Review` means that folder inside the source mailbox. Proposed
+actions that require approval can be reviewed with:
+
+``` powershell
+python -m assistant.src.ask_memory pending-actions
+```
+
+To test the shared Clarity mailbox path with local Microsoft Graph-shaped sample
+messages:
+
+``` powershell
+python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --sample-graph
+```
 
 To read from Jira Cloud instead, configure `config/.env` with
 `JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`, then pass `--live`:

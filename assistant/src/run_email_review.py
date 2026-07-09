@@ -14,6 +14,8 @@ from common.configuration import ConfigurationError, load_workspace_config
 from common.email import (
     EmailClient,
     EmailMessage,
+    EmailTransport,
+    StaticGraphEmailTransport,
     StaticEmailTransport,
     classify_email_message,
     propose_email_folder_action,
@@ -41,6 +43,52 @@ SAMPLE_EMAIL_MESSAGES: tuple[Mapping[str, object], ...] = (
 )
 
 
+SAMPLE_GRAPH_EMAIL_MESSAGES: Mapping[str, tuple[Mapping[str, object], ...]] = {
+    "clarity@sendthisfile.ai": (
+        {
+            "id": "sample-graph-allowed-1",
+            "subject": "Please review my Clarity note",
+            "from": {
+                "emailAddress": {
+                    "address": "scott.sexton@sendthisfile.com",
+                }
+            },
+            "receivedDateTime": "2026-07-09T15:30:00Z",
+            "bodyPreview": "This is a safe local Graph-shaped sample.",
+            "internetMessageHeaders": [
+                {
+                    "name": "Authentication-Results",
+                    "value": (
+                        "mx.example; spf=pass smtp.mailfrom=sendthisfile.com; "
+                        "dkim=pass header.d=sendthisfile.com; dmarc=pass"
+                    ),
+                },
+            ],
+        },
+        {
+            "id": "sample-graph-spoof-1",
+            "subject": "Spoofed Clarity command",
+            "from": {
+                "emailAddress": {
+                    "address": "scott.sexton@sendthisfile.com",
+                }
+            },
+            "receivedDateTime": "2026-07-09T15:31:00Z",
+            "bodyPreview": "This sample fails email authentication.",
+            "internetMessageHeaders": [
+                {
+                    "name": "Authentication-Results",
+                    "value": (
+                        "mx.example; spf=fail smtp.mailfrom=example.invalid; "
+                        "dkim=fail header.d=example.invalid; dmarc=fail"
+                    ),
+                },
+            ],
+        },
+    )
+}
+
+
 @dataclass(frozen=True)
 class EmailReviewResult:
     """Safe result details for a local email review run."""
@@ -52,6 +100,7 @@ class EmailReviewResult:
     message_count: int
     review_count: int
     noise_count: int
+    trash_count: int
     proposed_action_count: int
 
 
@@ -62,7 +111,8 @@ def run_email_review(
     limit: int = 25,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     brief_output_path: Path | str | None = None,
-    transport: StaticEmailTransport | None = None,
+    transport: EmailTransport | None = None,
+    use_sample_graph: bool = False,
 ) -> EmailReviewResult:
     """Read fake email metadata, write memory, and generate a local brief."""
 
@@ -80,14 +130,24 @@ def run_email_review(
     effective_limit = min(limit, email_settings.max_messages)
 
     resolved_memory_path = _resolve_path(workspace_root, Path(memory_path))
-    client = EmailClient(transport=transport or StaticEmailTransport(SAMPLE_EMAIL_MESSAGES))
+    client = EmailClient(
+        transport=transport
+        or (
+            StaticGraphEmailTransport(SAMPLE_GRAPH_EMAIL_MESSAGES)
+            if use_sample_graph
+            else StaticEmailTransport(SAMPLE_EMAIL_MESSAGES)
+        )
+    )
     read_result = client.list_messages(mailbox=requested_mailbox, limit=effective_limit)
 
-    run_id, review_count, noise_count, proposed_action_count = _record_email_memory(
-        memory_path=resolved_memory_path,
-        mailbox=requested_mailbox,
-        messages=read_result.messages,
-        folder_policy=email_settings.folder_policy,
+    run_id, review_count, noise_count, trash_count, proposed_action_count = (
+        _record_email_memory(
+            memory_path=resolved_memory_path,
+            mailbox=requested_mailbox,
+            messages=read_result.messages,
+            allowed_senders=email_settings.allowed_senders_for(requested_mailbox),
+            folder_policy=email_settings.folder_policy,
+        )
     )
     brief_path = generate_memory_brief(
         root=workspace_root,
@@ -102,6 +162,7 @@ def run_email_review(
         message_count=len(read_result.messages),
         review_count=review_count,
         noise_count=noise_count,
+        trash_count=trash_count,
         proposed_action_count=proposed_action_count,
     )
 
@@ -115,10 +176,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         limit=args.limit,
         memory_path=args.memory,
         brief_output_path=args.brief,
+        use_sample_graph=args.sample_graph,
     )
     print(f"Read {result.message_count} email message(s) from {result.mailbox}")
     print(f"Review: {result.review_count}")
     print(f"Noise: {result.noise_count}")
+    print(f"Trash: {result.trash_count}")
     print(f"Proposed actions: {result.proposed_action_count}")
     print(f"Wrote brief {result.brief_path}")
 
@@ -128,11 +191,13 @@ def _record_email_memory(
     memory_path: Path,
     mailbox: str,
     messages: tuple[EmailMessage, ...],
+    allowed_senders: tuple[str, ...],
     folder_policy: Mapping[str, str],
-) -> tuple[str, int, int, int]:
+) -> tuple[str, int, int, int, int]:
     memory_path.parent.mkdir(parents=True, exist_ok=True)
     review_count = 0
     noise_count = 0
+    trash_count = 0
     proposed_action_count = 0
     store = DuckDbMemoryStore(memory_path)
     try:
@@ -145,11 +210,16 @@ def _record_email_memory(
             access_mode="read",
         )
         for message in messages:
-            classification = classify_email_message(message)
+            classification = classify_email_message(
+                message,
+                allowed_senders=allowed_senders,
+            )
             if classification.label == "review":
                 review_count += 1
             elif classification.label == "noise":
                 noise_count += 1
+            elif classification.label == "trash":
+                trash_count += 1
             item = store.record_item_seen(
                 source_id=source.source_id,
                 external_id=message.message_id,
@@ -172,6 +242,7 @@ def _record_email_memory(
                 item_id=item.item_id,
                 action_type=proposal.action_type,
                 approval_status="required",
+                action_target=proposal.target_folder,
                 result=(
                     f"Proposed moving message metadata for {message.message_id} "
                     f"to {proposal.target_folder}. {proposal.reason}"
@@ -189,7 +260,7 @@ def _record_email_memory(
             status="completed",
             summary=f"Reviewed {len(messages)} email message(s) from {mailbox}.",
         )
-        return run.run_id, review_count, noise_count, proposed_action_count
+        return run.run_id, review_count, noise_count, trash_count, proposed_action_count
     finally:
         store.close()
 
@@ -200,6 +271,10 @@ def _message_hash(message: EmailMessage) -> str:
             message.message_id,
             message.subject,
             message.sender or "",
+            message.return_path or "",
+            message.spf or "",
+            message.dkim or "",
+            message.dmarc or "",
             message.received_at or "",
             message.preview or "",
         )
@@ -223,6 +298,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Approved mailbox label to read from fake local transport.",
     )
     parser.add_argument("--limit", type=int, default=25)
+    parser.add_argument(
+        "--sample-graph",
+        action="store_true",
+        help="Use local Microsoft Graph-shaped sample messages; no network calls.",
+    )
     parser.add_argument(
         "--memory",
         default=str(DEFAULT_MEMORY_PATH),

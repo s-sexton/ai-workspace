@@ -8,8 +8,9 @@ The current email milestone is intentionally local and read-only:
 -   Require the mailbox to be listed in local approved mailbox config
 -   Normalize message metadata
 -   Apply deterministic placeholder classifications
+-   Apply mailbox sender allow-list and authentication rules before content rules
 -   Store metadata, hashes, and classifications in local Clarity memory
--   Propose review/noise folder destinations from local policy
+-   Propose review/noise/trash folder destinations from local policy
 -   Generate the local Clarity brief
 -   Surface both review and noise classifications for inspection
 
@@ -23,15 +24,27 @@ Folder moves are recorded only as proposed local actions that require approval.
 `common.email` owns the reusable email metadata boundary:
 
 -   `EmailClient`
+-   `EmailMoveClient`
 -   `EmailTransport`
+-   `EmailMoveTransport`
 -   `EmailMessage`
 -   `EmailFolderProposal`
+-   `EmailMoveRequest`
+-   `EmailMoveResult`
 -   `StaticEmailTransport`
+-   `StaticEmailMoveTransport`
+-   `StaticGraphEmailTransport`
 -   `classify_email_message`
+-   `graph_message_to_email_payload`
 -   `propose_email_folder_action`
 
 Assistant workflows consume normalized `EmailMessage` objects. They should not
 parse provider-specific payloads directly.
+
+`EmailMoveClient` is the small write-side boundary for moving one message inside
+one mailbox. The current workflow only uses fake local move transports and keeps
+the command-line `--execute` path fail-closed until live Graph writes are
+explicitly designed and approved.
 
 ## Approved Mailboxes
 
@@ -47,14 +60,24 @@ Approved mailbox scope is configured in `config/config.json`:
           "accessMode": "read_write"
         },
         {
+          "address": "clarity@sendthisfile.ai",
+          "accessMode": "read_write",
+          "allowedSenders": [
+            "scott.sexton@sendthisfile.com",
+            "sesexton@gmail.com"
+          ]
+        },
+        {
           "address": "legal@example.invalid",
           "accessMode": "read"
         }
       ],
       "defaultMailbox": "inbox@example.invalid",
+      "folderNamespace": "Clarity",
       "folderPolicy": {
         "review": "Clarity/Review",
-        "noise": "Clarity/Noise"
+        "noise": "Clarity/Noise",
+        "trash": "Deleted Items"
       },
       "maxMessages": 25
     }
@@ -70,6 +93,48 @@ means a future approved design may allow scoped write actions such as moving
 messages into approved review folders. The current implementation only reads
 fake metadata regardless of access mode.
 
+`allowedSenders` restricts a mailbox to messages from specific senders. For
+`clarity@sendthisfile.ai`, Clarity should ignore anything not sent by
+`scott.sexton@sendthisfile.com` or `sesexton@gmail.com`.
+
+Restricted mailbox messages must also pass authentication checks. The current
+local rule requires:
+
+-   DMARC: `pass`
+-   SPF or DKIM: `pass`
+
+Transports may provide normalized `spf`, `dkim`, and `dmarc` values directly,
+or provide raw `Authentication-Results` header text as `authentication_results`.
+The local email boundary parses only SPF, DKIM, and DMARC status values from
+that header. Explicit normalized values take precedence over parsed header
+values.
+
+Microsoft Graph message metadata should be converted with
+`graph_message_to_email_payload()` before it reaches assistant workflows. That
+helper maps:
+
+-   `id` to message ID
+-   `subject` to subject
+-   `from.emailAddress.address` or `sender.emailAddress.address` to sender
+-   `receivedDateTime` to received timestamp
+-   `bodyPreview` to preview
+-   `categories` to categories
+-   `internetMessageHeaders` entries named `Return-Path` and
+    `Authentication-Results` to authentication metadata
+
+`StaticGraphEmailTransport` is a fake local transport for tests and dry runs
+with Graph-shaped payloads. It does not call Microsoft Graph.
+
+The local email review workflow can exercise that transport with:
+
+``` powershell
+python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --sample-graph
+```
+
+If the sender is not allowed, authentication metadata is missing, or
+authentication fails, the local workflow classifies the message as `trash` and
+records a proposed move to the trash folder.
+
 ## Folder Policy
 
 `assistant.email.folderPolicy` maps classification labels to proposed mailbox
@@ -77,9 +142,71 @@ folders. The current required labels are:
 
 -   `review`
 -   `noise`
+-   `trash`
+
+Folder targets are intentionally constrained. All assistant-managed non-trash
+destinations must be children of `assistant.email.folderNamespace`, for example
+`Clarity/Review` and `Clarity/Noise`. Trash is treated as a system folder and
+must be configured as `Deleted Items`.
+
+Folder moves are scoped to the mailbox being reviewed. If Clarity reviews
+`scott.sexton@sendthisfile.com`, then an approved move to `Clarity/Review`
+means the `Clarity/Review` folder inside the `scott.sexton@sendthisfile.com`
+mailbox. If Clarity reviews `clarity@sendthisfile.ai`, the same folder name
+refers to that mailbox's folder tree.
 
 The local review workflow records one proposed folder action per message. Those
-actions are audit records only. They do not move messages.
+actions are audit records only. They do not move messages. Proposed folder
+destinations are stored as structured action targets so future execution logic
+can use the recorded target without parsing human-readable text. The action
+queue also includes the email item ID, which maps to the provider message ID in
+future live Graph workflows.
+
+Pending proposed actions can be reviewed with:
+
+``` powershell
+python -m assistant.src.ask_memory pending-actions
+```
+
+Local approval status can be updated with:
+
+``` powershell
+python -m assistant.src.update_action ACTION_ID approved
+python -m assistant.src.update_action ACTION_ID rejected
+```
+
+Approving a proposed action only updates local memory. It does not execute a
+mailbox move.
+
+Approved local actions can be reviewed separately with:
+
+``` powershell
+python -m assistant.src.ask_memory approved-actions
+```
+
+Approved email move proposals can be previewed without execution with:
+
+``` powershell
+python -m assistant.src.ask_memory email-move-plan
+```
+
+The move plan is read-only. It lists the source mailbox, provider message ID,
+and destination folder for approved local proposals.
+
+Approved email moves can be dry-run with:
+
+``` powershell
+python -m assistant.src.execute_email_moves
+```
+
+The dry run records a local audit action but does not call Graph or move
+mailbox items. The reserved `--execute` flag currently fails closed until live
+write behavior is explicitly designed and approved. Before a move can appear in
+the executable dry-run section, the approved action must still be attached to an
+`email_message` from an `email` source, the source mailbox must still be
+configured with `read_write` access, and the target folder must still be present
+in the current folder policy. Approved local actions that no longer meet those
+rules are listed as blocked moves.
 
 ## Memory Rules
 
@@ -89,10 +216,12 @@ Email memory stores:
 -   Message ID
 -   Subject
 -   Sender
+-   Return path when available
+-   SPF/DKIM/DMARC result metadata when available
 -   Received timestamp
 -   Content hash
 -   Classification label and reason
--   Proposed folder action and destination
+-   Proposed folder action and structured destination target
 
 Email memory does not store raw message bodies by default.
 

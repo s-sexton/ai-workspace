@@ -68,13 +68,22 @@ def test_email_settings_are_validated_and_typed(tmp_path):
           "assistant": {
             "email": {
               "approvedMailboxes": [
-                {"address": "inbox@example.invalid", "accessMode": "read_write"},
+                {
+                  "address": "inbox@example.invalid",
+                  "accessMode": "read_write",
+                  "allowedSenders": [
+                    "scott.sexton@sendthisfile.com",
+                    "sesexton@gmail.com"
+                  ]
+                },
                 {"address": "legal@example.invalid", "accessMode": "read"}
               ],
               "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
               "folderPolicy": {
                 "review": "Clarity/Review",
-                "noise": "Clarity/Noise"
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
               },
               "maxMessages": 50
             }
@@ -94,8 +103,15 @@ def test_email_settings_are_validated_and_typed(tmp_path):
     assert email_settings.access_mode_for("inbox@example.invalid") == "read_write"
     assert email_settings.access_mode_for("legal@example.invalid") == "read"
     assert email_settings.access_mode_for("missing@example.invalid") is None
+    assert email_settings.allowed_senders_for("inbox@example.invalid") == (
+        "scott.sexton@sendthisfile.com",
+        "sesexton@gmail.com",
+    )
+    assert email_settings.allowed_senders_for("legal@example.invalid") == ()
+    assert email_settings.folder_namespace == "Clarity"
     assert email_settings.folder_for_label("review") == "Clarity/Review"
     assert email_settings.folder_for_label("noise") == "Clarity/Noise"
+    assert email_settings.folder_for_label("trash") == "Deleted Items"
     assert email_settings.folder_for_label("unknown") is None
     assert email_settings.default_mailbox == "inbox@example.invalid"
     assert email_settings.max_messages == 50
@@ -113,9 +129,11 @@ def test_email_default_mailbox_must_be_approved(tmp_path):
                 {"address": "legal@example.invalid", "accessMode": "read"}
               ],
               "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
               "folderPolicy": {
                 "review": "Clarity/Review",
-                "noise": "Clarity/Noise"
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
               },
               "maxMessages": 50
             }
@@ -145,9 +163,11 @@ def test_email_mailbox_access_mode_must_be_valid(tmp_path):
                 {"address": "inbox@example.invalid", "accessMode": "admin"}
               ],
               "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
               "folderPolicy": {
                 "review": "Clarity/Review",
-                "noise": "Clarity/Noise"
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
               },
               "maxMessages": 50
             }
@@ -165,6 +185,44 @@ def test_email_mailbox_access_mode_must_be_valid(tmp_path):
     assert "accessMode" in str(exc_info.value)
 
 
+def test_email_allowed_senders_must_be_strings(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {
+                  "address": "clarity@sendthisfile.ai",
+                  "accessMode": "read",
+                  "allowedSenders": ["scott.sexton@sendthisfile.com", 123]
+                }
+              ],
+              "defaultMailbox": "clarity@sendthisfile.ai",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "allowedSenders" in str(exc_info.value)
+
+
 def test_email_folder_policy_must_include_required_labels(tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
@@ -177,6 +235,7 @@ def test_email_folder_policy_must_include_required_labels(tmp_path):
                 {"address": "inbox@example.invalid", "accessMode": "read"}
               ],
               "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
               "folderPolicy": {
                 "review": "Clarity/Review"
               },
@@ -194,6 +253,74 @@ def test_email_folder_policy_must_include_required_labels(tmp_path):
         config.email_settings
 
     assert "noise" in str(exc_info.value)
+
+
+def test_email_folder_policy_must_use_folder_namespace(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "read"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Review",
+                "noise": "Other/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "Clarity/" in str(exc_info.value)
+
+
+def test_email_folder_namespace_must_be_single_folder_name(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "read"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity/Review",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "folderNamespace" in str(exc_info.value)
 
 
 def test_process_environment_overrides_local_env_file(tmp_path, monkeypatch):

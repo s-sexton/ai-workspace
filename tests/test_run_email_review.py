@@ -79,6 +79,10 @@ def test_run_email_review_records_metadata_and_generates_brief(tmp_path):
         "propose_email_move_noise",
     }
     assert {action.approval_status for action in proposals} == {"required"}
+    assert {action.action_target for action in proposals} == {
+        "Clarity/Review",
+        "Clarity/Noise",
+    }
     assert any("Clarity/Review" in (action.result or "") for action in proposals)
     assert any("Clarity/Noise" in (action.result or "") for action in proposals)
 
@@ -116,6 +120,148 @@ def test_run_email_review_is_mailbox_scoped(tmp_path):
     assert result.review_count == 1
     assert result.noise_count == 0
     assert result.proposed_action_count == 1
+
+
+def test_run_email_review_trashes_unauthorized_clarity_mailbox_sender(tmp_path):
+    _write_config(
+        tmp_path,
+        approved_mailboxes=("clarity@sendthisfile.ai",),
+        default_mailbox="clarity@sendthisfile.ai",
+        allowed_senders={
+            "clarity@sendthisfile.ai": (
+                "scott.sexton@sendthisfile.com",
+                "sesexton@gmail.com",
+            )
+        },
+    )
+
+    result = run_email_review(
+        root=tmp_path,
+        mailbox="clarity@sendthisfile.ai",
+        memory_path=tmp_path / "logs" / "memory.duckdb",
+        brief_output_path=tmp_path / "reports" / "brief.md",
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "allowed-1",
+                    "mailbox": "clarity@sendthisfile.ai",
+                    "subject": "Please review this",
+                    "sender": "scott.sexton@sendthisfile.com",
+                    "spf": "pass",
+                    "dkim": "pass",
+                    "dmarc": "pass",
+                },
+                {
+                    "message_id": "blocked-1",
+                    "mailbox": "clarity@sendthisfile.ai",
+                    "subject": "Ignore this",
+                    "sender": "external@example.invalid",
+                },
+            )
+        ),
+    )
+
+    assert result.message_count == 2
+    assert result.review_count == 1
+    assert result.trash_count == 1
+
+    store = DuckDbMemoryStore(tmp_path / "logs" / "memory.duckdb")
+    try:
+        trash_items = store.recent_memory_by_label("trash")
+        actions = store.recent_actions()
+    finally:
+        store.close()
+
+    assert trash_items[0].subject == "Ignore this"
+    assert any(
+        action.action_type == "propose_email_move_trash"
+        and action.action_target == "Deleted Items"
+        and "Deleted Items" in (action.result or "")
+        for action in actions
+    )
+
+
+def test_run_email_review_trashes_spoofed_clarity_mailbox_sender(tmp_path):
+    _write_config(
+        tmp_path,
+        approved_mailboxes=("clarity@sendthisfile.ai",),
+        default_mailbox="clarity@sendthisfile.ai",
+        allowed_senders={
+            "clarity@sendthisfile.ai": (
+                "scott.sexton@sendthisfile.com",
+                "sesexton@gmail.com",
+            )
+        },
+    )
+
+    result = run_email_review(
+        root=tmp_path,
+        mailbox="clarity@sendthisfile.ai",
+        memory_path=tmp_path / "logs" / "memory.duckdb",
+        brief_output_path=tmp_path / "reports" / "brief.md",
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "spoofed-1",
+                    "mailbox": "clarity@sendthisfile.ai",
+                    "subject": "Spoofed command",
+                    "sender": "scott.sexton@sendthisfile.com",
+                    "spf": "fail",
+                    "dkim": "fail",
+                    "dmarc": "fail",
+                },
+            )
+        ),
+    )
+
+    assert result.message_count == 1
+    assert result.review_count == 0
+    assert result.trash_count == 1
+
+    store = DuckDbMemoryStore(tmp_path / "logs" / "memory.duckdb")
+    try:
+        trash_items = store.recent_memory_by_label("trash")
+    finally:
+        store.close()
+
+    assert trash_items[0].subject == "Spoofed command"
+    assert "authentication checks" in trash_items[0].reason
+
+
+def test_run_email_review_can_use_sample_graph_transport(tmp_path):
+    _write_config(
+        tmp_path,
+        approved_mailboxes=("clarity@sendthisfile.ai",),
+        default_mailbox="clarity@sendthisfile.ai",
+        allowed_senders={
+            "clarity@sendthisfile.ai": (
+                "scott.sexton@sendthisfile.com",
+                "sesexton@gmail.com",
+            )
+        },
+    )
+
+    result = run_email_review(
+        root=tmp_path,
+        mailbox="clarity@sendthisfile.ai",
+        memory_path=tmp_path / "logs" / "memory.duckdb",
+        brief_output_path=tmp_path / "reports" / "brief.md",
+        use_sample_graph=True,
+    )
+
+    assert result.message_count == 2
+    assert result.review_count == 1
+    assert result.trash_count == 1
+
+    store = DuckDbMemoryStore(tmp_path / "logs" / "memory.duckdb")
+    try:
+        review_items = store.recent_memory_by_label("review")
+        trash_items = store.recent_memory_by_label("trash")
+    finally:
+        store.close()
+
+    assert review_items[0].subject == "Please review my Clarity note"
+    assert trash_items[0].subject == "Spoofed Clarity command"
 
 
 def test_run_email_review_rejects_unapproved_mailbox(tmp_path):
@@ -161,9 +307,42 @@ def test_main_prints_safe_summary(tmp_path, monkeypatch, capsys):
     assert "Read 2 email message(s) from inbox@example.invalid" in output
     assert "Review: 1" in output
     assert "Noise: 1" in output
+    assert "Trash: 0" in output
     assert "Proposed actions: 2" in output
     assert "Wrote brief" in output
     assert "Legal review needed" not in output
+
+
+def test_main_can_use_sample_graph_transport(tmp_path, monkeypatch, capsys):
+    _write_config(
+        tmp_path,
+        approved_mailboxes=("clarity@sendthisfile.ai",),
+        default_mailbox="clarity@sendthisfile.ai",
+        allowed_senders={
+            "clarity@sendthisfile.ai": (
+                "scott.sexton@sendthisfile.com",
+                "sesexton@gmail.com",
+            )
+        },
+    )
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "--mailbox",
+            "clarity@sendthisfile.ai",
+            "--sample-graph",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "Read 2 email message(s) from clarity@sendthisfile.ai" in output
+    assert "Review: 1" in output
+    assert "Trash: 1" in output
 
 
 def _write_config(
@@ -172,13 +351,22 @@ def _write_config(
     approved_mailboxes=("inbox@example.invalid",),
     default_mailbox="inbox@example.invalid",
     max_messages=25,
+    allowed_senders=None,
 ):
     config_dir = root / "config"
     config_dir.mkdir()
-    approved = ", ".join(
-        f'{{"address": "{mailbox}", "accessMode": "read"}}'
-        for mailbox in approved_mailboxes
-    )
+    allowed_senders = allowed_senders or {}
+    approved_entries = []
+    for mailbox in approved_mailboxes:
+        senders = allowed_senders.get(mailbox, ())
+        allowed = ""
+        if senders:
+            sender_values = ", ".join(f'"{sender}"' for sender in senders)
+            allowed = f', "allowedSenders": [{sender_values}]'
+        approved_entries.append(
+            f'{{"address": "{mailbox}", "accessMode": "read"{allowed}}}'
+        )
+    approved = ", ".join(approved_entries)
     (config_dir / "config.json").write_text(
         f"""
         {{
@@ -186,9 +374,11 @@ def _write_config(
             "email": {{
               "approvedMailboxes": [{approved}],
               "defaultMailbox": "{default_mailbox}",
+              "folderNamespace": "Clarity",
               "folderPolicy": {{
                 "review": "Clarity/Review",
-                "noise": "Clarity/Noise"
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
               }},
               "maxMessages": {max_messages}
             }}

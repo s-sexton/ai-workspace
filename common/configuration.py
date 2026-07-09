@@ -70,6 +70,8 @@ class EmailSettings:
 
     approved_mailboxes: tuple[str, ...]
     mailbox_access: Mapping[str, str]
+    mailbox_allowed_senders: Mapping[str, tuple[str, ...]]
+    folder_namespace: str
     folder_policy: Mapping[str, str]
     default_mailbox: str
     max_messages: int
@@ -83,6 +85,11 @@ class EmailSettings:
         """Return the proposed destination folder for a classification label."""
 
         return self.folder_policy.get(label)
+
+    def allowed_senders_for(self, mailbox: str) -> tuple[str, ...]:
+        """Return allowed senders for a restricted mailbox."""
+
+        return self.mailbox_allowed_senders.get(mailbox, ())
 
 
 @dataclass(frozen=True)
@@ -124,6 +131,8 @@ class WorkspaceConfig:
 
         settings = _get_mapping(self.settings, ("assistant", "email"))
         mailbox_access = _require_mailbox_access(settings, "approvedMailboxes")
+        mailbox_allowed_senders = _mailbox_allowed_senders(settings, "approvedMailboxes")
+        folder_namespace = _require_folder_namespace(settings, "folderNamespace")
         approved_mailboxes = tuple(mailbox_access)
         default_mailbox = _require_non_empty_string(settings, "defaultMailbox")
         if default_mailbox not in approved_mailboxes:
@@ -134,8 +143,10 @@ class WorkspaceConfig:
         return EmailSettings(
             approved_mailboxes=approved_mailboxes,
             mailbox_access=MappingProxyType(mailbox_access),
+            mailbox_allowed_senders=MappingProxyType(mailbox_allowed_senders),
+            folder_namespace=folder_namespace,
             folder_policy=MappingProxyType(
-                _require_folder_policy(settings, "folderPolicy")
+                _require_folder_policy(settings, "folderPolicy", folder_namespace)
             ),
             default_mailbox=default_mailbox,
             max_messages=_require_positive_int(settings, "maxMessages"),
@@ -344,7 +355,60 @@ def _require_mailbox_access(settings: Mapping[str, Any], key: str) -> dict[str, 
     return mailbox_access
 
 
-def _require_folder_policy(settings: Mapping[str, Any], key: str) -> dict[str, str]:
+def _mailbox_allowed_senders(
+    settings: Mapping[str, Any],
+    key: str,
+) -> dict[str, tuple[str, ...]]:
+    value = settings.get(key)
+    if not isinstance(value, list):
+        raise ConfigurationError(
+            f"Configuration value must be a non-empty list of mailbox objects: {key}"
+        )
+
+    allowed_senders: dict[str, tuple[str, ...]] = {}
+    for index, item in enumerate(value, 1):
+        if not isinstance(item, Mapping):
+            raise ConfigurationError(f"Mailbox entry must be an object: {key}[{index}]")
+        address = item.get("address")
+        if not isinstance(address, str) or not address.strip():
+            raise ConfigurationError(
+                f"Mailbox address must be a non-empty string: {key}[{index}]"
+            )
+        raw_allowed_senders = item.get("allowedSenders", [])
+        if raw_allowed_senders is None:
+            raw_allowed_senders = []
+        if not isinstance(raw_allowed_senders, list):
+            raise ConfigurationError(
+                f"Mailbox allowedSenders must be a list of strings: {key}[{index}]"
+            )
+        if any(
+            not isinstance(sender, str) or not sender.strip()
+            for sender in raw_allowed_senders
+        ):
+            raise ConfigurationError(
+                f"Mailbox allowedSenders must be a list of strings: {key}[{index}]"
+            )
+        allowed_senders[address.strip()] = tuple(
+            sender.strip() for sender in raw_allowed_senders
+        )
+
+    return allowed_senders
+
+
+def _require_folder_namespace(settings: Mapping[str, Any], key: str) -> str:
+    namespace = _require_non_empty_string(settings, key).strip()
+    if "/" in namespace or "\\" in namespace:
+        raise ConfigurationError(
+            "Email folderNamespace must be a single folder name."
+        )
+    return namespace
+
+
+def _require_folder_policy(
+    settings: Mapping[str, Any],
+    key: str,
+    folder_namespace: str,
+) -> dict[str, str]:
     value = settings.get(key)
     if not isinstance(value, Mapping) or not value:
         raise ConfigurationError(
@@ -363,10 +427,23 @@ def _require_folder_policy(settings: Mapping[str, Any], key: str) -> dict[str, s
             )
         folder_policy[label.strip()] = folder.strip()
 
-    for required_label in ("review", "noise"):
+    for required_label in ("review", "noise", "trash"):
         if required_label not in folder_policy:
             raise ConfigurationError(
                 f"Email folder policy must include label: {required_label}"
+            )
+
+    expected_prefix = f"{folder_namespace}/"
+    for label, folder in folder_policy.items():
+        if label == "trash":
+            if folder != "Deleted Items":
+                raise ConfigurationError(
+                    "Email folder policy trash target must be Deleted Items."
+                )
+            continue
+        if not folder.startswith(expected_prefix) or folder == expected_prefix:
+            raise ConfigurationError(
+                f"Email folder policy folder for {label} must be under {expected_prefix}"
             )
 
     return folder_policy

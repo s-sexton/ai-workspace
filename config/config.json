@@ -38,12 +38,22 @@
         {
           "address": "dpo@example.invalid",
           "accessMode": "read"
+        },
+        {
+          "address": "clarity@sendthisfile.ai",
+          "accessMode": "read_write",
+          "allowedSenders": [
+            "scott.sexton@sendthisfile.com",
+            "sesexton@gmail.com"
+          ]
         }
       ],
       "defaultMailbox": "inbox@example.invalid",
+      "folderNamespace": "Clarity",
       "folderPolicy": {
         "review": "Clarity/Review",
-        "noise": "Clarity/Noise"
+        "noise": "Clarity/Noise",
+        "trash": "Deleted Items"
       },
       "maxMessages": 25
     }

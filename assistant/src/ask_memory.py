@@ -19,6 +19,9 @@ SUPPORTED_QUESTIONS = (
     "noise-items",
     "feedback",
     "actions",
+    "pending-actions",
+    "approved-actions",
+    "email-move-plan",
     "open-tasks",
 )
 
@@ -62,6 +65,12 @@ def answer_memory_question(
             return _format_feedback(store, limit=limit)
         if question == "actions":
             return _format_actions(store, limit=limit)
+        if question == "pending-actions":
+            return _format_pending_actions(store, limit=limit)
+        if question == "approved-actions":
+            return _format_approved_actions(store, limit=limit)
+        if question == "email-move-plan":
+            return _format_email_move_plan(store, limit=limit)
         if question == "open-tasks":
             return _format_open_tasks(store)
     finally:
@@ -186,6 +195,63 @@ def _format_actions(store: DuckDbMemoryStore, *, limit: int) -> str:
         lines.append(f"- {action.action_type} [{action.approval_status}]")
         if action.result:
             lines.append(f"  Result: {action.result}")
+    return "\n".join(lines)
+
+
+def _format_pending_actions(store: DuckDbMemoryStore, *, limit: int) -> str:
+    pending_actions = store.pending_actions(limit=limit)
+    if not pending_actions:
+        return "# Pending Actions\n\nNo pending actions found."
+
+    return _format_action_queue("Pending Actions", pending_actions)
+
+
+def _format_approved_actions(store: DuckDbMemoryStore, *, limit: int) -> str:
+    approved_actions = store.actions_by_approval_status("approved", limit=limit)
+    if not approved_actions:
+        return "# Approved Actions\n\nNo approved actions found."
+
+    return _format_action_queue("Approved Actions", approved_actions)
+
+
+def _format_email_move_plan(store: DuckDbMemoryStore, *, limit: int) -> str:
+    approved_actions = store.actions_by_approval_status("approved", limit=limit)
+    move_actions = [
+        action
+        for action in approved_actions
+        if action.action_type.startswith("propose_email_move_")
+        and action.item_external_id
+        and action.action_target
+    ]
+    if not move_actions:
+        return "# Email Move Plan\n\nNo approved email moves found."
+
+    lines = ["# Email Move Plan", ""]
+    for action in move_actions:
+        source_scope = action.source_scope_label or "unknown mailbox"
+        lines.append(
+            f"- In mailbox {source_scope}, move message "
+            f"{action.item_external_id} to {action.action_target}"
+        )
+        if action.item_subject:
+            lines.append(f"  Subject: {action.item_subject}")
+        lines.append(f"  Action: {action.action_id}")
+    return "\n".join(lines)
+
+
+def _format_action_queue(title: str, actions) -> str:
+    lines = [f"# {title}", ""]
+    for action in actions:
+        subject = f" - {action.item_subject}" if action.item_subject else ""
+        lines.append(f"- {action.action_type}{subject} [{action.approval_status}]")
+        if action.item_external_id:
+            lines.append(f"  Item: {action.item_external_id}")
+        if action.source_scope_label:
+            lines.append(f"  Source: {action.source_scope_label}")
+        if action.action_target:
+            lines.append(f"  Target: {action.action_target}")
+        if action.result:
+            lines.append(f"  Proposal: {action.result}")
     return "\n".join(lines)
 
 

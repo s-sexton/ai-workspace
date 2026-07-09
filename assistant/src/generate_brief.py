@@ -70,6 +70,27 @@ def generate_memory_brief(
         ),
         "",
         answer_memory_question(
+            "pending-actions",
+            root=workspace_root,
+            memory_path=resolved_memory_path,
+            limit=limit,
+        ),
+        "",
+        answer_memory_question(
+            "approved-actions",
+            root=workspace_root,
+            memory_path=resolved_memory_path,
+            limit=limit,
+        ),
+        "",
+        answer_memory_question(
+            "email-move-plan",
+            root=workspace_root,
+            memory_path=resolved_memory_path,
+            limit=limit,
+        ),
+        "",
+        answer_memory_question(
             "actions",
             root=workspace_root,
             memory_path=resolved_memory_path,

@@ -131,6 +131,60 @@ def test_answers_recent_actions(tmp_path):
     assert "Result: Wrote reports/jira-report.md" in answer
 
 
+def test_answers_pending_actions(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "pending-actions",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Pending Actions" in answer
+    assert "propose_email_move_noise - July product newsletter [required]" in answer
+    assert "Item: email-noise-1" in answer
+    assert "Target: Clarity/Noise" in answer
+    assert "Proposal: Proposed moving message metadata" in answer
+
+
+def test_answers_approved_actions(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "approved-actions",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Approved Actions" in answer
+    assert "propose_email_move_review - Review vendor terms [approved]" in answer
+    assert "Item: email-review-1" in answer
+    assert "Source: scott.sexton@sendthisfile.com" in answer
+    assert "Target: Clarity/Review" in answer
+    assert "Proposal: Proposed moving message metadata" in answer
+
+
+def test_answers_email_move_plan(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "email-move-plan",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Email Move Plan" in answer
+    assert (
+        "In mailbox scott.sexton@sendthisfile.com, move message "
+        "email-review-1 to Clarity/Review"
+    ) in answer
+    assert "Subject: Review vendor terms" in answer
+    assert "Move message email-noise-1" not in answer
+
+
 def test_missing_memory_returns_plain_message(tmp_path):
     answer = answer_memory_question(
         "recent-items",
@@ -190,8 +244,13 @@ def _seed_memory(memory_path):
                     feedback_type="noise",
                     feedback_text="This was just an automated update.",
                 )
+        email_source = store.record_source(
+            source_type="email",
+            display_name="scott.sexton@sendthisfile.com",
+            scope_label="scott.sexton@sendthisfile.com",
+        )
         noise_item = store.record_item_seen(
-            source_id=source.source_id,
+            source_id=email_source.source_id,
             external_id="email-noise-1",
             item_type="email_message",
             subject="July product newsletter",
@@ -202,6 +261,35 @@ def _seed_memory(memory_path):
             run_id=run.run_id,
             label="noise",
             reason="Marketing or subscription-style message.",
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            item_id=noise_item.item_id,
+            action_type="propose_email_move_noise",
+            approval_status="required",
+            action_target="Clarity/Noise",
+            result=(
+                "Proposed moving message metadata for email-noise-1 "
+                "to Clarity/Noise."
+            ),
+        )
+        approved_item = store.record_item_seen(
+            source_id=email_source.source_id,
+            external_id="email-review-1",
+            item_type="email_message",
+            subject="Review vendor terms",
+            first_seen_run_id=run.run_id,
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            item_id=approved_item.item_id,
+            action_type="propose_email_move_review",
+            approval_status="approved",
+            action_target="Clarity/Review",
+            result=(
+                "Proposed moving message metadata for email-review-1 "
+                "to Clarity/Review."
+            ),
         )
         store.create_delegated_task(
             created_run_id=run.run_id,

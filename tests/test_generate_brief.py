@@ -26,8 +26,19 @@ def test_generates_memory_brief(tmp_path):
     assert "# Items Marked For Review" in brief
     assert "# Items Marked As Noise" in brief
     assert "# Open Delegated Tasks" in brief
+    assert "# Pending Actions" in brief
+    assert "# Approved Actions" in brief
+    assert "# Email Move Plan" in brief
     assert "# Recent Actions" in brief
     assert "Review billing export [review]" in brief
+    assert "propose_email_move_review - Review billing export" in brief
+    assert "Target: Clarity/Review" in brief
+    assert "propose_email_move_noise - Monthly newsletter [approved]" in brief
+    assert "Target: Clarity/Noise" in brief
+    assert (
+        "In mailbox scott.sexton@sendthisfile.com, move message "
+        "email-noise-1 to Clarity/Noise"
+    ) in brief
 
     store = DuckDbMemoryStore(memory_path)
     try:
@@ -102,6 +113,34 @@ def _seed_memory(memory_path):
             title="Prepare ACCT review",
             request="Summarize billing tickets.",
             next_step="Run the Jira report.",
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            item_id=item.item_id,
+            action_type="propose_email_move_review",
+            approval_status="required",
+            action_target="Clarity/Review",
+            result="Proposed moving message metadata to Clarity/Review.",
+        )
+        email_source = store.record_source(
+            source_type="email",
+            display_name="scott.sexton@sendthisfile.com",
+            scope_label="scott.sexton@sendthisfile.com",
+        )
+        approved_item = store.record_item_seen(
+            source_id=email_source.source_id,
+            external_id="email-noise-1",
+            item_type="email_message",
+            subject="Monthly newsletter",
+            first_seen_run_id=run.run_id,
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            item_id=approved_item.item_id,
+            action_type="propose_email_move_noise",
+            approval_status="approved",
+            action_target="Clarity/Noise",
+            result="Proposed moving message metadata to Clarity/Noise.",
         )
         store.record_assistant_action(
             run_id=run.run_id,

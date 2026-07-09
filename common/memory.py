@@ -19,6 +19,7 @@ OPEN_TASK_STATUSES = (
     "blocked",
 )
 TASK_STATUSES = (*OPEN_TASK_STATUSES, "completed")
+ACTION_APPROVAL_STATUSES = ("required", "approved", "rejected", "not_required")
 
 _SECRET_MARKERS = (
     "api_token=",
@@ -121,6 +122,26 @@ class AssistantActionRecord:
     item_id: str | None
     action_type: str
     approval_status: str
+    action_target: str | None
+    result: str | None
+    created_at: str
+
+
+@dataclass(frozen=True)
+class PendingActionRecord:
+    """An action with approval status and optional item context."""
+
+    action_id: str
+    run_id: str
+    item_id: str | None
+    item_external_id: str | None
+    item_subject: str | None
+    item_type: str | None
+    source_type: str | None
+    source_scope_label: str | None
+    action_type: str
+    approval_status: str
+    action_target: str | None
     result: str | None
     created_at: str
 
@@ -252,9 +273,16 @@ class DuckDbMemoryStore:
                 item_id VARCHAR,
                 action_type VARCHAR NOT NULL,
                 approval_status VARCHAR NOT NULL,
+                action_target VARCHAR,
                 result VARCHAR,
                 created_at VARCHAR NOT NULL
             )
+            """
+        )
+        self._connection.execute(
+            """
+            ALTER TABLE assistant_actions
+            ADD COLUMN IF NOT EXISTS action_target VARCHAR
             """
         )
         self._connection.execute(
@@ -646,27 +674,39 @@ class DuckDbMemoryStore:
         run_id: str,
         action_type: str,
         approval_status: str,
+        action_target: str | None = None,
         result: str | None = None,
         item_id: str | None = None,
         created_at: str | None = None,
     ) -> AssistantActionRecord:
         """Record a local action Clarity prepared or performed."""
 
-        _reject_secret_text(run_id, action_type, approval_status, result, item_id)
+        _reject_secret_text(
+            run_id,
+            action_type,
+            approval_status,
+            action_target,
+            result,
+            item_id,
+        )
         record = AssistantActionRecord(
             action_id=_new_id(),
             run_id=_required_text(run_id, "run_id"),
             item_id=item_id,
             action_type=_required_text(action_type, "action_type"),
             approval_status=_required_text(approval_status, "approval_status"),
+            action_target=action_target,
             result=result,
             created_at=created_at or _now(),
         )
         self._connection.execute(
             """
             INSERT INTO assistant_actions
-            (action_id, run_id, item_id, action_type, approval_status, result, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (
+                action_id, run_id, item_id, action_type, approval_status,
+                action_target, result, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 record.action_id,
@@ -674,6 +714,7 @@ class DuckDbMemoryStore:
                 record.item_id,
                 record.action_type,
                 record.approval_status,
+                record.action_target,
                 record.result,
                 record.created_at,
             ],
@@ -688,7 +729,7 @@ class DuckDbMemoryStore:
         rows = self._connection.execute(
             """
             SELECT action_id, run_id, item_id, action_type, approval_status,
-                   result, created_at
+                   action_target, result, created_at
             FROM assistant_actions
             ORDER BY created_at DESC, action_id DESC
             LIMIT ?
@@ -696,6 +737,90 @@ class DuckDbMemoryStore:
             [limit],
         ).fetchall()
         return tuple(AssistantActionRecord(*row) for row in rows)
+
+    def pending_actions(self, *, limit: int = 25) -> tuple[PendingActionRecord, ...]:
+        """Return local actions that still require human approval."""
+
+        return self.actions_by_approval_status("required", limit=limit)
+
+    def actions_by_approval_status(
+        self,
+        approval_status: str,
+        *,
+        limit: int = 25,
+    ) -> tuple[PendingActionRecord, ...]:
+        """Return local actions with a specific approval status."""
+
+        _reject_secret_text(approval_status)
+        clean_status = _required_text(approval_status, "approval_status")
+        if clean_status not in ACTION_APPROVAL_STATUSES:
+            raise MemoryStoreError(
+                "approval_status must be one of: "
+                + ", ".join(ACTION_APPROVAL_STATUSES)
+            )
+        if limit < 1:
+            raise MemoryStoreError("limit must be positive.")
+        rows = self._connection.execute(
+            """
+            SELECT a.action_id, a.run_id, a.item_id, i.external_id, i.subject,
+                   i.item_type, s.source_type, s.scope_label, a.action_type,
+                   a.approval_status, a.action_target, a.result, a.created_at
+            FROM assistant_actions a
+            LEFT JOIN items_seen i ON i.item_id = a.item_id
+            LEFT JOIN sources s ON s.source_id = i.source_id
+            WHERE a.approval_status = ?
+            ORDER BY a.created_at DESC, a.action_id DESC
+            LIMIT ?
+            """,
+            [clean_status, limit],
+        ).fetchall()
+        return tuple(PendingActionRecord(*row) for row in rows)
+
+    def update_assistant_action_approval(
+        self,
+        *,
+        action_id: str,
+        approval_status: str,
+    ) -> AssistantActionRecord:
+        """Update the local approval status for an assistant action."""
+
+        _reject_secret_text(action_id, approval_status)
+        clean_status = _required_text(approval_status, "approval_status")
+        if clean_status not in ACTION_APPROVAL_STATUSES:
+            raise MemoryStoreError(
+                "approval_status must be one of: "
+                + ", ".join(ACTION_APPROVAL_STATUSES)
+            )
+
+        existing = self._connection.execute(
+            """
+            SELECT action_id
+            FROM assistant_actions
+            WHERE action_id = ?
+            """,
+            [_required_text(action_id, "action_id")],
+        ).fetchone()
+        if existing is None:
+            raise MemoryStoreError(f"Unknown assistant action: {action_id}")
+
+        self._connection.execute(
+            """
+            UPDATE assistant_actions
+            SET approval_status = ?
+            WHERE action_id = ?
+            """,
+            [clean_status, action_id],
+        )
+        row = self._connection.execute(
+            """
+            SELECT action_id, run_id, item_id, action_type, approval_status,
+                   action_target, result, created_at
+            FROM assistant_actions
+            WHERE action_id = ?
+            """,
+            [action_id],
+        ).fetchone()
+        return AssistantActionRecord(*row)
 
     def list_generated_artifacts(
         self,

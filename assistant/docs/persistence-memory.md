@@ -119,6 +119,7 @@ Suggested fields:
 -   `item_id`
 -   `action_type`
 -   `approval_status`
+-   `action_target`
 -   `result`
 -   `created_at`
 
@@ -182,7 +183,8 @@ Useful statuses:
 
 Clarity may prepare drafts, summaries, filing recommendations, or task plans.
 Sending messages, changing calendars, writing Jira, deleting records, changing
-permissions, or moving items outside approved folders still requires approval.
+permissions, or moving items outside approved folder conventions still requires
+approval.
 
 ## Security Rules
 
@@ -254,7 +256,12 @@ removes it from open-task summaries.
 
 Clarity records local assistant actions for report generation, feedback,
 delegated task creation, and task status updates. These records provide an audit
-trail of what Clarity did locally and whether approval was required.
+trail of what Clarity did locally and whether approval was required. When an
+action has a destination, such as a proposed email folder move, the destination
+is stored in `action_target` so later planning does not need to parse prose.
+Pending and approved action queues include the linked source item's
+`external_id`; for email, that is the provider message identifier needed by a
+future live move.
 
 The first brief command is `assistant.src.generate_brief`. It composes the local
 memory summary, review items, noise items, open delegated tasks, and recent
@@ -267,4 +274,7 @@ deterministic placeholder classifications, stores metadata and hashes in local
 memory, and generates the Clarity brief. The requested mailbox must be listed in
 local approved mailbox configuration with `read` or `read_write` access. It does
 not connect to live Exchange or Gmail, store raw bodies by default, or perform
-mailbox writes.
+mailbox writes. Proposed folder destinations are stored as structured
+`assistant_actions.action_target` values. Non-trash email move targets must live
+under the configured folder namespace, such as `Clarity/Review`; trash must use
+the system `Deleted Items` folder.
