@@ -244,6 +244,7 @@ def _format_action_queue(title: str, actions) -> str:
     for action in actions:
         subject = f" - {action.item_subject}" if action.item_subject else ""
         lines.append(f"- {action.action_type}{subject} [{action.approval_status}]")
+        lines.append(f"  Action: {action.action_id}")
         if action.item_external_id:
             lines.append(f"  Item: {action.item_external_id}")
         if action.source_scope_label:

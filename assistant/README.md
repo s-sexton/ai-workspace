@@ -40,6 +40,8 @@ Jira report.
 
 Current components:
 
+-   `assistant.src.clarity`: routes the first deterministic natural-language
+    Clarity requests to local tools and memory.
 -   `assistant.src.jira_report`: generates Markdown from normalized Jira issues.
 -   `assistant.src.run_jira_report`: runs the local fake Jira report workflow
     and writes `reports/jira-report.md`.
@@ -111,6 +113,24 @@ python -m assistant.src.ask_memory email-move-plan
 python -m assistant.src.ask_memory open-tasks
 ```
 
+To ask Clarity a first natural-language question:
+
+``` powershell
+python -m assistant.src.clarity "What emails need immediate attention?"
+python -m assistant.src.clarity "What needs approval?"
+python -m assistant.src.clarity "What did you do?"
+python -m assistant.src.clarity "Show my email move plan"
+```
+
+To open a small local prompt:
+
+``` powershell
+python -m assistant.src.clarity
+```
+
+This is a deterministic command surface over local memory. It does not use an
+LLM router yet.
+
 To teach Clarity from a remembered item:
 
 ``` powershell
@@ -159,6 +179,15 @@ python -m assistant.src.execute_email_moves
 Dry-run move planning re-checks current configuration. The source mailbox must
 be approved with `read_write` access, and the destination folder must still be in
 `assistant.email.folderPolicy`.
+
+To execute approved moves through Microsoft Graph:
+
+``` powershell
+python -m assistant.src.execute_email_moves --graph --execute
+```
+
+Execution still requires an approved local action, an email source item, a
+`read_write` mailbox, and a configured destination folder.
 
 To generate a local brief from memory:
 

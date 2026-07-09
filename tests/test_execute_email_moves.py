@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+import pytest
+
 from assistant.src.execute_email_moves import (
     build_graph_move_transport_from_config,
     execute_email_moves,
@@ -67,6 +69,7 @@ def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
     try:
         latest_run = store.latest_run(workflow="execute-email-moves")
         actions = store.recent_actions()
+        executed_actions = store.actions_by_approval_status("executed")
     finally:
         store.close()
 
@@ -218,12 +221,39 @@ def test_execute_email_moves_can_execute_with_injected_transport(tmp_path):
     try:
         latest_run = store.latest_run(workflow="execute-email-moves")
         actions = store.recent_actions()
+        executed_actions = store.actions_by_approval_status("executed")
     finally:
         store.close()
 
     assert latest_run is not None
     assert latest_run.summary == "Executed email move plan with 1 item(s)."
     assert actions[0].action_type == "execute_email_moves"
+    assert executed_actions[0].action_id == action_id
+
+
+def test_execute_email_moves_does_not_repeat_executed_actions(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
+    _seed_approved_email_move(memory_path)
+    first_transport = StaticEmailMoveTransport(moved_messages=[])
+
+    execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        dry_run=False,
+        move_transport=first_transport,
+    )
+    second_transport = StaticEmailMoveTransport(moved_messages=[])
+    result = execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        dry_run=False,
+        move_transport=second_transport,
+    )
+
+    assert len(first_transport.moved_messages) == 1
+    assert second_transport.moved_messages == []
+    assert result == "No approved email moves found."
 
 
 def test_main_prints_dry_run(tmp_path, monkeypatch, capsys):
@@ -240,6 +270,54 @@ def test_main_prints_dry_run(tmp_path, monkeypatch, capsys):
         "Would move message graph-message-1 in mailbox "
         "scott.sexton@sendthisfile.com to Clarity/Review"
     ) in output
+
+
+def test_main_execute_without_graph_still_fails_closed(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
+    _seed_approved_email_move(memory_path)
+    monkeypatch.chdir(tmp_path)
+
+    main(["--memory", str(memory_path), "--execute"])
+
+    output = capsys.readouterr().out
+    assert "Live email moves are not implemented" in output
+
+
+def test_main_rejects_graph_without_execute():
+    with pytest.raises(SystemExit):
+        main(["--graph"])
+
+
+def test_main_rejects_graph_bearer_without_graph():
+    with pytest.raises(SystemExit):
+        main(["--graph-bearer"])
+
+
+def test_main_can_execute_with_graph_transport(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
+    action_id = _seed_approved_email_move(memory_path)
+    transport = StaticEmailMoveTransport(moved_messages=[])
+    calls = []
+
+    def fake_build_graph_move_transport_from_config(*, use_bearer_auth=False, **_):
+        calls.append(use_bearer_auth)
+        return transport
+
+    monkeypatch.setattr(
+        "assistant.src.execute_email_moves.build_graph_move_transport_from_config",
+        fake_build_graph_move_transport_from_config,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    main(["--memory", str(memory_path), "--graph", "--graph-bearer", "--execute"])
+
+    output = capsys.readouterr().out
+    assert calls == [True]
+    assert "# Email Move Execution" in output
+    assert f"Action: {action_id}" in output
+    assert len(transport.moved_messages) == 1
 
 
 def _seed_approved_email_move(

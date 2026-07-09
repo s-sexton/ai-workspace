@@ -143,6 +143,7 @@ def test_answers_pending_actions(tmp_path):
 
     assert "# Pending Actions" in answer
     assert "propose_email_move_noise - July product newsletter [required]" in answer
+    assert "Action:" in answer
     assert "Item: email-noise-1" in answer
     assert "Target: Clarity/Noise" in answer
     assert "Proposal: Proposed moving message metadata" in answer
@@ -160,6 +161,7 @@ def test_answers_approved_actions(tmp_path):
 
     assert "# Approved Actions" in answer
     assert "propose_email_move_review - Review vendor terms [approved]" in answer
+    assert "Action:" in answer
     assert "Item: email-review-1" in answer
     assert "Source: scott.sexton@sendthisfile.com" in answer
     assert "Target: Clarity/Review" in answer

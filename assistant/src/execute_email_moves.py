@@ -88,6 +88,11 @@ def execute_email_moves(
             action_type = "dry_run_email_moves"
         else:
             _execute_plan(plan, move_transport=move_transport)
+            for item in plan:
+                store.update_assistant_action_approval(
+                    action_id=item.action_id,
+                    approval_status="executed",
+                )
             result_summary = f"Executed {len(plan)} approved email move(s)."
             run_summary = f"Executed email move plan with {len(plan)} item(s)."
             action_type = "execute_email_moves"
@@ -125,11 +130,16 @@ def main(argv: Sequence[str] | None = None) -> None:
     """Print the local email move dry run."""
 
     args = _parse_args(argv)
+    move_transport = (
+        build_graph_move_transport_from_config(use_bearer_auth=args.graph_bearer)
+        if args.graph and args.execute
+        else None
+    )
     print(
         execute_email_moves(
             memory_path=args.memory,
             dry_run=not args.execute,
-            move_transport=None,
+            move_transport=move_transport,
             limit=args.limit,
         )
     )
@@ -289,7 +299,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Reserved for future live moves. Currently reports unsupported.",
+        help="Execute approved moves. Requires --graph for live Graph moves.",
+    )
+    parser.add_argument(
+        "--graph",
+        action="store_true",
+        help="Use Microsoft Graph for live move execution.",
+    )
+    parser.add_argument(
+        "--graph-bearer",
+        action="store_true",
+        help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
     )
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument(
@@ -297,7 +317,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=str(DEFAULT_MEMORY_PATH),
         help="Local Clarity memory path. Relative paths are resolved under the workspace root.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.graph and not args.execute:
+        parser.error("--graph requires --execute.")
+    if args.graph_bearer and not args.graph:
+        parser.error("--graph-bearer requires --graph.")
+    return args
 
 
 if __name__ == "__main__":

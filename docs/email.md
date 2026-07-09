@@ -222,6 +222,20 @@ Pending proposed actions can be reviewed with:
 python -m assistant.src.ask_memory pending-actions
 ```
 
+The first Clarity command surface can answer common email-attention questions
+from local memory:
+
+``` powershell
+python -m assistant.src.clarity "What emails need immediate attention?"
+python -m assistant.src.clarity "What needs approval?"
+```
+
+It can also be opened as a small local prompt:
+
+``` powershell
+python -m assistant.src.clarity
+```
+
 Local approval status can be updated with:
 
 ``` powershell
@@ -253,15 +267,21 @@ Approved email moves can be dry-run with:
 python -m assistant.src.execute_email_moves
 ```
 
+Approved email moves can be executed through Microsoft Graph with:
+
+``` powershell
+python -m assistant.src.execute_email_moves --graph --execute
+```
+
 The dry run records a local audit action but does not call Graph or move
-mailbox items. The reusable execution function can execute moves only when a
-move transport is explicitly injected by code; the command-line `--execute` path
-still fails closed until live Graph writes are explicitly designed and approved.
-Before a move can appear in the executable section, the approved action must
-still be attached to an `email_message` from an `email` source, the source
-mailbox must still be configured with `read_write` access, and the target folder
-must still be present in the current folder policy. Approved local actions that
-no longer meet those rules are listed as blocked moves.
+mailbox items. The command-line `--execute` path still fails closed unless
+`--graph` is also passed. Before a move can appear in the executable section,
+the approved action must still be attached to an `email_message` from an `email`
+source, the source mailbox must still be configured with `read_write` access,
+and the target folder must still be present in the current folder policy.
+Approved local actions that no longer meet those rules are listed as blocked
+moves. After a move executes successfully, the original approved move action is
+marked `executed` so a later run will not try to move the same message again.
 
 ## Memory Rules
 

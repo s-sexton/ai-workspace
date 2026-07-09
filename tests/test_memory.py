@@ -207,6 +207,16 @@ def test_updates_assistant_action_approval(memory_store):
     assert approved_actions[0].approval_status == "approved"
     assert approved_actions[0].action_target == "Clarity/Noise"
 
+    executed = memory_store.update_assistant_action_approval(
+        action_id=action.action_id,
+        approval_status="executed",
+    )
+
+    assert executed.approval_status == "executed"
+    assert memory_store.actions_by_approval_status("approved") == ()
+    executed_actions = memory_store.actions_by_approval_status("executed")
+    assert executed_actions[0].action_id == action.action_id
+
 
 def test_action_queue_includes_item_external_id(memory_store):
     run = memory_store.start_run(workflow="email-review")

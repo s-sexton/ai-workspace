@@ -19,7 +19,13 @@ OPEN_TASK_STATUSES = (
     "blocked",
 )
 TASK_STATUSES = (*OPEN_TASK_STATUSES, "completed")
-ACTION_APPROVAL_STATUSES = ("required", "approved", "rejected", "not_required")
+ACTION_APPROVAL_STATUSES = (
+    "required",
+    "approved",
+    "rejected",
+    "executed",
+    "not_required",
+)
 
 _SECRET_MARKERS = (
     "api_token=",
