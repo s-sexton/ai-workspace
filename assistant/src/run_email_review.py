@@ -20,6 +20,11 @@ from common.email import (
     classify_email_message,
     propose_email_folder_action,
 )
+from common.graph_email import (
+    GraphTokenTransport,
+    GraphTransport,
+    build_graph_email_read_transport,
+)
 from common.memory import DuckDbMemoryStore
 
 
@@ -184,6 +189,25 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Trash: {result.trash_count}")
     print(f"Proposed actions: {result.proposed_action_count}")
     print(f"Wrote brief {result.brief_path}")
+
+
+def build_graph_read_transport_from_config(
+    *,
+    root: Path | str | None = None,
+    graph_transport: GraphTransport | None = None,
+    token_transport: GraphTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> EmailTransport:
+    """Build a Graph email read transport from local workspace configuration."""
+
+    config = load_workspace_config(root)
+    credentials = config.require_graph_credentials(use_bearer_auth=use_bearer_auth)
+    return build_graph_email_read_transport(
+        credentials,
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+        use_bearer_auth=use_bearer_auth,
+    )
 
 
 def _record_email_memory(

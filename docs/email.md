@@ -46,6 +46,30 @@ one mailbox. The current workflow only uses fake local move transports and keeps
 the command-line `--execute` path fail-closed until live Graph writes are
 explicitly designed and approved.
 
+`common.graph_email` contains the Microsoft Graph-specific runtime adapters:
+
+-   `GraphClientCredentialsTokenProvider` requests app-only Graph tokens with
+    the Microsoft identity client credentials flow.
+-   `GraphEmailReadTransport` lists message metadata and fetches message headers
+    for spoof/authentication checks.
+-   `GraphEmailMoveTransport` resolves mailbox folder paths and calls the Graph
+    message move API.
+-   `UrllibGraphTransport` and `UrllibGraphTokenTransport` are standard-library
+    HTTP adapters.
+
+These adapters are isolated from the assistant workflow so they can be tested
+with fake transports before live Graph writes are enabled.
+
+`assistant.src.execute_email_moves.build_graph_move_transport_from_config()`
+loads local Graph credentials and builds the Graph move transport for future
+approved live execution paths. The public command-line execution path still
+does not call this helper.
+
+`assistant.src.run_email_review.build_graph_read_transport_from_config()` loads
+local Graph credentials and builds the Graph read transport for future live
+review paths. The public command-line review path still defaults to fake local
+data unless a transport is injected by code.
+
 ## Approved Mailboxes
 
 Approved mailbox scope is configured in `config/config.json`:
@@ -200,13 +224,14 @@ python -m assistant.src.execute_email_moves
 ```
 
 The dry run records a local audit action but does not call Graph or move
-mailbox items. The reserved `--execute` flag currently fails closed until live
-write behavior is explicitly designed and approved. Before a move can appear in
-the executable dry-run section, the approved action must still be attached to an
-`email_message` from an `email` source, the source mailbox must still be
-configured with `read_write` access, and the target folder must still be present
-in the current folder policy. Approved local actions that no longer meet those
-rules are listed as blocked moves.
+mailbox items. The reusable execution function can execute moves only when a
+move transport is explicitly injected by code; the command-line `--execute` path
+still fails closed until live Graph writes are explicitly designed and approved.
+Before a move can appear in the executable section, the approved action must
+still be attached to an `email_message` from an `email` source, the source
+mailbox must still be configured with `read_write` access, and the target folder
+must still be present in the current folder policy. Approved local actions that
+no longer meet those rules are listed as blocked moves.
 
 ## Memory Rules
 

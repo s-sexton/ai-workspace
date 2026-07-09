@@ -1,11 +1,54 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any, Mapping
+
 import pytest
 
-from assistant.src.run_email_review import run_email_review, main
+from assistant.src.run_email_review import (
+    build_graph_read_transport_from_config,
+    run_email_review,
+    main,
+)
 from common.configuration import ConfigurationError
 from common.email import StaticEmailTransport
 from common.memory import DuckDbMemoryStore
+
+
+@dataclass
+class FakeGraphResponse:
+    status_code: int
+    payload: Mapping[str, Any]
+
+    def json(self) -> Mapping[str, Any]:
+        return self.payload
+
+
+class FakeGraphTransport:
+    def get(self, url: str, headers: Mapping[str, str]) -> FakeGraphResponse:
+        raise AssertionError("Unexpected Graph GET in factory test.")
+
+    def post(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+    ) -> FakeGraphResponse:
+        raise AssertionError("Unexpected Graph POST in factory test.")
+
+
+class FakeGraphTokenTransport:
+    def __init__(self):
+        self.calls: list[tuple[str, Mapping[str, str], Mapping[str, str]]] = []
+
+    def post_form(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        form: Mapping[str, str],
+    ) -> FakeGraphResponse:
+        self.calls.append((url, headers, form))
+        return FakeGraphResponse(200, {"access_token": "acquired-token"})
 
 
 def test_run_email_review_records_metadata_and_generates_brief(tmp_path):
@@ -264,6 +307,43 @@ def test_run_email_review_can_use_sample_graph_transport(tmp_path):
     assert trash_items[0].subject == "Spoofed Clarity command"
 
 
+def test_build_graph_read_transport_from_config_uses_client_credentials(tmp_path):
+    _write_graph_env(
+        tmp_path,
+        "GRAPH_TENANT_ID=tenant\n"
+        "GRAPH_CLIENT_ID=client-id\n"
+        "GRAPH_CLIENT_SECRET=super-secret\n",
+    )
+    token_transport = FakeGraphTokenTransport()
+
+    transport = build_graph_read_transport_from_config(
+        root=tmp_path,
+        graph_transport=FakeGraphTransport(),
+        token_transport=token_transport,
+    )
+
+    assert "acquired-token" not in repr(transport)
+    assert len(token_transport.calls) == 1
+    _, _, form = token_transport.calls[0]
+    assert form["client_id"] == "client-id"
+    assert form["client_secret"] == "super-secret"
+
+
+def test_build_graph_read_transport_from_config_can_use_bearer_token(tmp_path):
+    _write_graph_env(tmp_path, "GRAPH_ACCESS_TOKEN=direct-token\n")
+    token_transport = FakeGraphTokenTransport()
+
+    transport = build_graph_read_transport_from_config(
+        root=tmp_path,
+        graph_transport=FakeGraphTransport(),
+        token_transport=token_transport,
+        use_bearer_auth=True,
+    )
+
+    assert "direct-token" not in repr(transport)
+    assert token_transport.calls == []
+
+
 def test_run_email_review_rejects_unapproved_mailbox(tmp_path):
     _write_config(tmp_path)
 
@@ -387,3 +467,10 @@ def _write_config(
         """,
         encoding="utf-8",
     )
+
+
+def _write_graph_env(root, content):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(content, encoding="utf-8")

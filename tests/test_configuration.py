@@ -15,7 +15,7 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
         encoding="utf-8",
     )
     (config_dir / ".env").write_text(
-        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\n",
+        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\nGRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=graph-secret\nGRAPH_ACCESS_TOKEN=graph-access\n",
         encoding="utf-8",
     )
 
@@ -29,6 +29,12 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
     assert config.jira_credentials.api_token == "secret"
     assert config.jira_credentials.access_token == "access-secret"
     assert config.jira_credentials.is_complete
+    assert config.graph_credentials.tenant_id == "tenant"
+    assert config.graph_credentials.client_id == "client"
+    assert config.graph_credentials.client_secret == "graph-secret"
+    assert config.graph_credentials.access_token == "graph-access"
+    assert config.graph_credentials.is_client_secret_complete
+    assert config.graph_credentials.is_bearer_auth_complete
 
 
 def test_jira_settings_are_validated_and_typed(tmp_path):
@@ -362,6 +368,53 @@ def test_require_jira_credentials_can_validate_bearer_auth_values(tmp_path):
     config = load_workspace_config(tmp_path, include_process_env=False)
 
     assert config.require_jira_credentials(use_bearer_auth=True).is_bearer_auth_complete
+
+
+def test_require_graph_credentials_returns_complete_client_secret_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "GRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.require_graph_credentials().is_client_secret_complete
+
+
+def test_require_graph_credentials_can_validate_bearer_auth_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "GRAPH_ACCESS_TOKEN=access-token\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.require_graph_credentials(use_bearer_auth=True).is_bearer_auth_complete
+
+
+def test_require_graph_credentials_reports_missing_values_without_secret_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "GRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_SECRET=super-secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.require_graph_credentials()
+
+    message = str(exc_info.value)
+    assert "GRAPH_CLIENT_ID" in message
+    assert "super-secret" not in message
 
 
 def test_require_jira_credentials_can_validate_basic_auth_values(tmp_path):

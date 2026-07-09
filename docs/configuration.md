@@ -37,6 +37,18 @@ modes:
 -   `JIRA_SITE_URL`
 -   `JIRA_ACCESS_TOKEN`
 
+Microsoft Graph runtime wiring uses these local values:
+
+-   `GRAPH_TENANT_ID`
+-   `GRAPH_CLIENT_ID`
+-   `GRAPH_CLIENT_SECRET`
+-   `GRAPH_ACCESS_TOKEN`
+
+`GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET` support
+app-only client credentials token acquisition. `GRAPH_ACCESS_TOKEN` is available
+for explicit Bearer-token experiments. These values are local secrets and must
+not be committed.
+
 ## Shared Settings
 
 `config/config.json` (committed)
@@ -56,6 +68,8 @@ The loader:
 -   Avoids importing unrelated process environment variables
 -   Keeps Jira API tokens out of object representations
 -   Keeps Jira access tokens out of object representations
+-   Keeps Graph client secrets out of object representations
+-   Keeps Graph access tokens out of object representations
 
 ## Public API
 
@@ -66,6 +80,7 @@ Use these public objects from `common.configuration`:
 -   `WorkspaceConfig`
 -   `JiraSettings`
 -   `JiraCredentials`
+-   `GraphCredentials`
 -   `EmailSettings`
 -   `ConfigurationError`
 
@@ -78,6 +93,11 @@ Use these public objects from `common.configuration`:
 `WorkspaceConfig.require_jira_credentials()` returns Jira credentials when all
 required values are present. It raises `ConfigurationError` with missing key
 names when values are incomplete. Error messages must not include secret values.
+
+`WorkspaceConfig.require_graph_credentials()` returns Microsoft Graph
+credentials for client-secret token acquisition or Bearer-token experiments. It
+raises `ConfigurationError` with missing key names when values are incomplete.
+Error messages must not include secret values.
 
 ## Validation
 

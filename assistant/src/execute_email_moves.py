@@ -9,6 +9,12 @@ from typing import Sequence
 
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import EmailSettings, find_workspace_root, load_workspace_config
+from common.email import EmailMoveClient, EmailMoveTransport
+from common.graph_email import (
+    GraphTokenTransport,
+    GraphTransport,
+    build_graph_email_move_transport,
+)
 from common.memory import DuckDbMemoryStore
 
 
@@ -44,11 +50,12 @@ def execute_email_moves(
     root: Path | str | None = None,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     dry_run: bool = True,
+    move_transport: EmailMoveTransport | None = None,
     limit: int = 25,
 ) -> str:
     """Dry-run approved email move actions from local Clarity memory."""
 
-    if not dry_run:
+    if not dry_run and move_transport is None:
         return "Live email moves are not implemented. Run without --execute."
 
     workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
@@ -73,24 +80,36 @@ def execute_email_moves(
             return _format_blocked_plan(blocked_plan)
 
         run = store.start_run(workflow="execute-email-moves")
+        if dry_run:
+            result_summary = (
+                f"Prepared dry-run plan for {len(plan)} approved email move(s)."
+            )
+            run_summary = f"Dry-run email move plan with {len(plan)} item(s)."
+            action_type = "dry_run_email_moves"
+        else:
+            _execute_plan(plan, move_transport=move_transport)
+            result_summary = f"Executed {len(plan)} approved email move(s)."
+            run_summary = f"Executed email move plan with {len(plan)} item(s)."
+            action_type = "execute_email_moves"
         store.record_assistant_action(
             run_id=run.run_id,
-            action_type="dry_run_email_moves",
+            action_type=action_type,
             approval_status="not_required",
-            result=f"Prepared dry-run plan for {len(plan)} approved email move(s).",
+            result=result_summary,
         )
         store.finish_run(
             run.run_id,
             status="completed",
-            summary=f"Dry-run email move plan with {len(plan)} item(s).",
+            summary=run_summary,
         )
     finally:
         store.close()
 
-    lines = ["# Email Move Dry Run", ""]
+    lines = ["# Email Move Dry Run" if dry_run else "# Email Move Execution", ""]
     for item in plan:
+        verb = "Would move" if dry_run else "Moved"
         lines.append(
-            f"- Would move message {item.message_id} in mailbox "
+            f"- {verb} message {item.message_id} in mailbox "
             f"{item.mailbox} to {item.target_folder}"
         )
         if item.subject:
@@ -110,8 +129,29 @@ def main(argv: Sequence[str] | None = None) -> None:
         execute_email_moves(
             memory_path=args.memory,
             dry_run=not args.execute,
+            move_transport=None,
             limit=args.limit,
         )
+    )
+
+
+def build_graph_move_transport_from_config(
+    *,
+    root: Path | str | None = None,
+    graph_transport: GraphTransport | None = None,
+    token_transport: GraphTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> EmailMoveTransport:
+    """Build a Graph email move transport from local workspace configuration."""
+
+    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    config = load_workspace_config(workspace_root)
+    credentials = config.require_graph_credentials(use_bearer_auth=use_bearer_auth)
+    return build_graph_email_move_transport(
+        credentials,
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+        use_bearer_auth=use_bearer_auth,
     )
 
 
@@ -136,6 +176,22 @@ def _approved_email_move_plan(
         and action.item_external_id
         and action.action_target
     )
+
+
+def _execute_plan(
+    plan: tuple[EmailMovePlanItem, ...],
+    *,
+    move_transport: EmailMoveTransport | None,
+) -> None:
+    if move_transport is None:
+        raise RuntimeError("move_transport is required for email move execution.")
+    client = EmailMoveClient(transport=move_transport)
+    for item in plan:
+        client.move_message(
+            mailbox=item.mailbox,
+            message_id=item.message_id,
+            target_folder=item.target_folder,
+        )
 
 
 def _validate_email_move_plan(

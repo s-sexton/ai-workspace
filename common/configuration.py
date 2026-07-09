@@ -55,6 +55,28 @@ class JiraCredentials:
 
 
 @dataclass(frozen=True)
+class GraphCredentials:
+    """Local Microsoft Graph credentials loaded from environment values."""
+
+    tenant_id: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = field(default=None, repr=False)
+    access_token: str | None = field(default=None, repr=False)
+
+    @property
+    def is_client_secret_complete(self) -> bool:
+        """Return whether app-only client secret credentials are present."""
+
+        return all((self.tenant_id, self.client_id, self.client_secret))
+
+    @property
+    def is_bearer_auth_complete(self) -> bool:
+        """Return whether a direct Graph access token is present."""
+
+        return bool(self.access_token)
+
+
+@dataclass(frozen=True)
 class JiraSettings:
     """Shared Jira report settings loaded from committed configuration."""
 
@@ -110,6 +132,17 @@ class WorkspaceConfig:
             email=self.env.get("JIRA_EMAIL"),
             api_token=self.env.get("JIRA_API_TOKEN"),
             access_token=self.env.get("JIRA_ACCESS_TOKEN"),
+        )
+
+    @property
+    def graph_credentials(self) -> GraphCredentials:
+        """Return Microsoft Graph credentials from local environment values."""
+
+        return GraphCredentials(
+            tenant_id=self.env.get("GRAPH_TENANT_ID"),
+            client_id=self.env.get("GRAPH_CLIENT_ID"),
+            client_secret=self.env.get("GRAPH_CLIENT_SECRET"),
+            access_token=self.env.get("GRAPH_ACCESS_TOKEN"),
         )
 
     @property
@@ -185,6 +218,31 @@ class WorkspaceConfig:
         if missing:
             raise ConfigurationError(
                 "Missing required Jira environment values: " + ", ".join(missing)
+            )
+
+        return credentials
+
+    def require_graph_credentials(
+        self,
+        *,
+        use_bearer_auth: bool = False,
+    ) -> GraphCredentials:
+        """Return Graph credentials or raise when required values are missing."""
+
+        credentials = self.graph_credentials
+        required = (
+            (("GRAPH_ACCESS_TOKEN", credentials.access_token),)
+            if use_bearer_auth
+            else (
+                ("GRAPH_TENANT_ID", credentials.tenant_id),
+                ("GRAPH_CLIENT_ID", credentials.client_id),
+                ("GRAPH_CLIENT_SECRET", credentials.client_secret),
+            )
+        )
+        missing = [name for name, value in required if not value]
+        if missing:
+            raise ConfigurationError(
+                "Missing required Graph environment values: " + ", ".join(missing)
             )
 
         return credentials

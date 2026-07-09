@@ -1,7 +1,51 @@
 from __future__ import annotations
 
-from assistant.src.execute_email_moves import execute_email_moves, main
+from dataclasses import dataclass
+from typing import Any, Mapping
+
+from assistant.src.execute_email_moves import (
+    build_graph_move_transport_from_config,
+    execute_email_moves,
+    main,
+)
+from common.email import StaticEmailMoveTransport
 from common.memory import DuckDbMemoryStore
+
+
+@dataclass
+class FakeGraphResponse:
+    status_code: int
+    payload: Mapping[str, Any]
+
+    def json(self) -> Mapping[str, Any]:
+        return self.payload
+
+
+class FakeGraphTransport:
+    def get(self, url: str, headers: Mapping[str, str]) -> FakeGraphResponse:
+        raise AssertionError("Unexpected Graph GET in factory test.")
+
+    def post(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+    ) -> FakeGraphResponse:
+        raise AssertionError("Unexpected Graph POST in factory test.")
+
+
+class FakeGraphTokenTransport:
+    def __init__(self):
+        self.calls: list[tuple[str, Mapping[str, str], Mapping[str, str]]] = []
+
+    def post_form(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        form: Mapping[str, str],
+    ) -> FakeGraphResponse:
+        self.calls.append((url, headers, form))
+        return FakeGraphResponse(200, {"access_token": "acquired-token"})
 
 
 def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
@@ -109,6 +153,79 @@ def test_execute_email_moves_rejects_live_execution(tmp_path):
     assert result == "Live email moves are not implemented. Run without --execute."
 
 
+def test_build_graph_move_transport_from_config_uses_client_credentials(tmp_path):
+    _write_graph_env(
+        tmp_path,
+        "GRAPH_TENANT_ID=tenant\n"
+        "GRAPH_CLIENT_ID=client-id\n"
+        "GRAPH_CLIENT_SECRET=super-secret\n",
+    )
+    token_transport = FakeGraphTokenTransport()
+
+    transport = build_graph_move_transport_from_config(
+        root=tmp_path,
+        graph_transport=FakeGraphTransport(),
+        token_transport=token_transport,
+    )
+
+    assert "acquired-token" not in repr(transport)
+    assert len(token_transport.calls) == 1
+    _, _, form = token_transport.calls[0]
+    assert form["client_id"] == "client-id"
+    assert form["client_secret"] == "super-secret"
+
+
+def test_build_graph_move_transport_from_config_can_use_bearer_token(tmp_path):
+    _write_graph_env(tmp_path, "GRAPH_ACCESS_TOKEN=direct-token\n")
+    token_transport = FakeGraphTokenTransport()
+
+    transport = build_graph_move_transport_from_config(
+        root=tmp_path,
+        graph_transport=FakeGraphTransport(),
+        token_transport=token_transport,
+        use_bearer_auth=True,
+    )
+
+    assert "direct-token" not in repr(transport)
+    assert token_transport.calls == []
+
+
+def test_execute_email_moves_can_execute_with_injected_transport(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
+    action_id = _seed_approved_email_move(memory_path)
+    transport = StaticEmailMoveTransport(moved_messages=[])
+
+    result = execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        dry_run=False,
+        move_transport=transport,
+    )
+
+    assert "# Email Move Execution" in result
+    assert (
+        "Moved message graph-message-1 in mailbox "
+        "scott.sexton@sendthisfile.com to Clarity/Review"
+    ) in result
+    assert f"Action: {action_id}" in result
+    assert len(transport.moved_messages) == 1
+    assert transport.moved_messages[0].mailbox == "scott.sexton@sendthisfile.com"
+    assert transport.moved_messages[0].message_id == "graph-message-1"
+    assert transport.moved_messages[0].target_folder == "Clarity/Review"
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        latest_run = store.latest_run(workflow="execute-email-moves")
+        actions = store.recent_actions()
+    finally:
+        store.close()
+
+    assert latest_run is not None
+    assert latest_run.summary == "Executed email move plan with 1 item(s)."
+    assert actions[0].action_type == "execute_email_moves"
+
+
 def test_main_prints_dry_run(tmp_path, monkeypatch, capsys):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
@@ -190,3 +307,10 @@ def _write_config(root, mailbox, access_mode):
         """,
         encoding="utf-8",
     )
+
+
+def _write_graph_env(root, content):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(content, encoding="utf-8")
