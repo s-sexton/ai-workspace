@@ -1,4 +1,4 @@
-# Architecture
+﻿# Architecture
 
 ## Overview
 
@@ -20,7 +20,11 @@ Current shared components:
     current milestone, and avoids exposing secret values in object
     representations or errors.
 -   `common.jira`: builds the read-only Jira report query, calls an injected
-    transport, and normalizes Jira issue JSON into report-friendly objects.
+    transport, optionally uses a standard-library live Jira transport, and
+    normalizes Jira issue JSON into report-friendly objects.
+-   `common.memory`: provides the first local Clarity memory boundary, backed by
+    DuckDB, for recording runs, approved sources, items seen, classifications,
+    human feedback, and delegated tasks without storing secrets.
 
 ## Assistant Structure
 
@@ -35,10 +39,11 @@ assistant/
 
 Current assistant components:
 
--   `assistant/`: contains LifeOps Assistant, which covers work and personal
+-   `assistant/`: contains Clarity Assistant, which covers work and personal
     decision support while keeping implementation steps small and testable.
 -   `assistant.src.jira_report`: formats normalized Jira issues into Markdown
     for the first read-only Jira report.
 -   `assistant.src.run_jira_report`: wires configuration, a static Jira
-    transport, Jira normalization, and Markdown generation into a local
-    end-to-end report check.
+    transport or explicit live read-only transport, Jira normalization, and
+    Markdown generation into an end-to-end report check.
+

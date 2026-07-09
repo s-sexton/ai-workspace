@@ -8,7 +8,6 @@
     "jira": {
       "projects": [
         "STF",
-        "SUPP",
         "ACCT"
       ],
       "maxResults": 10,

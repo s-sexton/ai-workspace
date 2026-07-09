@@ -1,4 +1,4 @@
-# AI Workspace
+﻿# AI Workspace
 
 ## Purpose
 
@@ -56,21 +56,21 @@ Complexity should emerge through composition rather than large monolithic applic
 
 ```
 ai-workspace/
-│
-├── assistant/
-├── developer/
-├── analytics/
-├── security/
-├── documentation/
-├── research/
-│
-├── common/
-├── config/
-├── docs/
-├── scripts/
-├── tests/
-├── logs/
-└── reports/
+â”‚
+â”œâ”€â”€ assistant/
+â”œâ”€â”€ developer/
+â”œâ”€â”€ analytics/
+â”œâ”€â”€ security/
+â”œâ”€â”€ documentation/
+â”œâ”€â”€ research/
+â”‚
+â”œâ”€â”€ common/
+â”œâ”€â”€ config/
+â”œâ”€â”€ docs/
+â”œâ”€â”€ scripts/
+â”œâ”€â”€ tests/
+â”œâ”€â”€ logs/
+â””â”€â”€ reports/
 ```
 
 ---
@@ -79,7 +79,7 @@ ai-workspace/
 
 ## assistant/
 
-LifeOps Assistant for work and personal decision support.
+Clarity Assistant for work and personal decision support.
 
 Initial responsibilities include:
 
@@ -265,3 +265,4 @@ Initial scope:
 # Long-Term Vision
 
 Create a reusable local-first AI engineering platform where specialized assistants collaborate through a shared platform while maintaining consistent architecture, security, and development practices.
+

@@ -22,6 +22,21 @@ For the first Jira milestone, the expected keys are:
 -   `JIRA_EMAIL`
 -   `JIRA_API_TOKEN`
 
+`JIRA_CLOUD_ID` is the Atlassian cloud ID used to build the live Jira API URL:
+
+``` text
+https://api.atlassian.com/ex/jira/{JIRA_CLOUD_ID}/rest/api/3/...
+```
+
+`JIRA_EMAIL` and `JIRA_API_TOKEN` are used for Basic auth on that route,
+matching the working Atlassian request shape.
+
+Optional values may still be stored for fallback, comparison, or future auth
+modes:
+
+-   `JIRA_SITE_URL`
+-   `JIRA_ACCESS_TOKEN`
+
 ## Shared Settings
 
 `config/config.json` (committed)
@@ -40,6 +55,7 @@ The loader:
 -   Allows process environment values to override local env file values
 -   Avoids importing unrelated process environment variables
 -   Keeps Jira API tokens out of object representations
+-   Keeps Jira access tokens out of object representations
 
 ## Public API
 

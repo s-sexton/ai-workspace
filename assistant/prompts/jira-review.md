@@ -1,6 +1,6 @@
-# Jira Review Guidance
+﻿# Jira Review Guidance
 
-Use this guidance when LifeOps Assistant reviews Jira report data.
+Use this guidance when Clarity Assistant reviews Jira report data.
 
 ## Goal
 
@@ -39,3 +39,4 @@ Do not:
 
 If a Jira write or workflow transition seems useful, recommend it and wait for
 explicit approval.
+

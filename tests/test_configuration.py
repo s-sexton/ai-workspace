@@ -15,7 +15,7 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
         encoding="utf-8",
     )
     (config_dir / ".env").write_text(
-        "JIRA_CLOUD_ID=test-cloud\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\n",
+        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\n",
         encoding="utf-8",
     )
 
@@ -24,8 +24,10 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
     assert config.root == tmp_path
     assert config.settings["workspace"]["name"] == "Test Workspace"
     assert config.jira_credentials.cloud_id == "test-cloud"
+    assert config.jira_credentials.site_url == "https://test.atlassian.net"
     assert config.jira_credentials.email == "user@example.com"
     assert config.jira_credentials.api_token == "secret"
+    assert config.jira_credentials.access_token == "access-secret"
     assert config.jira_credentials.is_complete
 
 
@@ -81,7 +83,35 @@ def test_require_jira_credentials_returns_complete_credentials(tmp_path):
 
     config = load_workspace_config(tmp_path, include_process_env=False)
 
-    assert config.require_jira_credentials().is_complete
+    assert config.require_jira_credentials().is_cloud_route_complete
+
+
+def test_require_jira_credentials_can_validate_bearer_auth_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "JIRA_CLOUD_ID=test-cloud\nJIRA_ACCESS_TOKEN=access-secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.require_jira_credentials(use_bearer_auth=True).is_bearer_auth_complete
+
+
+def test_require_jira_credentials_can_validate_basic_auth_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "JIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.require_jira_credentials(use_cloud_route=False).is_basic_auth_complete
 
 
 def test_require_jira_credentials_reports_missing_keys_without_secret_values(tmp_path):

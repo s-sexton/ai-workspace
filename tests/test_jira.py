@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 from typing import Any, Mapping
+from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -12,6 +13,8 @@ from common.jira import (
     JIRA_SEARCH_PATH,
     JiraClient,
     JiraClientError,
+    UrllibJiraResponse,
+    UrllibJiraTransport,
     build_report_jql,
     normalize_search_result,
 )
@@ -59,21 +62,56 @@ def test_fetch_report_issues_builds_read_only_search_request():
     query = parse_qs(parsed.query)
 
     assert parsed.scheme == "https"
-    assert parsed.netloc == "example.atlassian.net"
-    assert parsed.path == JIRA_SEARCH_PATH
+    assert parsed.netloc == "api.atlassian.com"
+    assert parsed.path == f"/ex/jira/example-cloud-id{JIRA_SEARCH_PATH}"
     assert query["jql"] == ["project in (STF) ORDER BY updated DESC"]
     assert query["maxResults"] == ["10"]
     assert query["fields"] == ["summary,status,priority,assignee,updated"]
     assert headers["Accept"] == "application/json"
+    expected = base64.b64encode(b"user@example.com:token").decode("ascii")
+    assert headers["Authorization"] == f"Basic {expected}"
 
 
-def test_fetch_report_issues_uses_basic_auth_without_exposing_token_in_repr():
+def test_fetch_report_issues_can_use_bearer_auth_with_cloud_route():
+    transport = FakeTransport(FakeResponse(200, {"issues": []}))
+    client = JiraClient(
+        settings=_settings(),
+        credentials=_credentials(),
+        transport=transport,
+        use_bearer_auth=True,
+    )
+
+    client.fetch_report_issues()
+
+    _, headers = transport.calls[0]
+    assert headers["Authorization"] == "Bearer access-token"
+
+
+def test_fetch_report_issues_accepts_jql_override():
+    transport = FakeTransport(FakeResponse(200, {"issues": []}))
+    client = JiraClient(
+        settings=_settings(),
+        credentials=_credentials(),
+        transport=transport,
+        jql="project = ACCT ORDER BY updated DESC",
+    )
+
+    client.fetch_report_issues()
+
+    url, _ = transport.calls[0]
+    query = parse_qs(urlparse(url).query)
+    assert query["jql"] == ["project = ACCT ORDER BY updated DESC"]
+    assert client.effective_jql == "project = ACCT ORDER BY updated DESC"
+
+
+def test_fetch_report_issues_can_use_basic_auth_without_exposing_token_in_repr():
     transport = FakeTransport(FakeResponse(200, {"issues": []}))
     credentials = _credentials(api_token="super-secret")
     client = JiraClient(
         settings=_settings(),
         credentials=credentials,
         transport=transport,
+        use_cloud_route=False,
     )
 
     client.fetch_report_issues()
@@ -157,6 +195,62 @@ def test_normalize_search_result_requires_issue_key_and_summary():
         normalize_search_result({"issues": [{"key": "STF-1", "fields": {}}]})
 
 
+def test_urllib_jira_transport_sends_get_request(monkeypatch):
+    calls = []
+
+    class FakeHttpResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"issues": []}'
+
+    def fake_urlopen(request, timeout):
+        calls.append((request, timeout))
+        return FakeHttpResponse()
+
+    monkeypatch.setattr("common.jira.urlopen", fake_urlopen)
+
+    response = UrllibJiraTransport(timeout_seconds=5).get(
+        "https://example.atlassian.net/rest/api/3/search/jql",
+        headers={"Accept": "application/json"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"issues": []}
+    request, timeout = calls[0]
+    assert request.get_method() == "GET"
+    assert request.full_url == "https://example.atlassian.net/rest/api/3/search/jql"
+    assert request.get_header("Accept") == "application/json"
+    assert timeout == 5
+
+
+def test_urllib_jira_transport_wraps_network_error(monkeypatch):
+    def fake_urlopen(request, timeout):
+        raise URLError("network down")
+
+    monkeypatch.setattr("common.jira.urlopen", fake_urlopen)
+
+    with pytest.raises(JiraClientError):
+        UrllibJiraTransport().get(
+            "https://example.atlassian.net/rest/api/3/search/jql",
+            headers={},
+        )
+
+
+def test_urllib_jira_response_requires_json_object():
+    with pytest.raises(JiraClientError):
+        UrllibJiraResponse(status_code=200, body=b"[]").json()
+
+    with pytest.raises(JiraClientError):
+        UrllibJiraResponse(status_code=200, body=b"not-json").json()
+
+
 def _settings(
     *,
     projects: tuple[str, ...] = ("STF",),
@@ -172,7 +266,9 @@ def _settings(
 
 def _credentials(api_token: str = "token") -> JiraCredentials:
     return JiraCredentials(
-        cloud_id="example",
+        cloud_id="example-cloud-id",
+        site_url="https://example.atlassian.net",
         email="user@example.com",
         api_token=api_token,
+        access_token="access-token",
     )

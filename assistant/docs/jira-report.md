@@ -52,3 +52,55 @@ python -m assistant.src.run_jira_report
 
 This runner is for local infrastructure testing only. It does not call live
 Jira, does not require real credentials, and does not write to Jira.
+
+## Live Read-Only Mode
+
+After `config/.env` contains Jira credentials, the same runner can read from
+Jira Cloud:
+
+``` powershell
+python -m assistant.src.run_jira_report --live
+```
+
+Live mode:
+
+-   Loads Jira settings from `config/config.json`
+-   Loads Jira credentials from `config/.env` or expected process environment
+    values
+-   Uses `JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`
+-   Calls `https://api.atlassian.com/ex/jira/{JIRA_CLOUD_ID}/...`
+-   Uses Basic auth by default, matching the working Atlassian curl request
+-   Uses the standard-library Jira transport in `common.jira`
+-   Writes the Markdown report to `reports/jira-report.md`
+-   Does not write to Jira
+
+The default command without `--live` remains offline and uses static sample
+data.
+
+## Troubleshooting Empty Reports
+
+If the live report returns zero issues, first show the safe diagnostics:
+
+``` powershell
+python -m assistant.src.run_jira_report --live --show-query
+```
+
+Diagnostics include:
+
+-   Base URL
+-   JQL
+-   Max results
+-   Requested fields
+-   Returned issue count
+
+Diagnostics do not print headers, API tokens, access tokens, or credentials.
+
+Then test one known active project at a time:
+
+``` powershell
+python -m assistant.src.run_jira_report --live --show-query --jql "project = STF ORDER BY updated DESC"
+python -m assistant.src.run_jira_report --live --show-query --jql "project = ACCT ORDER BY updated DESC"
+```
+
+If a project-specific query still returns zero issues, check whether the
+Atlassian account tied to `JIRA_EMAIL` has read access to that Jira project.

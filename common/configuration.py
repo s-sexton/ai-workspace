@@ -24,14 +24,34 @@ class JiraCredentials:
     """Local Jira credentials loaded from environment values."""
 
     cloud_id: str | None = None
+    site_url: str | None = None
     email: str | None = None
     api_token: str | None = field(default=None, repr=False)
+    access_token: str | None = field(default=None, repr=False)
 
     @property
     def is_complete(self) -> bool:
         """Return whether all required Jira credential values are present."""
 
+        return self.is_cloud_route_complete
+
+    @property
+    def is_basic_auth_complete(self) -> bool:
+        """Return whether Basic-auth Jira credentials are present."""
+
+        return all((self.site_url, self.email, self.api_token))
+
+    @property
+    def is_cloud_route_complete(self) -> bool:
+        """Return whether cloud ID route Jira credentials are present."""
+
         return all((self.cloud_id, self.email, self.api_token))
+
+    @property
+    def is_bearer_auth_complete(self) -> bool:
+        """Return whether Bearer-auth Jira credentials are present."""
+
+        return all((self.cloud_id, self.access_token))
 
 
 @dataclass(frozen=True)
@@ -58,8 +78,10 @@ class WorkspaceConfig:
 
         return JiraCredentials(
             cloud_id=self.env.get("JIRA_CLOUD_ID"),
+            site_url=self.env.get("JIRA_SITE_URL"),
             email=self.env.get("JIRA_EMAIL"),
             api_token=self.env.get("JIRA_API_TOKEN"),
+            access_token=self.env.get("JIRA_ACCESS_TOKEN"),
         )
 
     @property
@@ -75,19 +97,36 @@ class WorkspaceConfig:
             report_fields=_require_string_tuple(settings, "reportFields"),
         )
 
-    def require_jira_credentials(self) -> JiraCredentials:
+    def require_jira_credentials(
+        self,
+        *,
+        use_cloud_route: bool = True,
+        use_bearer_auth: bool = False,
+    ) -> JiraCredentials:
         """Return Jira credentials or raise when required values are missing."""
 
         credentials = self.jira_credentials
-        missing = [
-            key
-            for key, value in (
+        required = (
+            (
                 ("JIRA_CLOUD_ID", credentials.cloud_id),
-                ("JIRA_EMAIL", credentials.email),
-                ("JIRA_API_TOKEN", credentials.api_token),
+                ("JIRA_ACCESS_TOKEN", credentials.access_token),
             )
-            if not value
-        ]
+            if use_bearer_auth
+            else (
+                (
+                    ("JIRA_CLOUD_ID", credentials.cloud_id),
+                    ("JIRA_EMAIL", credentials.email),
+                    ("JIRA_API_TOKEN", credentials.api_token),
+                )
+                if use_cloud_route
+                else (
+                    ("JIRA_SITE_URL", credentials.site_url),
+                    ("JIRA_EMAIL", credentials.email),
+                    ("JIRA_API_TOKEN", credentials.api_token),
+                )
+            )
+        )
+        missing = [key for key, value in required if not value]
         if missing:
             raise ConfigurationError(
                 "Missing required Jira environment values: " + ", ".join(missing)

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import base64
+import json
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from common.configuration import JiraCredentials, JiraSettings
 
@@ -35,6 +38,54 @@ class JiraResponse(Protocol):
 
     def json(self) -> Mapping[str, Any]:
         """Return the response body as JSON data."""
+
+
+@dataclass(frozen=True)
+class UrllibJiraResponse:
+    """Jira response backed by a standard-library HTTP response."""
+
+    status_code: int
+    body: bytes = field(repr=False)
+
+    def json(self) -> Mapping[str, Any]:
+        """Decode the response body as JSON."""
+
+        try:
+            payload = json.loads(self.body.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            raise JiraClientError("Jira response body was not valid JSON.") from exc
+
+        if not isinstance(payload, Mapping):
+            raise JiraClientError("Jira response body must be a JSON object.")
+
+        return payload
+
+
+@dataclass(frozen=True)
+class UrllibJiraTransport:
+    """Read-only Jira transport using Python's standard library."""
+
+    timeout_seconds: float = 30.0
+
+    def get(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+    ) -> UrllibJiraResponse:
+        """Send a read-only GET request to Jira Cloud."""
+
+        request = Request(url, headers=dict(headers), method="GET")
+
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                status_code = int(response.status)
+                body = response.read()
+        except HTTPError as exc:
+            return UrllibJiraResponse(status_code=int(exc.code), body=exc.read())
+        except URLError as exc:
+            raise JiraClientError("Jira issue search request failed.") from exc
+
+        return UrllibJiraResponse(status_code=status_code, body=body)
 
 
 @dataclass(frozen=True)
@@ -73,6 +124,9 @@ class JiraClient:
     settings: JiraSettings
     credentials: JiraCredentials = field(repr=False)
     transport: JiraTransport = field(repr=False)
+    jql: str | None = None
+    use_cloud_route: bool = True
+    use_bearer_auth: bool = False
 
     def fetch_report_issues(self) -> JiraIssueSearchResult:
         """Fetch and normalize the Jira issues needed for the first report."""
@@ -88,13 +142,31 @@ class JiraClient:
 
     def _build_search_url(self) -> str:
         query = {
-            "jql": build_report_jql(self.settings),
+            "jql": self.effective_jql,
             "maxResults": str(self.settings.max_results),
             "fields": ",".join(_jira_api_fields(self.settings.report_fields)),
         }
-        return f"https://{self.credentials.cloud_id}.atlassian.net{JIRA_SEARCH_PATH}?{urlencode(query)}"
+        return f"{self._base_url()}{JIRA_SEARCH_PATH}?{urlencode(query)}"
+
+    @property
+    def effective_jql(self) -> str:
+        """Return the custom JQL override or the configured report JQL."""
+
+        if self.jql is not None and self.jql.strip():
+            return self.jql.strip()
+        return build_report_jql(self.settings)
 
     def _build_headers(self) -> dict[str, str]:
+        if self.use_bearer_auth:
+            if not self.credentials.access_token:
+                raise JiraClientError("Jira access token is required for Bearer auth.")
+            return {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.credentials.access_token}",
+            }
+
+        if not self.credentials.email or not self.credentials.api_token:
+            raise JiraClientError("Jira email and API token are required for Basic auth.")
         token = f"{self.credentials.email}:{self.credentials.api_token}".encode("utf-8")
         return {
             "Accept": "application/json",
@@ -102,12 +174,35 @@ class JiraClient:
             + base64.b64encode(token).decode("ascii"),
         }
 
+    def _base_url(self) -> str:
+        if self.use_cloud_route:
+            return f"https://api.atlassian.com/ex/jira/{_normalized_cloud_id(self.credentials.cloud_id)}"
+        return _normalized_site_url(self.credentials.site_url)
+
 
 def build_report_jql(settings: JiraSettings) -> str:
     """Build the configured read-only report JQL."""
 
     projects = ", ".join(settings.projects)
     return f"project in ({projects}) ORDER BY {settings.sort_order}"
+
+
+def _normalized_site_url(site_url: str | None) -> str:
+    if site_url is None or not site_url.strip():
+        raise JiraClientError("Jira site URL is required.")
+
+    stripped = site_url.strip().rstrip("/")
+    if not stripped.startswith("https://"):
+        raise JiraClientError("Jira site URL must start with https://.")
+
+    return stripped
+
+
+def _normalized_cloud_id(cloud_id: str | None) -> str:
+    if cloud_id is None or not cloud_id.strip():
+        raise JiraClientError("Jira cloud ID is required.")
+
+    return cloud_id.strip().strip("/")
 
 
 def _jira_api_fields(report_fields: tuple[str, ...]) -> tuple[str, ...]:
