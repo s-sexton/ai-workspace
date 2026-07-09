@@ -45,6 +45,8 @@ Current components:
     Clarity requests to local tools and memory.
 -   `assistant.src.run_clarity_cycle`: runs one scheduled-friendly Clarity email
     refresh cycle and prints a safe local summary.
+-   `assistant.src.print_clarity_schedule`: prints PowerShell commands for
+    registering a local Windows scheduled task.
 -   `assistant.src.jira_report`: generates Markdown from normalized Jira issues.
 -   `assistant.src.run_jira_report`: runs the local fake Jira report workflow
     and writes `reports/jira-report.md`.
@@ -152,6 +154,15 @@ python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --gr
 This performs the same read-only email refresh and prints review/pending-action
 sections. Scheduling the command is an operator/environment concern; the command
 itself does not create an operating-system scheduled task.
+
+To print the PowerShell commands for a daily Windows scheduled task:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30
+```
+
+Review the printed script before running it. See `docs/scheduling.md` for the
+local scheduling workflow.
 
 To teach Clarity from a remembered item:
 

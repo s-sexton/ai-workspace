@@ -246,19 +246,21 @@ Reports may contain sensitive business information.
 
 ---
 
-# Initial Milestone
+# Current Milestone
 
-Build the Assistant's first Jira report.
+Build Clarity's local command surface and email review loop.
 
-Initial scope:
+Current scope:
 
-- Read-only Jira Cloud API
-- Normalize ticket data
-- Generate Markdown report
+- Deterministic local question answering from Clarity memory
+- Read-only Jira Cloud reporting
+- Approved email mailbox metadata review
+- Local memory and Markdown briefs
+- Proposed email folder moves with local approval records
+- Scheduler-friendly local cycle commands
 - No Jira writes
-- No email integration
 - No LLM
-- No scheduling
+- No autonomous writes
 
 ---
 

@@ -253,6 +253,15 @@ python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --gr
 The cycle performs a read-only refresh and prints safe review and pending-action
 sections. It does not create the scheduled task itself.
 
+To print PowerShell commands for registering that daily task with Windows Task
+Scheduler:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30
+```
+
+See `docs/scheduling.md` for the scheduling workflow and removal command.
+
 Local approval status can be updated with:
 
 ``` powershell
