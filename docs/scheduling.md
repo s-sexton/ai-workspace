@@ -45,6 +45,13 @@ memory, writes the local brief, writes `reports/clarity-cycle.md`, and prints
 review and pending-action sections. It does not send, move, archive, or delete
 email.
 
+Clarity also records the cycle in local memory. To check the last remembered
+cycle:
+
+``` powershell
+python -m assistant.src.clarity "When did Clarity last run?"
+```
+
 To choose a different cycle report path:
 
 ``` powershell

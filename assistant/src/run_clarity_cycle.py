@@ -15,6 +15,7 @@ from assistant.src.run_email_review import (
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import find_workspace_root
 from common.email import EmailTransport
+from common.memory import DuckDbMemoryStore
 
 
 DEFAULT_CYCLE_REPORT_PATH = Path("reports") / "clarity-cycle.md"
@@ -83,6 +84,16 @@ def run_clarity_cycle(
         brief_path=review_result.brief_path,
         review_answer=review_answer,
         pending_answer=pending_answer,
+    )
+    _record_cycle_memory(
+        memory_path=review_result.memory_path,
+        cycle_report_path=resolved_cycle_report_path,
+        mailbox=review_result.mailbox,
+        message_count=review_result.message_count,
+        review_count=review_result.review_count,
+        noise_count=review_result.noise_count,
+        trash_count=review_result.trash_count,
+        proposed_action_count=review_result.proposed_action_count,
     )
     return ClarityCycleResult(
         memory_path=review_result.memory_path,
@@ -222,6 +233,50 @@ def _resolve_path(workspace_root: Path, path: Path) -> Path:
     if path.is_absolute():
         return path
     return workspace_root / path
+
+
+def _record_cycle_memory(
+    *,
+    memory_path: Path,
+    cycle_report_path: Path,
+    mailbox: str,
+    message_count: int,
+    review_count: int,
+    noise_count: int,
+    trash_count: int,
+    proposed_action_count: int,
+) -> None:
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="clarity-cycle")
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_cycle_report",
+            path=cycle_report_path,
+            summary=f"Clarity cycle report for {mailbox}.",
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            action_type="run_clarity_cycle",
+            approval_status="not_required",
+            result=(
+                f"Read {message_count} message(s) from {mailbox}; "
+                f"review={review_count}, noise={noise_count}, trash={trash_count}, "
+                f"proposed_actions={proposed_action_count}."
+            ),
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary=(
+                f"Read {message_count} message(s) from {mailbox}; "
+                f"review={review_count}, noise={noise_count}, trash={trash_count}, "
+                f"proposed_actions={proposed_action_count}."
+            ),
+        )
+    finally:
+        store.close()
 
 
 if __name__ == "__main__":

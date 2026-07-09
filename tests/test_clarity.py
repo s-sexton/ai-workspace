@@ -65,6 +65,21 @@ def test_clarity_answers_what_did_you_do(tmp_path):
     assert "read_email_metadata [not_required]" in answer
 
 
+def test_clarity_answers_last_run_question(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+    _seed_cycle_run(memory_path)
+
+    answer = answer_clarity_request(
+        "When did Clarity last run?",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Latest Clarity Cycle" in answer
+    assert "- Workflow: clarity-cycle" in answer
+
+
 def test_clarity_answers_email_move_plan(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -266,6 +281,30 @@ def _seed_memory(memory_path):
             run.run_id,
             status="completed",
             summary="Reviewed 2 email message(s).",
+        )
+    finally:
+        store.close()
+
+
+def _seed_cycle_run(memory_path):
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(
+            workflow="clarity-cycle",
+            started_at="2026-07-09T16:00:00+00:00",
+        )
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_cycle_report",
+            path="reports/clarity-cycle.md",
+            summary="Clarity cycle report for clarity@sendthisfile.ai.",
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary="Read 1 message(s) from clarity@sendthisfile.ai.",
+            completed_at="2026-07-09T16:01:00+00:00",
         )
     finally:
         store.close()

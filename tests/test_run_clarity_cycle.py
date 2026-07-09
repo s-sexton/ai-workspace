@@ -4,6 +4,7 @@ import pytest
 
 from assistant.src.run_clarity_cycle import main, run_clarity_cycle
 from common.email import StaticEmailTransport
+from common.memory import DuckDbMemoryStore
 
 
 def test_run_clarity_cycle_refreshes_email_and_returns_answers(tmp_path):
@@ -50,6 +51,18 @@ def test_run_clarity_cycle_refreshes_email_and_returns_answers(tmp_path):
     assert "# Clarity Cycle" in report
     assert "Mailbox: inbox@example.invalid" in report
     assert "Please review this [review]" in report
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        latest_cycle = store.latest_run(workflow="clarity-cycle")
+        artifacts = store.list_generated_artifacts(run_id=latest_cycle.run_id)
+        actions = store.recent_actions()
+    finally:
+        store.close()
+
+    assert latest_cycle is not None
+    assert "Read 2 message(s) from inbox@example.invalid" in latest_cycle.summary
+    assert artifacts[0].path == str(cycle_report_path)
+    assert any(action.action_type == "run_clarity_cycle" for action in actions)
 
 
 def test_main_prints_safe_cycle_summary(tmp_path, monkeypatch, capsys):

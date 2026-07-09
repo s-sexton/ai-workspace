@@ -21,6 +21,23 @@ def test_answers_latest_jira_run(tmp_path):
     assert "Artifact summary: Jira report with 2 issue(s)." in answer
 
 
+def test_answers_last_clarity_cycle(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "last-cycle",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Latest Clarity Cycle" in answer
+    assert "- Workflow: clarity-cycle" in answer
+    assert "- Status: completed" in answer
+    assert "- Summary: Read 2 message(s) from clarity@sendthisfile.ai" in answer
+    assert "- Artifact: reports/clarity-cycle.md (markdown_cycle_report)" in answer
+
+
 def test_answers_summary(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -316,6 +333,34 @@ def _seed_memory(memory_path):
             status="completed",
             summary="Generated Jira report with 2 issue(s).",
             completed_at="2026-07-09T15:01:00+00:00",
+        )
+        cycle_run = store.start_run(
+            workflow="clarity-cycle",
+            started_at="2026-07-09T16:00:00+00:00",
+        )
+        store.record_generated_artifact(
+            run_id=cycle_run.run_id,
+            artifact_type="markdown_cycle_report",
+            path="reports/clarity-cycle.md",
+            summary="Clarity cycle report for clarity@sendthisfile.ai.",
+        )
+        store.record_assistant_action(
+            run_id=cycle_run.run_id,
+            action_type="run_clarity_cycle",
+            approval_status="not_required",
+            result=(
+                "Read 2 message(s) from clarity@sendthisfile.ai; "
+                "review=1, noise=0, trash=1, proposed_actions=2."
+            ),
+        )
+        store.finish_run(
+            cycle_run.run_id,
+            status="completed",
+            summary=(
+                "Read 2 message(s) from clarity@sendthisfile.ai; "
+                "review=1, noise=0, trash=1, proposed_actions=2."
+            ),
+            completed_at="2026-07-09T16:01:00+00:00",
         )
     finally:
         store.close()

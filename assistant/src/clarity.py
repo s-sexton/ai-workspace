@@ -91,6 +91,16 @@ def _route_request(request: str) -> str | None:
 
     if any(phrase in clean_request for phrase in ("what did you do", "what happened")):
         return "actions"
+    if any(
+        phrase in clean_request
+        for phrase in (
+            "last cycle",
+            "last run",
+            "when did you run",
+            "when did clarity run",
+        )
+    ):
+        return "last-cycle"
     if "pending" in clean_request or "needs approval" in clean_request:
         return "pending-actions"
     if "approved" in clean_request and "move" in clean_request:
@@ -123,6 +133,7 @@ def _unsupported_response() -> str:
         "- What emails need immediate attention?\n"
         "- What needs approval?\n"
         "- What did you do?\n"
+        "- When did Clarity last run?\n"
         "- Show my email move plan.\n"
         "- What tasks are open?"
     )

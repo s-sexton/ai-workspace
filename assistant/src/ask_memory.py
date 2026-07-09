@@ -13,6 +13,7 @@ from common.memory import DuckDbMemoryStore
 
 SUPPORTED_QUESTIONS = (
     "summary",
+    "last-cycle",
     "latest-jira-run",
     "recent-items",
     "review-items",
@@ -44,8 +45,20 @@ def answer_memory_question(
     try:
         if question == "summary":
             return _format_summary(store, limit=limit)
+        if question == "last-cycle":
+            return _answer_latest_run(
+                store,
+                workflow="clarity-cycle",
+                title="Latest Clarity Cycle",
+                empty_message="No Clarity cycle runs found in Clarity memory.",
+            )
         if question == "latest-jira-run":
-            return _answer_latest_jira_run(store)
+            return _answer_latest_run(
+                store,
+                workflow="jira-report",
+                title="Latest Jira Report Run",
+                empty_message="No Jira report runs found in Clarity memory.",
+            )
         if question == "recent-items":
             return _format_recent_items(
                 "Recent Items",
@@ -93,15 +106,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
 
-def _answer_latest_jira_run(store: DuckDbMemoryStore) -> str:
-    run = store.latest_run(workflow="jira-report")
+def _answer_latest_run(
+    store: DuckDbMemoryStore,
+    *,
+    workflow: str,
+    title: str,
+    empty_message: str,
+) -> str:
+    run = store.latest_run(workflow=workflow)
     if run is None:
-        return "No Jira report runs found in Clarity memory."
+        return empty_message
 
     lines = [
-        "# Latest Jira Report Run",
+        f"# {title}",
         "",
         f"- Run ID: {run.run_id}",
+        f"- Workflow: {run.workflow}",
         f"- Status: {run.status}",
         f"- Started: {run.started_at}",
     ]
