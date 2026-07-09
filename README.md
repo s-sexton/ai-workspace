@@ -1,0 +1,267 @@
+# AI Workspace
+
+## Purpose
+
+AI Workspace is a local-first engineering platform for building AI-powered assistants that support work and personal decision making, including SendThisFile operations and personal life coordination.
+
+The goal is **not** to replace human decision making.
+
+The goal is to help people make better decisions by gathering information, analyzing data, making recommendations, and automating repetitive work while maintaining human oversight.
+
+The workspace is designed to grow over time by adding specialized assistants that share a common platform rather than duplicating functionality.
+
+---
+
+# Design Principles
+
+The following principles guide every architectural and implementation decision.
+
+## Local First
+
+Whenever practical, assistants execute locally.
+
+Cloud execution is never assumed.
+
+## Human In Control
+
+Assistants assist.
+
+Humans decide.
+
+Production changes, infrastructure changes, security changes, and destructive actions always require human approval.
+
+## Security First
+
+Security is preferred over convenience.
+
+Least privilege is the default.
+
+Secrets are never committed to source control.
+
+## Build Once, Reuse Everywhere
+
+Common functionality belongs in the shared platform.
+
+Avoid duplicated implementations.
+
+## Small, Understandable Components
+
+Each assistant should have a clear responsibility.
+
+Complexity should emerge through composition rather than large monolithic applications.
+
+---
+
+# Repository Layout
+
+```
+ai-workspace/
+│
+├── assistant/
+├── developer/
+├── analytics/
+├── security/
+├── documentation/
+├── research/
+│
+├── common/
+├── config/
+├── docs/
+├── scripts/
+├── tests/
+├── logs/
+└── reports/
+```
+
+---
+
+# Directory Responsibilities
+
+## assistant/
+
+LifeOps Assistant for work and personal decision support.
+
+Initial responsibilities include:
+
+- Jira review
+- Jira Service Management review
+- Operational summaries
+- Prioritization recommendations
+
+Future capabilities may include:
+
+- Gmail review
+- Family calendar review
+- Personal reminders
+- Household planning
+- Customer health monitoring
+- Daily briefings
+
+---
+
+## developer/
+
+Software engineering assistant.
+
+Examples:
+
+- Jira implementation
+- Code generation
+- Code review
+- Pull request summaries
+- Architecture analysis
+
+---
+
+## analytics/
+
+Business analytics assistant.
+
+Examples:
+
+- PostgreSQL analysis
+- Power BI
+- Chargebee
+- QuickBooks
+- Business metrics
+- Customer trends
+
+---
+
+## security/
+
+Security engineering assistant.
+
+Examples:
+
+- Authentication review
+- Secret scanning
+- Dependency review
+- Security recommendations
+- Code review
+
+---
+
+## documentation/
+
+Documentation assistant.
+
+Examples:
+
+- README maintenance
+- Architecture documentation
+- Release notes
+- User documentation
+- Architecture Decision Records
+
+---
+
+## research/
+
+Research assistant.
+
+Examples:
+
+- Technology evaluations
+- Product comparisons
+- Design alternatives
+- Best practices
+
+---
+
+## common/
+
+Shared platform used by every assistant.
+
+Examples include:
+
+- Authentication
+- Configuration
+- Logging
+- Shared API clients
+- Prompt management
+- Reporting
+- Utility functions
+
+---
+
+## config/
+
+Workspace configuration.
+
+Contains:
+
+- Environment templates
+- Shared configuration
+
+Local secrets are never committed.
+
+---
+
+## docs/
+
+Architecture and design documentation.
+
+Every significant architectural decision should be documented.
+
+---
+
+## scripts/
+
+Workspace utility scripts.
+
+These scripts support the workspace.
+
+They should not contain reusable business logic.
+
+---
+
+## tests/
+
+Workspace testing.
+
+Includes:
+
+- Unit tests
+- Integration tests
+- Shared component tests
+
+---
+
+## logs/
+
+Runtime logs.
+
+Ignored by Git.
+
+---
+
+## reports/
+
+Generated assistant output.
+
+Ignored by Git.
+
+Reports may contain sensitive business information.
+
+---
+
+# Initial Milestone
+
+Build the Assistant's first Jira report.
+
+Initial scope:
+
+- Read-only Jira Cloud API
+- Normalize ticket data
+- Generate Markdown report
+- No Jira writes
+- No email integration
+- No LLM
+- No scheduling
+
+---
+
+# Long-Term Vision
+
+Create a reusable local-first AI engineering platform where specialized assistants collaborate through a shared platform while maintaining consistent architecture, security, and development practices.

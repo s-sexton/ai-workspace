@@ -1,0 +1,26 @@
+{
+  "workspace": {
+    "name": "AI Workspace",
+    "pythonVersion": ">=3.12",
+    "localFirst": true
+  },
+  "assistant": {
+    "jira": {
+      "projects": [
+        "STF",
+        "SUPP",
+        "ACCT"
+      ],
+      "maxResults": 10,
+      "sortOrder": "updated DESC",
+      "reportFields": [
+        "key",
+        "summary",
+        "status",
+        "priority",
+        "assignee",
+        "updated"
+      ]
+    }
+  }
+}
