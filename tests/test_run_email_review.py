@@ -425,6 +425,57 @@ def test_main_can_use_sample_graph_transport(tmp_path, monkeypatch, capsys):
     assert "Trash: 1" in output
 
 
+def test_main_can_use_graph_read_transport(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_build_graph_read_transport_from_config(*, use_bearer_auth=False, **_):
+        calls.append(use_bearer_auth)
+        return StaticEmailTransport(
+            (
+                {
+                    "message_id": "graph-live-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Live Graph review",
+                    "sender": "sender@example.invalid",
+                },
+            )
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.run_email_review.build_graph_read_transport_from_config",
+        fake_build_graph_read_transport_from_config,
+    )
+
+    main(
+        [
+            "--graph",
+            "--graph-bearer",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert calls == [True]
+    assert "Read 1 email message(s) from inbox@example.invalid" in output
+    assert "Review: 1" in output
+    assert "Live Graph review" not in output
+
+
+def test_main_rejects_graph_bearer_without_graph():
+    with pytest.raises(SystemExit):
+        main(["--graph-bearer"])
+
+
+def test_main_rejects_sample_graph_with_live_graph():
+    with pytest.raises(SystemExit):
+        main(["--sample-graph", "--graph"])
+
+
 def _write_config(
     root,
     *,

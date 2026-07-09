@@ -260,6 +260,212 @@ def build_graph_email_read_transport(
     )
 
 
+def build_graph_email_folder_transport(
+    credentials: GraphCredentials,
+    *,
+    graph_transport: GraphTransport | None = None,
+    token_transport: GraphTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> GraphEmailFolderTransport:
+    """Build a Graph email folder transport from local credentials."""
+
+    if use_bearer_auth:
+        access_token = _required_text(credentials.access_token, "access_token")
+    else:
+        provider = GraphClientCredentialsTokenProvider(
+            credentials=credentials,
+            transport=token_transport or UrllibGraphTokenTransport(),
+        )
+        access_token = provider.access_token()
+
+    return GraphEmailFolderTransport(
+        access_token=access_token,
+        transport=graph_transport or UrllibGraphTransport(),
+    )
+
+
+@dataclass(frozen=True)
+class GraphFolderEnsureResult:
+    """Result for ensuring one mailbox folder path exists."""
+
+    mailbox: str
+    folder_path: str
+    folder_id: str
+    created: bool
+
+
+@dataclass(frozen=True)
+class GraphEmailFolderTransport:
+    """Create mailbox folders using Microsoft Graph."""
+
+    access_token: str = field(repr=False)
+    transport: GraphTransport = field(repr=False)
+    base_url: str = GRAPH_BASE_URL
+
+    def ensure_folder_path(
+        self,
+        *,
+        mailbox: str,
+        folder_path: str,
+    ) -> GraphFolderEnsureResult:
+        """Ensure one folder path exists inside the specified mailbox."""
+
+        clean_mailbox = _required_text(mailbox, "mailbox")
+        clean_folder_path = _required_text(folder_path, "folder_path")
+        if clean_folder_path == "Deleted Items":
+            return GraphFolderEnsureResult(
+                mailbox=clean_mailbox,
+                folder_path=clean_folder_path,
+                folder_id="deleteditems",
+                created=False,
+            )
+
+        created = False
+        parent_folder_id: str | None = None
+        folder_id: str | None = None
+        for segment in _folder_segments(clean_folder_path):
+            existing_id = self._find_child_folder_id_or_none(
+                mailbox=clean_mailbox,
+                parent_folder_id=parent_folder_id,
+                display_name=segment,
+            )
+            if existing_id is None:
+                folder_id = self._create_child_folder(
+                    mailbox=clean_mailbox,
+                    parent_folder_id=parent_folder_id,
+                    display_name=segment,
+                )
+                created = True
+            else:
+                folder_id = existing_id
+            parent_folder_id = folder_id
+
+        if folder_id is None:
+            raise GraphClientError("Microsoft Graph folder path was not resolved.")
+        return GraphFolderEnsureResult(
+            mailbox=clean_mailbox,
+            folder_path=clean_folder_path,
+            folder_id=folder_id,
+            created=created,
+        )
+
+    def folder_path_exists(self, *, mailbox: str, folder_path: str) -> bool:
+        """Return whether one folder path currently exists."""
+
+        clean_mailbox = _required_text(mailbox, "mailbox")
+        clean_folder_path = _required_text(folder_path, "folder_path")
+        if clean_folder_path == "Deleted Items":
+            return True
+
+        parent_folder_id: str | None = None
+        for segment in _folder_segments(clean_folder_path):
+            folder_id = self._find_child_folder_id_or_none(
+                mailbox=clean_mailbox,
+                parent_folder_id=parent_folder_id,
+                display_name=segment,
+            )
+            if folder_id is None:
+                return False
+            parent_folder_id = folder_id
+        return True
+
+    def _find_child_folder_id_or_none(
+        self,
+        *,
+        mailbox: str,
+        parent_folder_id: str | None,
+        display_name: str,
+    ) -> str | None:
+        payload = self._get_json(
+            self._mail_folders_url(mailbox, parent_folder_id=parent_folder_id)
+        )
+        folders = payload.get("value")
+        if not isinstance(folders, list):
+            raise GraphClientError("Microsoft Graph mailFolders response missing value.")
+        for folder in folders:
+            if not isinstance(folder, Mapping):
+                raise GraphClientError(
+                    "Microsoft Graph mailFolders response item must be an object."
+                )
+            if folder.get("displayName") == display_name:
+                folder_id = folder.get("id")
+                if not isinstance(folder_id, str) or not folder_id.strip():
+                    raise GraphClientError("Microsoft Graph mail folder missing id.")
+                return folder_id
+        return None
+
+    def _create_child_folder(
+        self,
+        *,
+        mailbox: str,
+        parent_folder_id: str | None,
+        display_name: str,
+    ) -> str:
+        response = self.transport.post(
+            self._create_folder_url(mailbox, parent_folder_id=parent_folder_id),
+            headers=self._json_headers(),
+            body={"displayName": display_name},
+        )
+        if response.status_code != 201:
+            raise GraphClientError(
+                f"Microsoft Graph folder create failed with status {response.status_code}"
+            )
+        payload = response.json()
+        folder_id = payload.get("id")
+        if not isinstance(folder_id, str) or not folder_id.strip():
+            raise GraphClientError("Microsoft Graph create folder response missing id.")
+        return folder_id
+
+    def _get_json(self, url: str) -> Mapping[str, Any]:
+        response = self.transport.get(url, headers=self._json_headers())
+        if response.status_code != 200:
+            raise GraphClientError(
+                f"Microsoft Graph mail folder lookup failed with status {response.status_code}"
+            )
+        return response.json()
+
+    def _json_headers(self) -> dict[str, str]:
+        token = _required_text(self.access_token, "access_token")
+        return {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+        }
+
+    def _mail_folders_url(
+        self,
+        mailbox: str,
+        *,
+        parent_folder_id: str | None,
+    ) -> str:
+        encoded_mailbox = quote(mailbox, safe="")
+        query = urlencode({"$top": "100"})
+        if parent_folder_id is None:
+            return f"{self._base_url()}/users/{encoded_mailbox}/mailFolders?{query}"
+        encoded_folder_id = quote(parent_folder_id, safe="")
+        return (
+            f"{self._base_url()}/users/{encoded_mailbox}/mailFolders/"
+            f"{encoded_folder_id}/childFolders?{query}"
+        )
+
+    def _create_folder_url(
+        self,
+        mailbox: str,
+        *,
+        parent_folder_id: str | None,
+    ) -> str:
+        encoded_mailbox = quote(mailbox, safe="")
+        if parent_folder_id is None:
+            return f"{self._base_url()}/users/{encoded_mailbox}/mailFolders"
+        encoded_folder_id = quote(parent_folder_id, safe="")
+        return (
+            f"{self._base_url()}/users/{encoded_mailbox}/mailFolders/"
+            f"{encoded_folder_id}/childFolders"
+        )
+
+    def _base_url(self) -> str:
+        return self.base_url.rstrip("/")
+
+
 @dataclass(frozen=True)
 class GraphEmailMoveTransport:
     """Move email messages inside a mailbox using Microsoft Graph."""

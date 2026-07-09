@@ -176,11 +176,17 @@ def main(argv: Sequence[str] | None = None) -> None:
     """Run the local read-only email review workflow."""
 
     args = _parse_args(argv)
+    transport = (
+        build_graph_read_transport_from_config(use_bearer_auth=args.graph_bearer)
+        if args.graph
+        else None
+    )
     result = run_email_review(
         mailbox=args.mailbox,
         limit=args.limit,
         memory_path=args.memory,
         brief_output_path=args.brief,
+        transport=transport,
         use_sample_graph=args.sample_graph,
     )
     print(f"Read {result.message_count} email message(s) from {result.mailbox}")
@@ -322,10 +328,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Approved mailbox label to read from fake local transport.",
     )
     parser.add_argument("--limit", type=int, default=25)
-    parser.add_argument(
+    source_group = parser.add_mutually_exclusive_group()
+    source_group.add_argument(
         "--sample-graph",
         action="store_true",
         help="Use local Microsoft Graph-shaped sample messages; no network calls.",
+    )
+    source_group.add_argument(
+        "--graph",
+        action="store_true",
+        help="Read approved mailbox metadata from Microsoft Graph.",
+    )
+    parser.add_argument(
+        "--graph-bearer",
+        action="store_true",
+        help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
     )
     parser.add_argument(
         "--memory",
@@ -337,7 +354,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=str(Path("reports") / "clarity-brief.md"),
         help="Local brief output path.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.graph_bearer and not args.graph:
+        parser.error("--graph-bearer requires --graph.")
+    return args
 
 
 if __name__ == "__main__":

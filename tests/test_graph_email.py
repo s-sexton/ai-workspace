@@ -11,9 +11,11 @@ from common.email import EmailClientError
 from common.graph_email import (
     GraphClientError,
     GraphClientCredentialsTokenProvider,
+    GraphEmailFolderTransport,
     GraphEmailReadTransport,
     GraphEmailMoveTransport,
     UrllibGraphResponse,
+    build_graph_email_folder_transport,
     build_graph_email_read_transport,
     build_graph_email_move_transport,
 )
@@ -212,6 +214,181 @@ def test_build_graph_email_read_transport_can_acquire_client_credentials_token()
     assert isinstance(transport, GraphEmailReadTransport)
     assert len(token_transport.calls) == 1
     assert "super-secret" not in repr(transport)
+
+
+def test_build_graph_email_folder_transport_can_use_direct_access_token():
+    graph_transport = FakeGraphTransport({})
+    token_transport = FakeGraphTokenTransport(
+        FakeGraphResponse(200, {"access_token": "should-not-be-used"})
+    )
+
+    transport = build_graph_email_folder_transport(
+        GraphCredentials(access_token="direct-token"),
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+        use_bearer_auth=True,
+    )
+
+    assert isinstance(transport, GraphEmailFolderTransport)
+    assert "direct-token" not in repr(transport)
+    assert token_transport.calls == []
+
+
+def test_build_graph_email_folder_transport_can_acquire_client_credentials_token():
+    graph_transport = FakeGraphTransport({})
+    token_transport = FakeGraphTokenTransport(
+        FakeGraphResponse(200, {"access_token": "acquired-token"})
+    )
+
+    transport = build_graph_email_folder_transport(
+        GraphCredentials(
+            tenant_id="tenant",
+            client_id="client-id",
+            client_secret="super-secret",
+        ),
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+    )
+
+    assert isinstance(transport, GraphEmailFolderTransport)
+    assert len(token_transport.calls) == 1
+    assert "super-secret" not in repr(transport)
+
+
+def test_graph_email_folder_transport_creates_missing_folder_path():
+    base_url = "https://graph.example/v1.0"
+    root_list_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders?%24top=100"
+    )
+    root_create_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/mailFolders"
+    )
+    child_list_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders/folder-clarity/childFolders?%24top=100"
+    )
+    child_create_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders/folder-clarity/childFolders"
+    )
+    transport = FakeGraphTransport(
+        {
+            root_list_url: FakeGraphResponse(200, {"value": []}),
+            root_create_url: FakeGraphResponse(
+                201,
+                {"id": "folder-clarity", "displayName": "Clarity"},
+            ),
+            child_list_url: FakeGraphResponse(200, {"value": []}),
+            child_create_url: FakeGraphResponse(
+                201,
+                {"id": "folder-review", "displayName": "Review"},
+            ),
+        }
+    )
+    client = GraphEmailFolderTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+    )
+
+    result = client.ensure_folder_path(
+        mailbox="clarity@sendthisfile.ai",
+        folder_path="Clarity/Review",
+    )
+
+    assert result.mailbox == "clarity@sendthisfile.ai"
+    assert result.folder_path == "Clarity/Review"
+    assert result.folder_id == "folder-review"
+    assert result.created
+    assert len(transport.post_calls) == 2
+    assert transport.post_calls[0][2] == {"displayName": "Clarity"}
+    assert transport.post_calls[1][2] == {"displayName": "Review"}
+
+
+def test_graph_email_folder_transport_leaves_existing_folder_path_unchanged():
+    base_url = "https://graph.example/v1.0"
+    root_list_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders?%24top=100"
+    )
+    child_list_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders/folder-clarity/childFolders?%24top=100"
+    )
+    transport = FakeGraphTransport(
+        {
+            root_list_url: FakeGraphResponse(
+                200,
+                {"value": [{"id": "folder-clarity", "displayName": "Clarity"}]},
+            ),
+            child_list_url: FakeGraphResponse(
+                200,
+                {"value": [{"id": "folder-noise", "displayName": "Noise"}]},
+            ),
+        }
+    )
+    client = GraphEmailFolderTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+    )
+
+    result = client.ensure_folder_path(
+        mailbox="clarity@sendthisfile.ai",
+        folder_path="Clarity/Noise",
+    )
+
+    assert result.folder_id == "folder-noise"
+    assert not result.created
+    assert transport.post_calls == []
+
+
+def test_graph_email_folder_transport_checks_folder_path_existence():
+    base_url = "https://graph.example/v1.0"
+    root_list_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders?%24top=100"
+    )
+    child_list_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders/folder-clarity/childFolders?%24top=100"
+    )
+    transport = FakeGraphTransport(
+        {
+            root_list_url: FakeGraphResponse(
+                200,
+                {"value": [{"id": "folder-clarity", "displayName": "Clarity"}]},
+            ),
+            child_list_url: FakeGraphResponse(200, {"value": []}),
+        }
+    )
+    client = GraphEmailFolderTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+    )
+
+    assert not client.folder_path_exists(
+        mailbox="clarity@sendthisfile.ai",
+        folder_path="Clarity/Review",
+    )
+
+
+def test_graph_email_folder_transport_does_not_create_deleted_items():
+    client = GraphEmailFolderTransport(
+        access_token="access-token",
+        transport=FakeGraphTransport({}),
+        base_url="https://graph.example/v1.0",
+    )
+
+    result = client.ensure_folder_path(
+        mailbox="clarity@sendthisfile.ai",
+        folder_path="Deleted Items",
+    )
+
+    assert result.folder_id == "deleteditems"
+    assert not result.created
 
 
 def test_graph_email_move_resolves_folder_path_and_moves_message():

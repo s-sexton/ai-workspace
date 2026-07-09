@@ -2,9 +2,11 @@
 
 ## Current Milestone
 
-The current email milestone is intentionally local and read-only:
+The current email milestone is intentionally read-only:
 
--   Read fake mailbox metadata
+-   Read fake mailbox metadata by default
+-   Optionally read approved mailbox metadata from Microsoft Graph with
+    `--graph`
 -   Require the mailbox to be listed in local approved mailbox config
 -   Normalize message metadata
 -   Apply deterministic placeholder classifications
@@ -14,7 +16,9 @@ The current email milestone is intentionally local and read-only:
 -   Generate the local Clarity brief
 -   Surface both review and noise classifications for inspection
 
-It does not connect to live Exchange, Gmail, or Microsoft Graph.
+By default it does not connect to live Exchange, Gmail, or Microsoft Graph.
+Explicit `--graph` mode reads message metadata from Microsoft Graph, but still
+does not send, move, archive, or delete email.
 
 It does not send, move, archive, delete, or modify email.
 Folder moves are recorded only as proposed local actions that require approval.
@@ -66,9 +70,9 @@ approved live execution paths. The public command-line execution path still
 does not call this helper.
 
 `assistant.src.run_email_review.build_graph_read_transport_from_config()` loads
-local Graph credentials and builds the Graph read transport for future live
+local Graph credentials and builds the Graph read transport for explicit live
 review paths. The public command-line review path still defaults to fake local
-data unless a transport is injected by code.
+data unless `--graph` is passed.
 
 ## Approved Mailboxes
 
@@ -155,6 +159,16 @@ The local email review workflow can exercise that transport with:
 python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --sample-graph
 ```
 
+The live Microsoft Graph read path can be exercised with:
+
+``` powershell
+python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --graph
+```
+
+Use `--graph-bearer` with `--graph` only when intentionally testing a local
+`GRAPH_ACCESS_TOKEN`; otherwise the command uses app-only client credentials
+from `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET`.
+
 If the sender is not allowed, authentication metadata is missing, or
 authentication fails, the local workflow classifies the message as `trash` and
 records a proposed move to the trash folder.
@@ -172,6 +186,22 @@ Folder targets are intentionally constrained. All assistant-managed non-trash
 destinations must be children of `assistant.email.folderNamespace`, for example
 `Clarity/Review` and `Clarity/Noise`. Trash is treated as a system folder and
 must be configured as `Deleted Items`.
+
+Configured non-trash folders can be checked with:
+
+``` powershell
+python -m assistant.src.ensure_email_folders --mailbox clarity@sendthisfile.ai
+```
+
+Missing configured folders can be created with:
+
+``` powershell
+python -m assistant.src.ensure_email_folders --mailbox clarity@sendthisfile.ai --execute
+```
+
+Folder creation requires the mailbox to be approved with `read_write` access.
+It only creates folder paths from `assistant.email.folderPolicy` where the label
+is not `trash`.
 
 Folder moves are scoped to the mailbox being reviewed. If Clarity reviews
 `scott.sexton@sendthisfile.com`, then an approved move to `Clarity/Review`

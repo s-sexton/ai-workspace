@@ -172,15 +172,15 @@ To run the first local email metadata review:
 python -m assistant.src.run_email_review
 ```
 
-This uses fake mailbox data. It does not connect to Exchange, Gmail, or any live
-mailbox, and it does not send, move, archive, or delete email. The mailbox must
-be listed in `config/config.json` under `assistant.email.approvedMailboxes` with
-`read` or `read_write` access. The workflow records proposed review/noise folder
-actions from `assistant.email.folderPolicy`, and non-trash targets must be under
-the configured `assistant.email.folderNamespace`, but those proposals do not
-move messages. Proposed folder moves are scoped to the mailbox being reviewed,
-so `Clarity/Review` means that folder inside the source mailbox. Proposed
-actions that require approval can be reviewed with:
+By default this uses fake mailbox data. It does not send, move, archive, or
+delete email. The mailbox must be listed in `config/config.json` under
+`assistant.email.approvedMailboxes` with `read` or `read_write` access. The
+workflow records proposed review/noise folder actions from
+`assistant.email.folderPolicy`, and non-trash targets must be under the
+configured `assistant.email.folderNamespace`, but those proposals do not move
+messages. Proposed folder moves are scoped to the mailbox being reviewed, so
+`Clarity/Review` means that folder inside the source mailbox. Proposed actions
+that require approval can be reviewed with:
 
 ``` powershell
 python -m assistant.src.ask_memory pending-actions
@@ -192,6 +192,32 @@ messages:
 ``` powershell
 python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --sample-graph
 ```
+
+To read an approved mailbox from Microsoft Graph instead, configure Graph values
+in `config/.env`, then pass `--graph`:
+
+``` powershell
+python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --graph
+```
+
+This live Graph mode is still read-only. It records local proposed actions but
+does not move, archive, delete, or send email.
+
+To check whether configured Clarity folders exist in an approved `read_write`
+mailbox:
+
+``` powershell
+python -m assistant.src.ensure_email_folders --mailbox clarity@sendthisfile.ai
+```
+
+To create missing configured folders:
+
+``` powershell
+python -m assistant.src.ensure_email_folders --mailbox clarity@sendthisfile.ai --execute
+```
+
+This only creates non-trash folders from `assistant.email.folderPolicy`, such as
+`Clarity/Review` and `Clarity/Noise`.
 
 To read from Jira Cloud instead, configure `config/.env` with
 `JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`, then pass `--live`:
