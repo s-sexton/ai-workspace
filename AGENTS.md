@@ -120,16 +120,19 @@ Always obtain approval before:
 
 # Current Milestone
 
-The current milestone is to build the Assistant's first Jira report.
+The current milestone is to build Clarity's local command surface and email
+review loop.
 
 Scope:
 
-- Read Jira Cloud
-- Normalize ticket data
-- Generate Markdown
-- No writes
+- Answer deterministic local questions from Clarity memory
+- Read approved email mailbox metadata
+- Normalize and classify email metadata
+- Generate local Markdown briefs
+- Propose email folder moves from configured policy
+- Execute approved email moves only through explicit Graph commands
 - No LLM
-- No automation
+- No autonomous writes
 
 ---
 

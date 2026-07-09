@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-The current email milestone is intentionally read-only:
+The current email milestone keeps reads and writes explicit:
 
 -   Read fake mailbox metadata by default
 -   Optionally read approved mailbox metadata from Microsoft Graph with
@@ -15,13 +15,13 @@ The current email milestone is intentionally read-only:
 -   Propose review/noise/trash folder destinations from local policy
 -   Generate the local Clarity brief
 -   Surface both review and noise classifications for inspection
+-   Allow approved move proposals to be executed only with explicit
+    `--graph --execute`
 
 By default it does not connect to live Exchange, Gmail, or Microsoft Graph.
-Explicit `--graph` mode reads message metadata from Microsoft Graph, but still
-does not send, move, archive, or delete email.
-
-It does not send, move, archive, delete, or modify email.
-Folder moves are recorded only as proposed local actions that require approval.
+Explicit `--graph` review mode reads message metadata from Microsoft Graph, but
+does not send, move, archive, or delete email. Folder moves are recorded first
+as proposed local actions that require approval.
 
 ## Shared Boundary
 
@@ -46,9 +46,8 @@ Assistant workflows consume normalized `EmailMessage` objects. They should not
 parse provider-specific payloads directly.
 
 `EmailMoveClient` is the small write-side boundary for moving one message inside
-one mailbox. The current workflow only uses fake local move transports and keeps
-the command-line `--execute` path fail-closed until live Graph writes are
-explicitly designed and approved.
+one mailbox. The command-line execution path requires both an approved local
+move action and explicit `--graph --execute` flags.
 
 `common.graph_email` contains the Microsoft Graph-specific runtime adapters:
 
@@ -235,6 +234,24 @@ It can also be opened as a small local prompt:
 ``` powershell
 python -m assistant.src.clarity
 ```
+
+It can refresh approved mailbox metadata before answering:
+
+``` powershell
+python -m assistant.src.clarity "What emails need immediate attention?" --refresh-email --mailbox clarity@sendthisfile.ai --graph
+```
+
+This refresh path records email metadata, classifications, proposed actions, and
+the local brief before answering from memory. It does not execute proposed moves.
+
+One non-interactive Clarity cycle can be run by a local scheduler:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph
+```
+
+The cycle performs a read-only refresh and prints safe review and pending-action
+sections. It does not create the scheduled task itself.
 
 Local approval status can be updated with:
 

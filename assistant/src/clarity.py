@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Sequence
 
 from assistant.src.ask_memory import answer_memory_question
+from assistant.src.run_email_review import (
+    build_graph_read_transport_from_config,
+    run_email_review,
+)
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 
 
@@ -16,8 +20,26 @@ def answer_clarity_request(
     root: Path | str | None = None,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     limit: int = 10,
+    refresh_email: bool = False,
+    mailbox: str | None = None,
+    use_graph: bool = False,
+    use_graph_bearer: bool = False,
+    use_sample_graph: bool = False,
+    brief_path: Path | str | None = None,
 ) -> str:
     """Answer a small deterministic Clarity request."""
+
+    if refresh_email:
+        _refresh_email_memory(
+            root=root,
+            mailbox=mailbox,
+            limit=limit,
+            memory_path=memory_path,
+            brief_path=brief_path,
+            use_graph=use_graph,
+            use_graph_bearer=use_graph_bearer,
+            use_sample_graph=use_sample_graph,
+        )
 
     intent = _route_request(request)
     if intent is None:
@@ -35,7 +57,16 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = _parse_args(argv)
     if args.request is None:
-        _run_prompt(memory_path=args.memory, limit=args.limit)
+        _run_prompt(
+            memory_path=args.memory,
+            limit=args.limit,
+            refresh_email=args.refresh_email,
+            mailbox=args.mailbox,
+            use_graph=args.graph,
+            use_graph_bearer=args.graph_bearer,
+            use_sample_graph=args.sample_graph,
+            brief_path=args.brief,
+        )
         return
 
     print(
@@ -43,6 +74,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.request,
             memory_path=args.memory,
             limit=args.limit,
+            refresh_email=args.refresh_email,
+            mailbox=args.mailbox,
+            use_graph=args.graph,
+            use_graph_bearer=args.graph_bearer,
+            use_sample_graph=args.sample_graph,
+            brief_path=args.brief,
         )
     )
 
@@ -105,11 +142,57 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=str(DEFAULT_MEMORY_PATH),
         help="Local Clarity memory path. Relative paths are resolved under the workspace root.",
     )
+    parser.add_argument(
+        "--brief",
+        default=None,
+        help="Local brief output path for refresh runs.",
+    )
     parser.add_argument("--limit", type=int, default=10)
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--refresh-email",
+        action="store_true",
+        help="Run the configured email review before answering.",
+    )
+    parser.add_argument(
+        "--mailbox",
+        default=None,
+        help="Approved mailbox to refresh before answering.",
+    )
+    source_group = parser.add_mutually_exclusive_group()
+    source_group.add_argument(
+        "--sample-graph",
+        action="store_true",
+        help="Use local Microsoft Graph-shaped sample messages during refresh.",
+    )
+    source_group.add_argument(
+        "--graph",
+        action="store_true",
+        help="Read approved mailbox metadata from Microsoft Graph during refresh.",
+    )
+    parser.add_argument(
+        "--graph-bearer",
+        action="store_true",
+        help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
+    )
+    args = parser.parse_args(argv)
+    if args.graph_bearer and not args.graph:
+        parser.error("--graph-bearer requires --graph.")
+    if (args.mailbox or args.sample_graph or args.graph) and not args.refresh_email:
+        parser.error("--mailbox, --sample-graph, and --graph require --refresh-email.")
+    return args
 
 
-def _run_prompt(*, memory_path: Path | str, limit: int) -> None:
+def _run_prompt(
+    *,
+    memory_path: Path | str,
+    limit: int,
+    refresh_email: bool,
+    mailbox: str | None,
+    use_graph: bool,
+    use_graph_bearer: bool,
+    use_sample_graph: bool,
+    brief_path: Path | str | None,
+) -> None:
     print("Clarity local prompt. Type 'exit' or 'quit' to leave.")
     while True:
         try:
@@ -124,7 +207,49 @@ def _run_prompt(*, memory_path: Path | str, limit: int) -> None:
         if not clean_request:
             continue
 
-        print(answer_clarity_request(clean_request, memory_path=memory_path, limit=limit))
+        print(
+            answer_clarity_request(
+                clean_request,
+                memory_path=memory_path,
+                limit=limit,
+                refresh_email=refresh_email,
+                mailbox=mailbox,
+                use_graph=use_graph,
+                use_graph_bearer=use_graph_bearer,
+                use_sample_graph=use_sample_graph,
+                brief_path=brief_path,
+            )
+        )
+
+
+def _refresh_email_memory(
+    *,
+    root: Path | str | None,
+    mailbox: str | None,
+    limit: int,
+    memory_path: Path | str,
+    brief_path: Path | str | None,
+    use_graph: bool,
+    use_graph_bearer: bool,
+    use_sample_graph: bool,
+) -> None:
+    transport = (
+        build_graph_read_transport_from_config(
+            root=root,
+            use_bearer_auth=use_graph_bearer,
+        )
+        if use_graph
+        else None
+    )
+    run_email_review(
+        root=root,
+        mailbox=mailbox or "",
+        limit=limit,
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=transport,
+        use_sample_graph=use_sample_graph,
+    )
 
 
 if __name__ == "__main__":

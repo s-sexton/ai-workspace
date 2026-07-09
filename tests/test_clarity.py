@@ -1,7 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
 from assistant.src.clarity import answer_clarity_request, main
 from common.memory import DuckDbMemoryStore
+
+
+@dataclass(frozen=True)
+class FakeEmailReviewResult:
+    memory_path: Path
+    brief_path: Path
+    run_id: str
+    mailbox: str
+    message_count: int
+    review_count: int
+    noise_count: int
+    trash_count: int
+    proposed_action_count: int
 
 
 def test_clarity_answers_emails_needing_attention(tmp_path):
@@ -95,6 +113,100 @@ def test_main_runs_local_prompt(tmp_path, monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "Clarity local prompt" in output
     assert "# Recent Actions" in output
+
+
+def test_clarity_can_refresh_email_before_answering(tmp_path, monkeypatch):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    calls = []
+
+    def fake_run_email_review(**kwargs):
+        calls.append(kwargs)
+        _seed_memory(memory_path)
+        return FakeEmailReviewResult(
+            memory_path=memory_path,
+            brief_path=tmp_path / "reports" / "brief.md",
+            run_id="run-1",
+            mailbox="clarity@sendthisfile.ai",
+            message_count=1,
+            review_count=1,
+            noise_count=0,
+            trash_count=0,
+            proposed_action_count=1,
+        )
+
+    monkeypatch.setattr("assistant.src.clarity.run_email_review", fake_run_email_review)
+
+    answer = answer_clarity_request(
+        "What emails need immediate attention?",
+        root=tmp_path,
+        memory_path=memory_path,
+        refresh_email=True,
+        mailbox="clarity@sendthisfile.ai",
+    )
+
+    assert "# Items Marked For Review" in answer
+    assert calls[0]["mailbox"] == "clarity@sendthisfile.ai"
+    assert calls[0]["memory_path"] == memory_path
+
+
+def test_main_can_refresh_email_with_graph_transport(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    graph_calls = []
+    review_calls = []
+
+    def fake_build_graph_read_transport_from_config(*, use_bearer_auth=False, **_):
+        graph_calls.append(use_bearer_auth)
+        return object()
+
+    def fake_run_email_review(**kwargs):
+        review_calls.append(kwargs)
+        _seed_memory(memory_path)
+        return FakeEmailReviewResult(
+            memory_path=memory_path,
+            brief_path=tmp_path / "reports" / "brief.md",
+            run_id="run-1",
+            mailbox="clarity@sendthisfile.ai",
+            message_count=1,
+            review_count=1,
+            noise_count=0,
+            trash_count=0,
+            proposed_action_count=1,
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.clarity.build_graph_read_transport_from_config",
+        fake_build_graph_read_transport_from_config,
+    )
+    monkeypatch.setattr("assistant.src.clarity.run_email_review", fake_run_email_review)
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "What emails need immediate attention?",
+            "--refresh-email",
+            "--mailbox",
+            "clarity@sendthisfile.ai",
+            "--graph",
+            "--graph-bearer",
+            "--memory",
+            str(memory_path),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert graph_calls == [True]
+    assert review_calls[0]["transport"] is not None
+    assert "# Items Marked For Review" in output
+
+
+def test_main_rejects_graph_refresh_without_refresh_email():
+    with pytest.raises(SystemExit):
+        main(["What emails need immediate attention?", "--graph"])
+
+
+def test_main_rejects_graph_bearer_without_graph():
+    with pytest.raises(SystemExit):
+        main(["What emails need immediate attention?", "--refresh-email", "--graph-bearer"])
 
 
 def _seed_memory(memory_path):

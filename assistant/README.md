@@ -35,13 +35,16 @@ Shared examples:
 
 ## Current Milestone
 
-The current implementation is still intentionally narrow: the first read-only
-Jira report.
+The current implementation is intentionally narrow: a local Clarity command
+surface, Jira reporting, and an explicit email review loop over approved
+sources.
 
 Current components:
 
 -   `assistant.src.clarity`: routes the first deterministic natural-language
     Clarity requests to local tools and memory.
+-   `assistant.src.run_clarity_cycle`: runs one scheduled-friendly Clarity email
+    refresh cycle and prints a safe local summary.
 -   `assistant.src.jira_report`: generates Markdown from normalized Jira issues.
 -   `assistant.src.run_jira_report`: runs the local fake Jira report workflow
     and writes `reports/jira-report.md`.
@@ -130,6 +133,25 @@ python -m assistant.src.clarity
 
 This is a deterministic command surface over local memory. It does not use an
 LLM router yet.
+
+To refresh approved email metadata before answering:
+
+``` powershell
+python -m assistant.src.clarity "What emails need immediate attention?" --refresh-email --mailbox clarity@sendthisfile.ai --graph
+```
+
+This reads metadata into local memory, regenerates the local brief, and then
+answers from memory. It does not move, archive, delete, or send email.
+
+To run one non-interactive Clarity cycle suitable for a scheduler:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph
+```
+
+This performs the same read-only email refresh and prints review/pending-action
+sections. Scheduling the command is an operator/environment concern; the command
+itself does not create an operating-system scheduled task.
 
 To teach Clarity from a remembered item:
 
