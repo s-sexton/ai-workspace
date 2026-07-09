@@ -19,6 +19,7 @@ The output is a PowerShell script that:
 -   Sets the working directory to this repository
 -   Runs `python -m assistant.src.run_clarity_cycle`
 -   Writes the latest cycle report to `reports/clarity-cycle.md`
+-   Appends console output to `logs/clarity-cycle.log`
 -   Registers a daily trigger at the requested time
 
 Inspect the printed script before running it. Registering the task is a local
@@ -61,6 +62,18 @@ To choose a different cycle report path:
 
 ``` powershell
 python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30 --cycle-report reports/morning-clarity-cycle.md
+```
+
+To choose a different console log path:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30 --log logs/morning-clarity-cycle.log
+```
+
+To print a scheduled task without console log redirection:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30 --no-log
 ```
 
 Email moves remain separate. They require a locally approved action and an

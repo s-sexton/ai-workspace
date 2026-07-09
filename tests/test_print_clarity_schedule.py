@@ -18,6 +18,7 @@ def test_build_windows_task_scheduler_script_uses_workspace_root(tmp_path):
         memory_path="logs/clarity-memory.duckdb",
         brief_path="reports/clarity-brief.md",
         cycle_report_path="reports/clarity-cycle.md",
+        log_path="logs/clarity-cycle.log",
     )
 
     assert "New-ScheduledTaskAction" in script
@@ -31,6 +32,9 @@ def test_build_windows_task_scheduler_script_uses_workspace_root(tmp_path):
     assert "--memory 'logs/clarity-memory.duckdb'" in script
     assert "--brief 'reports/clarity-brief.md'" in script
     assert "--cycle-report 'reports/clarity-cycle.md'" in script
+    assert "$ClarityLog = 'logs/clarity-cycle.log'" in script
+    assert "New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ClarityLog)" in script
+    assert "*>> 'logs/clarity-cycle.log'" in script
 
 
 def test_build_windows_task_scheduler_script_escapes_single_quotes(tmp_path):
@@ -42,6 +46,19 @@ def test_build_windows_task_scheduler_script_escapes_single_quotes(tmp_path):
 
     assert "Scott''s Workspace" in script
     assert "--mailbox 'scott''s-mailbox@example.invalid'" in script
+    assert "--sample-graph" in script
+
+
+def test_build_windows_task_scheduler_script_can_disable_log_redirection(tmp_path):
+    script = build_windows_task_scheduler_script(
+        root=tmp_path,
+        mailbox="clarity@sendthisfile.ai",
+        use_sample_graph=True,
+        log_path=None,
+    )
+
+    assert "$ClarityLog" not in script
+    assert "*>>" not in script
     assert "--sample-graph" in script
 
 
@@ -74,6 +91,20 @@ def test_main_prints_schedule_script(tmp_path, monkeypatch, capsys):
     assert "--mailbox 'clarity@sendthisfile.ai'" in output
     assert "--sample-graph" in output
     assert "--cycle-report 'reports/clarity-cycle.md'" in output
+    assert "*>> 'logs/clarity-cycle.log'" in output
+
+
+def test_main_can_disable_schedule_log(tmp_path, monkeypatch, capsys):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    main(["--mailbox", "clarity@sendthisfile.ai", "--sample-graph", "--no-log"])
+
+    output = capsys.readouterr().out
+    assert "$ClarityLog" not in output
+    assert "*>>" not in output
 
 
 def test_main_rejects_graph_bearer_without_graph():

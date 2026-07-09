@@ -12,6 +12,7 @@ from common.configuration import find_workspace_root
 
 DEFAULT_TASK_NAME = "Clarity Email Cycle"
 DEFAULT_TASK_TIME = "07:30"
+DEFAULT_TASK_LOG_PATH = "logs/clarity-cycle.log"
 
 
 def build_windows_task_scheduler_script(
@@ -26,6 +27,7 @@ def build_windows_task_scheduler_script(
     memory_path: Path | str | None = None,
     brief_path: Path | str | None = None,
     cycle_report_path: Path | str | None = None,
+    log_path: Path | str | None = DEFAULT_TASK_LOG_PATH,
 ) -> str:
     """Return PowerShell commands that register one local scheduled task."""
 
@@ -46,14 +48,28 @@ def build_windows_task_scheduler_script(
         brief_path=brief_path,
         cycle_report_path=cycle_report_path,
     )
+    scheduled_command = (
+        "Set-Location -LiteralPath "
+        + _ps_single_quote(str(workspace_root))
+        + "; "
+    )
+    if log_path is not None:
+        log_path_text = str(log_path)
+        scheduled_command += (
+            "$ClarityLog = "
+            + _ps_single_quote(log_path_text)
+            + "; "
+            + "New-Item -ItemType Directory -Force -Path "
+            + "(Split-Path -Parent $ClarityLog) | Out-Null; "
+            + cycle_command
+            + " *>> "
+            + _ps_single_quote(log_path_text)
+        )
+    else:
+        scheduled_command += cycle_command
     scheduled_argument = (
         "-NoProfile -ExecutionPolicy Bypass -Command "
-        + _ps_double_quote(
-            "Set-Location -LiteralPath "
-            + _ps_single_quote(str(workspace_root))
-            + "; "
-            + cycle_command
-        )
+        + _ps_double_quote(scheduled_command)
     )
     lines = [
         "$Action = New-ScheduledTaskAction "
@@ -89,6 +105,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             memory_path=args.memory,
             brief_path=args.brief,
             cycle_report_path=args.cycle_report,
+            log_path=args.log,
         ),
         end="",
     )
@@ -156,11 +173,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--memory", default=None)
     parser.add_argument("--brief", default=None)
     parser.add_argument("--cycle-report", default="reports/clarity-cycle.md")
+    parser.add_argument(
+        "--log",
+        default=str(DEFAULT_TASK_LOG_PATH),
+        help="Append scheduled task console output to this local log path.",
+    )
+    parser.add_argument(
+        "--no-log",
+        action="store_true",
+        help="Do not add scheduled task output redirection.",
+    )
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
     if not _is_valid_time(args.at):
         parser.error("--at must be in HH:mm 24-hour format.")
+    if args.no_log:
+        args.log = None
     return args
 
 
