@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -11,9 +12,11 @@ from typing import Any, Mapping, Sequence
 from assistant.src.jira_report import generate_jira_report
 from common.configuration import JiraCredentials, load_workspace_config
 from common.jira import JiraClient, JiraResponse, JiraTransport, UrllibJiraTransport
+from common.memory import DuckDbMemoryStore
 
 
 DEFAULT_REPORT_PATH = Path("reports") / "jira-report.md"
+DEFAULT_MEMORY_PATH = Path("logs") / "clarity-memory.duckdb"
 
 
 SAMPLE_JIRA_RESPONSE: Mapping[str, Any] = {
@@ -79,6 +82,8 @@ class JiraReportRunResult:
     """Details from a Jira report run that are safe to display."""
 
     report_path: Path
+    memory_path: Path | None
+    run_id: str | None
     issue_count: int
     jql: str
     base_url: str
@@ -97,6 +102,7 @@ def generate_local_jira_report(
     use_live_jira: bool = False,
     jql: str | None = None,
     use_bearer_auth: bool = False,
+    memory_path: Path | str | None = DEFAULT_MEMORY_PATH,
 ) -> JiraReportRunResult:
     """Generate a Jira report file and return safe run details."""
 
@@ -135,11 +141,29 @@ def generate_local_jira_report(
         generated_at or datetime.now(),
         timezone_name=timezone_name,
     )
-
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(markdown, encoding="utf-8")
+
+    resolved_memory_path = (
+        _resolve_output_path(workspace_root, Path(memory_path))
+        if memory_path is not None
+        else None
+    )
+    run_id = (
+        _record_jira_report_memory(
+            memory_path=resolved_memory_path,
+            report_path=report_path,
+            issues=search_result.issues,
+            jql=client.effective_jql,
+            use_live_jira=use_live_jira,
+        )
+        if resolved_memory_path is not None
+        else None
+    )
     return JiraReportRunResult(
         report_path=report_path,
+        memory_path=resolved_memory_path,
+        run_id=run_id,
         issue_count=len(search_result.issues),
         jql=client.effective_jql,
         base_url=client._base_url(),
@@ -158,6 +182,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         use_live_jira=args.live,
         jql=args.jql,
         use_bearer_auth=args.bearer,
+        memory_path=None if args.no_memory else args.memory,
     )
     if args.show_query:
         _print_safe_diagnostics(result)
@@ -174,6 +199,73 @@ def _default_transport(use_live_jira: bool) -> JiraTransport:
     if use_live_jira:
         return UrllibJiraTransport()
     return StaticJiraTransport()
+
+
+def _record_jira_report_memory(
+    *,
+    memory_path: Path,
+    report_path: Path,
+    issues: Sequence[Any],
+    jql: str,
+    use_live_jira: bool,
+) -> str:
+    memory_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="jira-report")
+        source = store.record_source(
+            source_type="jira",
+            display_name="Jira Cloud" if use_live_jira else "Sample Jira",
+            scope_label=jql,
+            access_mode="read",
+        )
+        for issue in issues:
+            item = store.record_item_seen(
+                source_id=source.source_id,
+                external_id=issue.key,
+                item_type="jira_issue",
+                subject=issue.summary,
+                sender_or_owner=(
+                    issue.assignee.display_name
+                    if issue.assignee is not None
+                    else None
+                ),
+                updated_at=issue.updated,
+                content_hash=_issue_hash(issue.key, issue.summary, issue.updated),
+                first_seen_run_id=run.run_id,
+            )
+            store.record_classification(
+                item_id=item.item_id,
+                run_id=run.run_id,
+                label="review",
+                reason="Included in the Jira report for human review.",
+            )
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_report",
+            path=report_path,
+            summary=f"Jira report with {len(issues)} issue(s).",
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            action_type="generate_jira_report",
+            approval_status="not_required",
+            result=f"Wrote {report_path}",
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary=f"Generated Jira report with {len(issues)} issue(s).",
+        )
+        return run.run_id
+    finally:
+        store.close()
+
+
+def _issue_hash(key: str, summary: str, updated: str | None) -> str:
+    content = "\n".join((key, summary, updated or ""))
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -204,6 +296,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Use JIRA_ACCESS_TOKEN Bearer auth instead of email/API-token Basic auth.",
     )
+    parser.add_argument(
+        "--memory",
+        default=str(DEFAULT_MEMORY_PATH),
+        help="Local Clarity memory path. Relative paths are resolved under the workspace root.",
+    )
+    parser.add_argument(
+        "--no-memory",
+        action="store_true",
+        help="Generate the report without recording local Clarity memory.",
+    )
     return parser.parse_args(argv)
 
 
@@ -215,6 +317,9 @@ def _print_safe_diagnostics(result: JiraReportRunResult) -> None:
     print(f"Max results: {result.max_results}")
     print(f"Fields: {', '.join(result.fields)}")
     print(f"Returned issues: {result.issue_count}")
+    if result.memory_path is not None:
+        print(f"Memory path: {result.memory_path}")
+        print(f"Memory run ID: {result.run_id}")
 
 
 if __name__ == "__main__":

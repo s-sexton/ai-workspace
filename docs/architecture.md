@@ -46,4 +46,17 @@ Current assistant components:
 -   `assistant.src.run_jira_report`: wires configuration, a static Jira
     transport or explicit live read-only transport, Jira normalization, and
     Markdown generation into an end-to-end report check.
+-   `assistant.src.ask_memory`: reads the local DuckDB memory file and answers a
+    small deterministic set of questions without network access, LLM calls, or
+    external writes.
+-   `assistant.src.record_feedback`: records human feedback for remembered
+    local memory items without writing to source systems.
+-   `assistant.src.delegate_task`: records delegated work in local memory so it
+    can be surfaced by summary and open-task questions.
+-   `assistant.src.update_task`: updates local delegated task status without
+    modifying external systems.
+-   `assistant.src.generate_brief`: composes deterministic local memory answers
+    into a Markdown brief artifact.
+-   Local assistant actions are recorded in `common.memory` so Clarity can
+    answer what it did recently without inspecting logs.
 

@@ -1,0 +1,202 @@
+from __future__ import annotations
+
+from assistant.src.ask_memory import answer_memory_question, main
+from common.memory import DuckDbMemoryStore
+
+
+def test_answers_latest_jira_run(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "latest-jira-run",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Latest Jira Report Run" in answer
+    assert "- Status: completed" in answer
+    assert "- Summary: Generated Jira report with 2 issue(s)." in answer
+    assert "- Artifact: reports/jira-report.md (markdown_report)" in answer
+    assert "Artifact summary: Jira report with 2 issue(s)." in answer
+
+
+def test_answers_summary(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "summary",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity Memory Summary" in answer
+    assert "- Latest Jira run: Generated Jira report with 2 issue(s)." in answer
+    assert "- Items marked for review: 2" in answer
+    assert "- Recent feedback records: 1" in answer
+    assert "- Open delegated tasks: 1" in answer
+    assert "## Next Attention" in answer
+    assert "Prepare ACCT review: Generate a short report." in answer
+
+
+def test_answers_recent_items(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "recent-items",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Recent Items" in answer
+    assert "Review support queue trends [review]" in answer
+    assert "Build the first Jira report [review]" in answer
+    assert "Source: Jira Cloud (jira)" in answer
+
+
+def test_answers_review_items(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "review-items",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Items Marked For Review" in answer
+    assert "Included in the Jira report for human review." in answer
+
+
+def test_answers_open_tasks(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "open-tasks",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Open Delegated Tasks" in answer
+    assert "Prepare ACCT review [requested, approval required]" in answer
+    assert "Next step: Generate a short report." in answer
+
+
+def test_answers_recent_feedback(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "feedback",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Recent Feedback" in answer
+    assert "STF-1: noise - Build the first Jira report" in answer
+    assert "Feedback: This was just an automated update." in answer
+
+
+def test_answers_recent_actions(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "actions",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Recent Actions" in answer
+    assert "generate_jira_report [not_required]" in answer
+    assert "Result: Wrote reports/jira-report.md" in answer
+
+
+def test_missing_memory_returns_plain_message(tmp_path):
+    answer = answer_memory_question(
+        "recent-items",
+        root=tmp_path,
+        memory_path=tmp_path / "logs" / "missing.duckdb",
+    )
+
+    assert "No Clarity memory found" in answer
+
+
+def test_main_prints_answer(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+    monkeypatch.chdir(tmp_path)
+
+    main(["latest-jira-run", "--memory", str(memory_path)])
+
+    output = capsys.readouterr().out
+    assert "# Latest Jira Report Run" in output
+
+
+def _seed_memory(memory_path):
+    memory_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(
+            workflow="jira-report",
+            started_at="2026-07-09T15:00:00+00:00",
+        )
+        source = store.record_source(
+            source_type="jira",
+            display_name="Jira Cloud",
+            scope_label="project in (STF, ACCT)",
+        )
+        for external_id, subject in (
+            ("STF-1", "Build the first Jira report"),
+            ("SUPP-2", "Review support queue trends"),
+        ):
+            item = store.record_item_seen(
+                source_id=source.source_id,
+                external_id=external_id,
+                item_type="jira_issue",
+                subject=subject,
+                first_seen_run_id=run.run_id,
+            )
+            store.record_classification(
+                item_id=item.item_id,
+                run_id=run.run_id,
+                label="review",
+                reason="Included in the Jira report for human review.",
+            )
+            if external_id == "STF-1":
+                store.record_feedback(
+                    item_id=item.item_id,
+                    run_id=run.run_id,
+                    feedback_type="noise",
+                    feedback_text="This was just an automated update.",
+                )
+        store.create_delegated_task(
+            created_run_id=run.run_id,
+            title="Prepare ACCT review",
+            request="Summarize ACCT tickets for review.",
+            next_step="Generate a short report.",
+        )
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_report",
+            path="reports/jira-report.md",
+            summary="Jira report with 2 issue(s).",
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            action_type="generate_jira_report",
+            approval_status="not_required",
+            result="Wrote reports/jira-report.md",
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary="Generated Jira report with 2 issue(s).",
+            completed_at="2026-07-09T15:01:00+00:00",
+        )
+    finally:
+        store.close()

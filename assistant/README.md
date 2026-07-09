@@ -43,6 +43,18 @@ Current components:
 -   `assistant.src.jira_report`: generates Markdown from normalized Jira issues.
 -   `assistant.src.run_jira_report`: runs the local fake Jira report workflow
     and writes `reports/jira-report.md`.
+-   `assistant.src.ask_memory`: answers a small set of read-only questions from
+    local Clarity memory.
+-   `assistant.src.record_feedback`: records human feedback for remembered
+    items in local Clarity memory.
+-   `assistant.src.delegate_task`: records delegated work in local Clarity
+    memory.
+-   `assistant.src.update_task`: updates delegated task status in local Clarity
+    memory.
+-   `assistant.src.generate_brief`: generates a local Markdown brief from
+    Clarity memory.
+-   `common.memory`: records local Clarity memory for runs, Jira issues seen,
+    classifications, feedback, and delegated tasks.
 
 ## Boundaries
 
@@ -70,7 +82,52 @@ python -m assistant.src.run_jira_report
 ```
 
 This command uses static sample Jira data. It does not call live Jira and does
-not require real Jira credentials.
+not require real Jira credentials. It writes the Markdown report and records a
+local memory run in `logs/clarity-memory.duckdb`.
+
+To skip local memory recording:
+
+``` powershell
+python -m assistant.src.run_jira_report --no-memory
+```
+
+To ask deterministic questions from local memory:
+
+``` powershell
+python -m assistant.src.ask_memory summary
+python -m assistant.src.ask_memory latest-jira-run
+python -m assistant.src.ask_memory recent-items
+python -m assistant.src.ask_memory review-items
+python -m assistant.src.ask_memory feedback
+python -m assistant.src.ask_memory actions
+python -m assistant.src.ask_memory open-tasks
+```
+
+To teach Clarity from a remembered item:
+
+``` powershell
+python -m assistant.src.record_feedback STF-1 noise "This was just an automated update."
+python -m assistant.src.record_feedback ACCT-9 review "Keep surfacing billing issues."
+```
+
+To delegate local work for Clarity to track:
+
+``` powershell
+python -m assistant.src.delegate_task "Prepare daily review" "Summarize what needs attention." --next-step "Ask memory summary."
+```
+
+To update delegated work:
+
+``` powershell
+python -m assistant.src.update_task TASK_ID in_progress --next-step "Draft the review."
+python -m assistant.src.update_task TASK_ID completed
+```
+
+To generate a local brief from memory:
+
+``` powershell
+python -m assistant.src.generate_brief
+```
 
 To read from Jira Cloud instead, configure `config/.env` with
 `JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`, then pass `--live`:

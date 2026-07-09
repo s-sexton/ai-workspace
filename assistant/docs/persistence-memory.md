@@ -226,3 +226,37 @@ The first version supports:
 
 That gives Clarity enough memory to begin learning without widening external
 permissions.
+
+The Jira report runner now uses this component by default. Each run records the
+Jira source, issues seen, content hashes, generated Markdown report artifact,
+and a basic `review` classification in `logs/clarity-memory.duckdb`. Use
+`--no-memory` when a report should be generated without updating local memory.
+
+The first read-only memory question command is `assistant.src.ask_memory`. It can
+answer deterministic questions about the local memory summary, latest Jira
+report run, recent items, items marked for review, recent human feedback, and
+recent local actions, and open delegated tasks. It does not use an LLM, network
+access, or external writes.
+
+The first local feedback command is `assistant.src.record_feedback`. It records
+human feedback for remembered items by internal item ID or external ID, such as a
+Jira key. Feedback is stored locally and does not write back to Jira, email,
+calendar, or any external system.
+
+The first local delegation command is `assistant.src.delegate_task`. It records
+work the human wants Clarity to track, then surfaces it through `ask_memory
+open-tasks` and `ask_memory summary`. It only writes to local memory.
+
+Delegated task status is updated with `assistant.src.update_task`. Supported
+statuses are `requested`, `in_progress`, `waiting_for_approval`,
+`waiting_for_external_response`, `blocked`, and `completed`. Completing a task
+removes it from open-task summaries.
+
+Clarity records local assistant actions for report generation, feedback,
+delegated task creation, and task status updates. These records provide an audit
+trail of what Clarity did locally and whether approval was required.
+
+The first brief command is `assistant.src.generate_brief`. It composes the local
+memory summary, review items, open delegated tasks, and recent actions into
+`reports/clarity-brief.md`, then records the brief as a local artifact and
+action.

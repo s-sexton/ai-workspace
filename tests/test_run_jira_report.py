@@ -6,6 +6,7 @@ from typing import Any, Mapping
 import pytest
 
 from common.configuration import ConfigurationError
+from common.memory import DuckDbMemoryStore
 from assistant.src.run_jira_report import (
     StaticJiraResponse,
     StaticJiraTransport,
@@ -25,12 +26,72 @@ def test_generate_local_jira_report_writes_markdown_report(tmp_path):
     )
 
     assert result.report_path == output_path
+    assert result.memory_path == tmp_path / "logs" / "clarity-memory.duckdb"
+    assert result.run_id is not None
     assert result.issue_count == 2
     report = output_path.read_text(encoding="utf-8")
     assert "# Jira Report" in report
     assert "Generated: 2026-07-05 09:30 America/Chicago" in report
     assert "- Total issues: 2" in report
     assert "| STF-1 | Build the first Jira report | In Progress | High | AI Workspace | 2026-07-05T09:30:00.000-0500 |" in report
+
+
+def test_generate_local_jira_report_records_local_memory(tmp_path):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+
+    result = generate_local_jira_report(
+        root=tmp_path,
+        output_path=tmp_path / "reports" / "jira-report.md",
+        generated_at=datetime(2026, 7, 5, 9, 30),
+        memory_path=memory_path,
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        recent_memory = store.recent_memory()
+        run = store.get_run(result.run_id)
+        artifacts = store.list_generated_artifacts(run_id=result.run_id)
+        actions = store.recent_actions()
+    finally:
+        store.close()
+
+    assert result.memory_path == memory_path
+    assert run.status == "completed"
+    assert run.workflow == "jira-report"
+    assert run.summary == "Generated Jira report with 2 issue(s)."
+    assert len(recent_memory) == 2
+    assert {record.subject for record in recent_memory} == {
+        "Build the first Jira report",
+        "Review support queue trends",
+    }
+    assert {record.label for record in recent_memory} == {"review"}
+    assert {record.reason for record in recent_memory} == {
+        "Included in the Jira report for human review."
+    }
+    assert len(artifacts) == 1
+    assert artifacts[0].artifact_type == "markdown_report"
+    assert artifacts[0].path == str(tmp_path / "reports" / "jira-report.md")
+    assert artifacts[0].summary == "Jira report with 2 issue(s)."
+    assert len(actions) == 1
+    assert actions[0].action_type == "generate_jira_report"
+    assert actions[0].approval_status == "not_required"
+    assert actions[0].result == f"Wrote {tmp_path / 'reports' / 'jira-report.md'}"
+
+
+def test_generate_local_jira_report_can_skip_memory_recording(tmp_path):
+    _write_config(tmp_path)
+
+    result = generate_local_jira_report(
+        root=tmp_path,
+        output_path=tmp_path / "reports" / "jira-report.md",
+        generated_at=datetime(2026, 7, 5, 9, 30),
+        memory_path=None,
+    )
+
+    assert result.memory_path is None
+    assert result.run_id is None
+    assert not (tmp_path / "logs" / "clarity-memory.duckdb").exists()
 
 
 def test_generate_local_jira_report_accepts_custom_static_transport(tmp_path):
@@ -168,7 +229,19 @@ def test_main_can_print_safe_query_diagnostics(tmp_path, monkeypatch, capsys):
     assert "Jira query diagnostics" in output
     assert "JQL: project in (STF, SUPP, ACCT) ORDER BY updated DESC" in output
     assert "Returned issues: 2" in output
+    assert "Memory path:" in output
+    assert "Memory run ID:" in output
     assert "Authorization" not in output
+
+
+def test_main_can_skip_memory_recording(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    main(["--output", "reports/from-main.md", "--no-memory"])
+
+    assert (tmp_path / "reports" / "from-main.md").is_file()
+    assert not (tmp_path / "logs" / "clarity-memory.duckdb").exists()
 
 
 class RecordingTransport:

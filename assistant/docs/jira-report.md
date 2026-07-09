@@ -41,7 +41,7 @@ config -> Jira client -> normalized Jira issues -> Markdown report
 Jira transport:
 
 ``` text
-load config -> static Jira response -> normalize issues -> generate Markdown -> write reports/jira-report.md
+load config -> static Jira response -> normalize issues -> generate Markdown -> write report -> record local memory
 ```
 
 Run it from the workspace root:
@@ -52,6 +52,22 @@ python -m assistant.src.run_jira_report
 
 This runner is for local infrastructure testing only. It does not call live
 Jira, does not require real credentials, and does not write to Jira.
+
+By default, the runner records local Clarity memory in:
+
+``` text
+logs/clarity-memory.duckdb
+```
+
+The memory record includes the run, Jira source, issues seen, content hashes,
+the generated Markdown report artifact, and a basic `review` classification. It
+does not store credentials or authentication data.
+
+To skip memory recording:
+
+``` powershell
+python -m assistant.src.run_jira_report --no-memory
+```
 
 ## Live Read-Only Mode
 
@@ -72,6 +88,7 @@ Live mode:
 -   Uses Basic auth by default, matching the working Atlassian curl request
 -   Uses the standard-library Jira transport in `common.jira`
 -   Writes the Markdown report to `reports/jira-report.md`
+-   Records local Clarity memory in `logs/clarity-memory.duckdb`
 -   Does not write to Jira
 
 The default command without `--live` remains offline and uses static sample
@@ -92,6 +109,7 @@ Diagnostics include:
 -   Max results
 -   Requested fields
 -   Returned issue count
+-   Memory path and run ID when memory recording is enabled
 
 Diagnostics do not print headers, API tokens, access tokens, or credentials.
 
