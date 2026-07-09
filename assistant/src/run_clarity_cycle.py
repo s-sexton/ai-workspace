@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -114,20 +115,38 @@ def main(argv: Sequence[str] | None = None) -> None:
     """Run one non-interactive Clarity cycle."""
 
     args = _parse_args(argv)
-    transport = (
-        build_graph_read_transport_from_config(use_bearer_auth=args.graph_bearer)
-        if args.graph
-        else None
-    )
-    result = run_clarity_cycle(
-        mailbox=args.mailbox,
-        limit=args.limit,
-        memory_path=args.memory,
-        brief_path=args.brief,
-        cycle_report_path=args.cycle_report,
-        transport=transport,
-        use_sample_graph=args.sample_graph,
-    )
+    try:
+        transport = (
+            build_graph_read_transport_from_config(use_bearer_auth=args.graph_bearer)
+            if args.graph
+            else None
+        )
+        result = run_clarity_cycle(
+            mailbox=args.mailbox,
+            limit=args.limit,
+            memory_path=args.memory,
+            brief_path=args.brief,
+            cycle_report_path=args.cycle_report,
+            transport=transport,
+            use_sample_graph=args.sample_graph,
+        )
+    except Exception as exc:
+        safe_error = _safe_error_message(exc)
+        failure_report_path = _write_cycle_failure_report(
+            output_path=args.cycle_report,
+            error=safe_error,
+        )
+        _record_cycle_failure_memory(
+            memory_path=args.memory,
+            cycle_report_path=failure_report_path,
+            error=safe_error,
+        )
+        print("# Clarity Cycle Failed")
+        print()
+        print(f"Error: {safe_error}")
+        print(f"Cycle report: {failure_report_path}")
+        raise SystemExit(1) from exc
+
     print("# Clarity Cycle")
     print()
     print(f"Mailbox: {result.mailbox}")
@@ -229,10 +248,36 @@ def _write_cycle_report(
     return resolved_output_path
 
 
+def _write_cycle_failure_report(
+    *,
+    output_path: Path | str,
+    error: str,
+) -> Path:
+    workspace_root = _best_effort_workspace_root()
+    resolved_output_path = _resolve_path(workspace_root, Path(output_path))
+    report = "\n".join(
+        (
+            "# Clarity Cycle Failed",
+            "",
+            f"Error: {error}",
+        )
+    ).rstrip() + "\n"
+    resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_output_path.write_text(report, encoding="utf-8")
+    return resolved_output_path
+
+
 def _resolve_path(workspace_root: Path, path: Path) -> Path:
     if path.is_absolute():
         return path
     return workspace_root / path
+
+
+def _best_effort_workspace_root() -> Path:
+    try:
+        return find_workspace_root()
+    except Exception:
+        return Path.cwd().resolve()
 
 
 def _record_cycle_memory(
@@ -277,6 +322,56 @@ def _record_cycle_memory(
         )
     finally:
         store.close()
+
+
+def _record_cycle_failure_memory(
+    *,
+    memory_path: Path | str,
+    cycle_report_path: Path,
+    error: str,
+) -> None:
+    resolved_memory_path = _resolve_path(_best_effort_workspace_root(), Path(memory_path))
+    try:
+        resolved_memory_path.parent.mkdir(parents=True, exist_ok=True)
+        store = DuckDbMemoryStore(resolved_memory_path)
+    except Exception:
+        return
+
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="clarity-cycle")
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_cycle_report",
+            path=cycle_report_path,
+            summary="Failed Clarity cycle report.",
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            action_type="run_clarity_cycle",
+            approval_status="not_required",
+            result=f"Clarity cycle failed: {error}",
+        )
+        store.finish_run(
+            run.run_id,
+            status="failed",
+            summary=f"Clarity cycle failed: {error}",
+        )
+    except Exception:
+        return
+    finally:
+        store.close()
+
+
+def _safe_error_message(exc: Exception) -> str:
+    message = f"{type(exc).__name__}: {exc}"
+    message = re.sub(
+        r"(?i)\b([a-z0-9_]*(?:api[_-]?token|access[_-]?token|client[_-]?secret|password))\s*[:=]\s*\S+",
+        r"\1=<redacted>",
+        message,
+    )
+    message = re.sub(r"(?i)\b(bearer|basic)\s+\S+", r"\1 <redacted>", message)
+    return message
 
 
 if __name__ == "__main__":

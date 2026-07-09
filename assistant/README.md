@@ -156,7 +156,8 @@ python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --gr
 This performs the same read-only email refresh and prints review/pending-action
 sections. It also writes `reports/clarity-cycle.md` by default. Scheduling the
 command is an operator/environment concern; the command itself does not create
-an operating-system scheduled task.
+an operating-system scheduled task. If a cycle fails, it writes a sanitized
+failure report and exits with status `1`.
 
 To print the PowerShell commands for a daily Windows scheduled task:
 

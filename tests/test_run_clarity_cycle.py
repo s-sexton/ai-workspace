@@ -133,6 +133,52 @@ def test_main_can_use_graph_read_transport(tmp_path, monkeypatch, capsys):
     assert "Graph review item [review]" in output
 
 
+def test_main_writes_failure_report_and_memory(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    def fake_build_graph_read_transport_from_config(**_):
+        raise RuntimeError("GRAPH_CLIENT_SECRET=super-secret")
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.build_graph_read_transport_from_config",
+        fake_build_graph_read_transport_from_config,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--graph",
+                "--memory",
+                str(tmp_path / "logs" / "memory.duckdb"),
+                "--cycle-report",
+                str(tmp_path / "reports" / "cycle.md"),
+            ]
+        )
+
+    assert exc_info.value.code == 1
+    output = capsys.readouterr().out
+    assert "# Clarity Cycle Failed" in output
+    assert "GRAPH_CLIENT_SECRET=<redacted>" in output
+    assert "super-secret" not in output
+
+    report = (tmp_path / "reports" / "cycle.md").read_text(encoding="utf-8")
+    assert "# Clarity Cycle Failed" in report
+    assert "GRAPH_CLIENT_SECRET=<redacted>" in report
+    assert "super-secret" not in report
+
+    store = DuckDbMemoryStore(tmp_path / "logs" / "memory.duckdb")
+    try:
+        latest_cycle = store.latest_run(workflow="clarity-cycle")
+        artifacts = store.list_generated_artifacts(run_id=latest_cycle.run_id)
+    finally:
+        store.close()
+
+    assert latest_cycle.status == "failed"
+    assert "super-secret" not in latest_cycle.summary
+    assert artifacts[0].path == str(tmp_path / "reports" / "cycle.md")
+
+
 def test_main_rejects_graph_bearer_without_graph():
     with pytest.raises(SystemExit):
         main(["--graph-bearer"])

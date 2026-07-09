@@ -45,6 +45,11 @@ memory, writes the local brief, writes `reports/clarity-cycle.md`, and prints
 review and pending-action sections. It does not send, move, archive, or delete
 email.
 
+If the cycle fails, the command exits with status `1`, writes a failure report
+to the configured cycle report path, and records a failed `clarity-cycle` run in
+local memory when memory is available. Error text is sanitized before it is
+written to the report or memory.
+
 Clarity also records the cycle in local memory. To check the last remembered
 cycle:
 
