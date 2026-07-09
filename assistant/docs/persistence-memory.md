@@ -234,9 +234,9 @@ and a basic `review` classification in `logs/clarity-memory.duckdb`. Use
 
 The first read-only memory question command is `assistant.src.ask_memory`. It can
 answer deterministic questions about the local memory summary, latest Jira
-report run, recent items, items marked for review, recent human feedback, and
-recent local actions, and open delegated tasks. It does not use an LLM, network
-access, or external writes.
+report run, recent items, items marked for review, items marked as noise, recent
+human feedback, recent local actions, and open delegated tasks. It does not use
+an LLM, network access, or external writes.
 
 The first local feedback command is `assistant.src.record_feedback`. It records
 human feedback for remembered items by internal item ID or external ID, such as a
@@ -257,6 +257,14 @@ delegated task creation, and task status updates. These records provide an audit
 trail of what Clarity did locally and whether approval was required.
 
 The first brief command is `assistant.src.generate_brief`. It composes the local
-memory summary, review items, open delegated tasks, and recent actions into
-`reports/clarity-brief.md`, then records the brief as a local artifact and
-action.
+memory summary, review items, noise items, open delegated tasks, and recent
+actions into `reports/clarity-brief.md`, then records the brief as a local
+artifact and action.
+
+The first email milestone is `assistant.src.run_email_review`. It reads fake
+mailbox metadata through `common.email`, normalizes message metadata, applies
+deterministic placeholder classifications, stores metadata and hashes in local
+memory, and generates the Clarity brief. The requested mailbox must be listed in
+local approved mailbox configuration with `read` or `read_write` access. It does
+not connect to live Exchange or Gmail, store raw bodies by default, or perform
+mailbox writes.

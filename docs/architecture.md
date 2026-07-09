@@ -22,6 +22,9 @@ Current shared components:
 -   `common.jira`: builds the read-only Jira report query, calls an injected
     transport, optionally uses a standard-library live Jira transport, and
     normalizes Jira issue JSON into report-friendly objects.
+-   `common.email`: defines the read-only email metadata boundary, normalizes
+    mailbox message metadata, and provides deterministic first-pass
+    classifications using fake transports.
 -   `common.memory`: provides the first local Clarity memory boundary, backed by
     DuckDB, for recording runs, approved sources, items seen, classifications,
     human feedback, and delegated tasks without storing secrets.
@@ -57,6 +60,9 @@ Current assistant components:
     modifying external systems.
 -   `assistant.src.generate_brief`: composes deterministic local memory answers
     into a Markdown brief artifact.
+-   `assistant.src.run_email_review`: reads email metadata from a fake local
+    transport, records message metadata and classifications in local memory, and
+    generates the Clarity brief without live mailbox access or external writes.
 -   Local assistant actions are recorded in `common.memory` so Clarity can
     answer what it did recently without inspecting logs.
 

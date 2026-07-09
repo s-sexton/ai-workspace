@@ -53,6 +53,8 @@ Current components:
     memory.
 -   `assistant.src.generate_brief`: generates a local Markdown brief from
     Clarity memory.
+-   `assistant.src.run_email_review`: runs the first local read-only email
+    metadata review workflow with fake mailbox data.
 -   `common.memory`: records local Clarity memory for runs, Jira issues seen,
     classifications, feedback, and delegated tasks.
 
@@ -98,6 +100,7 @@ python -m assistant.src.ask_memory summary
 python -m assistant.src.ask_memory latest-jira-run
 python -m assistant.src.ask_memory recent-items
 python -m assistant.src.ask_memory review-items
+python -m assistant.src.ask_memory noise-items
 python -m assistant.src.ask_memory feedback
 python -m assistant.src.ask_memory actions
 python -m assistant.src.ask_memory open-tasks
@@ -128,6 +131,19 @@ To generate a local brief from memory:
 ``` powershell
 python -m assistant.src.generate_brief
 ```
+
+To run the first local email metadata review:
+
+``` powershell
+python -m assistant.src.run_email_review
+```
+
+This uses fake mailbox data. It does not connect to Exchange, Gmail, or any live
+mailbox, and it does not send, move, archive, or delete email. The mailbox must
+be listed in `config/config.json` under `assistant.email.approvedMailboxes` with
+`read` or `read_write` access. The workflow records proposed review/noise folder
+actions from `assistant.email.folderPolicy`, but those proposals do not move
+messages.
 
 To read from Jira Cloud instead, configure `config/.env` with
 `JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`, then pass `--live`:

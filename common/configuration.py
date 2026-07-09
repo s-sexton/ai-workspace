@@ -65,6 +65,27 @@ class JiraSettings:
 
 
 @dataclass(frozen=True)
+class EmailSettings:
+    """Shared email settings loaded from committed configuration."""
+
+    approved_mailboxes: tuple[str, ...]
+    mailbox_access: Mapping[str, str]
+    folder_policy: Mapping[str, str]
+    default_mailbox: str
+    max_messages: int
+
+    def access_mode_for(self, mailbox: str) -> str | None:
+        """Return the configured access mode for a mailbox."""
+
+        return self.mailbox_access.get(mailbox)
+
+    def folder_for_label(self, label: str) -> str | None:
+        """Return the proposed destination folder for a classification label."""
+
+        return self.folder_policy.get(label)
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     """Loaded workspace configuration and local environment values."""
 
@@ -95,6 +116,29 @@ class WorkspaceConfig:
             max_results=_require_positive_int(settings, "maxResults"),
             sort_order=_require_non_empty_string(settings, "sortOrder"),
             report_fields=_require_string_tuple(settings, "reportFields"),
+        )
+
+    @property
+    def email_settings(self) -> EmailSettings:
+        """Return validated email review settings."""
+
+        settings = _get_mapping(self.settings, ("assistant", "email"))
+        mailbox_access = _require_mailbox_access(settings, "approvedMailboxes")
+        approved_mailboxes = tuple(mailbox_access)
+        default_mailbox = _require_non_empty_string(settings, "defaultMailbox")
+        if default_mailbox not in approved_mailboxes:
+            raise ConfigurationError(
+                "Email defaultMailbox must be listed in approvedMailboxes."
+            )
+
+        return EmailSettings(
+            approved_mailboxes=approved_mailboxes,
+            mailbox_access=MappingProxyType(mailbox_access),
+            folder_policy=MappingProxyType(
+                _require_folder_policy(settings, "folderPolicy")
+            ),
+            default_mailbox=default_mailbox,
+            max_messages=_require_positive_int(settings, "maxMessages"),
         )
 
     def require_jira_credentials(
@@ -269,3 +313,60 @@ def _require_string_tuple(settings: Mapping[str, Any], key: str) -> tuple[str, .
             f"Configuration value must be a non-empty list of strings: {key}"
         )
     return tuple(value)
+
+
+def _require_mailbox_access(settings: Mapping[str, Any], key: str) -> dict[str, str]:
+    value = settings.get(key)
+    if not isinstance(value, list) or not value:
+        raise ConfigurationError(
+            f"Configuration value must be a non-empty list of mailbox objects: {key}"
+        )
+
+    mailbox_access: dict[str, str] = {}
+    for index, item in enumerate(value, 1):
+        if not isinstance(item, Mapping):
+            raise ConfigurationError(f"Mailbox entry must be an object: {key}[{index}]")
+        address = item.get("address")
+        access_mode = item.get("accessMode")
+        if not isinstance(address, str) or not address.strip():
+            raise ConfigurationError(
+                f"Mailbox address must be a non-empty string: {key}[{index}]"
+            )
+        if access_mode not in ("read", "read_write"):
+            raise ConfigurationError(
+                f"Mailbox accessMode must be read or read_write: {key}[{index}]"
+            )
+        clean_address = address.strip()
+        if clean_address in mailbox_access:
+            raise ConfigurationError(f"Duplicate approved mailbox: {clean_address}")
+        mailbox_access[clean_address] = access_mode
+
+    return mailbox_access
+
+
+def _require_folder_policy(settings: Mapping[str, Any], key: str) -> dict[str, str]:
+    value = settings.get(key)
+    if not isinstance(value, Mapping) or not value:
+        raise ConfigurationError(
+            f"Configuration value must be a non-empty object: {key}"
+        )
+
+    folder_policy: dict[str, str] = {}
+    for label, folder in value.items():
+        if not isinstance(label, str) or not label.strip():
+            raise ConfigurationError(
+                f"Email folder policy label must be a non-empty string: {key}"
+            )
+        if not isinstance(folder, str) or not folder.strip():
+            raise ConfigurationError(
+                f"Email folder policy folder must be a non-empty string: {key}.{label}"
+            )
+        folder_policy[label.strip()] = folder.strip()
+
+    for required_label in ("review", "noise"):
+        if required_label not in folder_policy:
+            raise ConfigurationError(
+                f"Email folder policy must include label: {required_label}"
+            )
+
+    return folder_policy

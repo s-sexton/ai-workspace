@@ -24,6 +24,7 @@ def test_generates_memory_brief(tmp_path):
     assert "Generated: 2026-07-09T12:00:00" in brief
     assert "# Clarity Memory Summary" in brief
     assert "# Items Marked For Review" in brief
+    assert "# Items Marked As Noise" in brief
     assert "# Open Delegated Tasks" in brief
     assert "# Recent Actions" in brief
     assert "Review billing export [review]" in brief

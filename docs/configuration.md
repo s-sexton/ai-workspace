@@ -66,9 +66,13 @@ Use these public objects from `common.configuration`:
 -   `WorkspaceConfig`
 -   `JiraSettings`
 -   `JiraCredentials`
+-   `EmailSettings`
 -   `ConfigurationError`
 
 `WorkspaceConfig.jira_settings` returns validated Jira report settings from
+`config/config.json`.
+
+`WorkspaceConfig.email_settings` returns approved mailbox settings from
 `config/config.json`.
 
 `WorkspaceConfig.require_jira_credentials()` returns Jira credentials when all
@@ -84,6 +88,20 @@ the first Jira report milestone:
 -   `assistant.jira.maxResults`: positive integer
 -   `assistant.jira.sortOrder`: non-empty string
 -   `assistant.jira.reportFields`: non-empty list of strings
+-   `assistant.email.approvedMailboxes`: non-empty list of mailbox objects with
+    `address` and `accessMode`
+-   `assistant.email.defaultMailbox`: non-empty string listed in
+    `approvedMailboxes`
+-   `assistant.email.folderPolicy`: non-empty object mapping classification
+    labels to proposed folder destinations; must include `review` and `noise`
+-   `assistant.email.maxMessages`: positive integer
+
+Email `accessMode` must be either `read` or `read_write`. Current email
+workflows only read fake metadata; `read_write` is reserved for future approved
+mailbox actions.
+
+Email folder policy is used only to record proposed local actions. The current
+workflow does not move messages.
 
 Missing `config/.env` is allowed. Missing Jira credentials are allowed until a
 caller asks for required Jira credentials.

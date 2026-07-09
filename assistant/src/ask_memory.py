@@ -16,6 +16,7 @@ SUPPORTED_QUESTIONS = (
     "latest-jira-run",
     "recent-items",
     "review-items",
+    "noise-items",
     "feedback",
     "actions",
     "open-tasks",
@@ -51,6 +52,11 @@ def answer_memory_question(
             return _format_recent_items(
                 "Items Marked For Review",
                 store.recent_memory_by_label("review", limit=limit),
+            )
+        if question == "noise-items":
+            return _format_recent_items(
+                "Items Marked As Noise",
+                store.recent_memory_by_label("noise", limit=limit),
             )
         if question == "feedback":
             return _format_feedback(store, limit=limit)
@@ -105,6 +111,7 @@ def _answer_latest_jira_run(store: DuckDbMemoryStore) -> str:
 def _format_summary(store: DuckDbMemoryStore, *, limit: int) -> str:
     latest_run = store.latest_run(workflow="jira-report")
     review_items = store.recent_memory_by_label("review", limit=limit)
+    noise_items = store.recent_memory_by_label("noise", limit=limit)
     feedback_records = store.recent_feedback(limit=limit)
     open_tasks = store.list_open_delegated_tasks()
 
@@ -115,6 +122,7 @@ def _format_summary(store: DuckDbMemoryStore, *, limit: int) -> str:
         run_summary = latest_run.summary or latest_run.status
         lines.append(f"- Latest Jira run: {run_summary}")
     lines.append(f"- Items marked for review: {len(review_items)}")
+    lines.append(f"- Items marked as noise: {len(noise_items)}")
     lines.append(f"- Recent feedback records: {len(feedback_records)}")
     lines.append(f"- Open delegated tasks: {len(open_tasks)}")
     if open_tasks:

@@ -34,6 +34,7 @@ def test_answers_summary(tmp_path):
     assert "# Clarity Memory Summary" in answer
     assert "- Latest Jira run: Generated Jira report with 2 issue(s)." in answer
     assert "- Items marked for review: 2" in answer
+    assert "- Items marked as noise: 1" in answer
     assert "- Recent feedback records: 1" in answer
     assert "- Open delegated tasks: 1" in answer
     assert "## Next Attention" in answer
@@ -68,6 +69,21 @@ def test_answers_review_items(tmp_path):
 
     assert "# Items Marked For Review" in answer
     assert "Included in the Jira report for human review." in answer
+
+
+def test_answers_noise_items(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "noise-items",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Items Marked As Noise" in answer
+    assert "July product newsletter [noise]" in answer
+    assert "Marketing or subscription-style message." in answer
 
 
 def test_answers_open_tasks(tmp_path):
@@ -174,6 +190,19 @@ def _seed_memory(memory_path):
                     feedback_type="noise",
                     feedback_text="This was just an automated update.",
                 )
+        noise_item = store.record_item_seen(
+            source_id=source.source_id,
+            external_id="email-noise-1",
+            item_type="email_message",
+            subject="July product newsletter",
+            first_seen_run_id=run.run_id,
+        )
+        store.record_classification(
+            item_id=noise_item.item_id,
+            run_id=run.run_id,
+            label="noise",
+            reason="Marketing or subscription-style message.",
+        )
         store.create_delegated_task(
             created_run_id=run.run_id,
             title="Prepare ACCT review",

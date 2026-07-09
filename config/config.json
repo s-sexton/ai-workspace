@@ -20,6 +20,32 @@
         "assignee",
         "updated"
       ]
+    },
+    "email": {
+      "approvedMailboxes": [
+        {
+          "address": "inbox@example.invalid",
+          "accessMode": "read_write"
+        },
+        {
+          "address": "legal@example.invalid",
+          "accessMode": "read"
+        },
+        {
+          "address": "accounting@example.invalid",
+          "accessMode": "read"
+        },
+        {
+          "address": "dpo@example.invalid",
+          "accessMode": "read"
+        }
+      ],
+      "defaultMailbox": "inbox@example.invalid",
+      "folderPolicy": {
+        "review": "Clarity/Review",
+        "noise": "Clarity/Noise"
+      },
+      "maxMessages": 25
     }
   }
 }

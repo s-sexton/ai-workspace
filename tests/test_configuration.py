@@ -59,6 +59,143 @@ def test_jira_settings_are_validated_and_typed(tmp_path):
     assert jira_settings.report_fields == ("key", "summary")
 
 
+def test_email_settings_are_validated_and_typed(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "read_write"},
+                {"address": "legal@example.invalid", "accessMode": "read"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+    email_settings = config.email_settings
+
+    assert email_settings.approved_mailboxes == (
+        "inbox@example.invalid",
+        "legal@example.invalid",
+    )
+    assert email_settings.access_mode_for("inbox@example.invalid") == "read_write"
+    assert email_settings.access_mode_for("legal@example.invalid") == "read"
+    assert email_settings.access_mode_for("missing@example.invalid") is None
+    assert email_settings.folder_for_label("review") == "Clarity/Review"
+    assert email_settings.folder_for_label("noise") == "Clarity/Noise"
+    assert email_settings.folder_for_label("unknown") is None
+    assert email_settings.default_mailbox == "inbox@example.invalid"
+    assert email_settings.max_messages == 50
+
+
+def test_email_default_mailbox_must_be_approved(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "legal@example.invalid", "accessMode": "read"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "defaultMailbox" in str(exc_info.value)
+
+
+def test_email_mailbox_access_mode_must_be_valid(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "admin"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "accessMode" in str(exc_info.value)
+
+
+def test_email_folder_policy_must_include_required_labels(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "read"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderPolicy": {
+                "review": "Clarity/Review"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "noise" in str(exc_info.value)
+
+
 def test_process_environment_overrides_local_env_file(tmp_path, monkeypatch):
     config_dir = tmp_path / "config"
     config_dir.mkdir()

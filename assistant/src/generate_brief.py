@@ -56,6 +56,13 @@ def generate_memory_brief(
         ),
         "",
         answer_memory_question(
+            "noise-items",
+            root=workspace_root,
+            memory_path=resolved_memory_path,
+            limit=limit,
+        ),
+        "",
+        answer_memory_question(
             "open-tasks",
             root=workspace_root,
             memory_path=resolved_memory_path,
