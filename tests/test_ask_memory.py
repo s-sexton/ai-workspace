@@ -103,6 +103,21 @@ def test_answers_llm_context(tmp_path):
     assert "Action:" in answer
 
 
+def test_answers_llm_prompt(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "llm-prompt",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity LLM Prompt" in answer
+    assert "Do not invent missing facts." in answer
+    assert "# Clarity LLM Context" in answer
+
+
 def test_answers_recent_items(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)

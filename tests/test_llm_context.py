@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from assistant.src.llm_context import build_llm_context
+from assistant.src.llm_context import build_llm_context, build_llm_prompt
 from common.memory import DuckDbMemoryStore
 
 
@@ -49,6 +49,26 @@ def test_build_llm_context_handles_missing_memory(tmp_path):
     )
 
     assert "No Clarity memory found" in context
+
+
+def test_build_llm_prompt_wraps_context_with_rules(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    prompt = build_llm_prompt(
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity LLM Prompt" in prompt
+    assert "Summarize only from the provided context." in prompt
+    assert "Do not invent missing facts." in prompt
+    assert "Do not claim you moved, sent, deleted, approved, or modified anything." in prompt
+    assert "Any action must remain a recommendation for human review." in prompt
+    assert "1. What matters now" in prompt
+    assert "Context:" in prompt
+    assert "# Clarity LLM Context" in prompt
+    assert "Subject: Review vendor terms" in prompt
 
 
 def _seed_memory(memory_path):

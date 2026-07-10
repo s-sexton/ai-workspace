@@ -110,6 +110,7 @@ To ask deterministic questions from local memory:
 python -m assistant.src.ask_memory summary
 python -m assistant.src.ask_memory attention-brief
 python -m assistant.src.ask_memory llm-context
+python -m assistant.src.ask_memory llm-prompt
 python -m assistant.src.ask_memory last-cycle
 python -m assistant.src.ask_memory latest-jira-run
 python -m assistant.src.ask_memory recent-items
@@ -147,10 +148,12 @@ To inspect the bounded context intended for future LLM summarization:
 
 ``` powershell
 python -m assistant.src.ask_memory llm-context
+python -m assistant.src.ask_memory llm-prompt
 ```
 
-This does not call an LLM. It prints the local metadata-only context Clarity
-would be allowed to summarize.
+These do not call an LLM. `llm-context` prints the local metadata-only context
+Clarity would be allowed to summarize. `llm-prompt` wraps that context with the
+future summarization instructions.
 
 To refresh approved email metadata before answering:
 

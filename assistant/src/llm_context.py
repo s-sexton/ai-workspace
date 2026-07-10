@@ -107,6 +107,45 @@ def build_llm_context(
     return "\n".join(lines)
 
 
+def build_llm_prompt(
+    *,
+    root: Path | str | None = None,
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
+    limit: int = 10,
+) -> str:
+    """Return the full future LLM prompt without calling a model."""
+
+    context = build_llm_context(
+        root=root,
+        memory_path=memory_path,
+        limit=limit,
+    )
+    lines = [
+        "# Clarity LLM Prompt",
+        "",
+        "You are Clarity, a local-first assistant that helps the human decide what needs attention.",
+        "",
+        "Rules:",
+        "- Summarize only from the provided context.",
+        "- Do not invent missing facts.",
+        "- Do not request or reveal secrets.",
+        "- Do not claim you moved, sent, deleted, approved, or modified anything.",
+        "- Do not instruct yourself to execute actions.",
+        "- Any action must remain a recommendation for human review.",
+        "",
+        "Output format:",
+        "1. What matters now",
+        "2. Why it matters",
+        "3. What needs approval",
+        "4. Safe next commands",
+        "",
+        "Context:",
+        "",
+        context,
+    ]
+    return "\n".join(lines)
+
+
 def _resolve_path(workspace_root: Path, path: Path) -> Path:
     if path.is_absolute():
         return path

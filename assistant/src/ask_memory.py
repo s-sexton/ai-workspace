@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from assistant.src.llm_context import build_llm_context
+from assistant.src.llm_context import build_llm_context, build_llm_prompt
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import find_workspace_root
 from common.memory import DuckDbMemoryStore
@@ -16,6 +16,7 @@ SUPPORTED_QUESTIONS = (
     "summary",
     "attention-brief",
     "llm-context",
+    "llm-prompt",
     "last-cycle",
     "latest-jira-run",
     "recent-items",
@@ -46,6 +47,12 @@ def answer_memory_question(
 
     if question == "llm-context":
         return build_llm_context(
+            root=workspace_root,
+            memory_path=resolved_memory_path,
+            limit=limit,
+        )
+    if question == "llm-prompt":
+        return build_llm_prompt(
             root=workspace_root,
             memory_path=resolved_memory_path,
             limit=limit,
