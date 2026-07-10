@@ -255,6 +255,12 @@ The cycle performs a read-only refresh and prints safe review and pending-action
 sections. It also writes `reports/clarity-cycle.md` by default. It does not
 create the scheduled task itself.
 
+Before scheduling a live Graph cycle, check setup without reading mail:
+
+``` powershell
+python -m assistant.src.check_clarity_setup --mailbox clarity@sendthisfile.ai --graph
+```
+
 To print PowerShell commands for registering that daily task with Windows Task
 Scheduler:
 

@@ -43,6 +43,8 @@ Current components:
 
 -   `assistant.src.clarity`: routes the first deterministic natural-language
     Clarity requests to local tools and memory.
+-   `assistant.src.check_clarity_setup`: checks local Clarity setup without
+    reading mail or writing files.
 -   `assistant.src.run_clarity_cycle`: runs one scheduled-friendly Clarity email
     refresh cycle and prints a safe local summary.
 -   `assistant.src.print_clarity_schedule`: prints PowerShell commands for
@@ -158,6 +160,15 @@ sections. It also writes `reports/clarity-cycle.md` by default. Scheduling the
 command is an operator/environment concern; the command itself does not create
 an operating-system scheduled task. If a cycle fails, it writes a sanitized
 failure report and exits with status `1`.
+
+To check local setup before scheduling:
+
+``` powershell
+python -m assistant.src.check_clarity_setup --mailbox clarity@sendthisfile.ai --graph
+```
+
+This validates local configuration and required Graph credential keys without
+reading mail or writing files.
 
 To print the PowerShell commands for a daily Windows scheduled task:
 

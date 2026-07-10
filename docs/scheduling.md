@@ -7,6 +7,16 @@ one Windows Task Scheduler task. It does not register the task by itself.
 
 ## Print A Daily Task
 
+Before printing or registering the scheduled task, run a local preflight check:
+
+``` powershell
+python -m assistant.src.check_clarity_setup --mailbox clarity@sendthisfile.ai --graph
+```
+
+The preflight validates committed configuration, mailbox approval, required
+Graph credential keys, and planned local paths. It does not read mail, write
+files, or create a scheduled task.
+
 From the workspace root:
 
 ``` powershell
