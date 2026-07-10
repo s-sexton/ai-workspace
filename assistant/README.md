@@ -245,7 +245,8 @@ python -m assistant.src.clarity "mark ITEM_ID as review because keep these updat
 ```
 
 For email, `noise` and `review` feedback is used on future review runs for
-matching mailbox, subject, and sender metadata. It does not override restricted
+matching mailbox, sender, subject, and sanitized subject/preview terms. It does
+not store raw message bodies by default, and it does not override restricted
 mailbox sender or authentication checks.
 
 To delegate local work for Clarity to track:

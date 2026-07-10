@@ -35,9 +35,10 @@ classify common promotional, digest, and subscription-style messages as noise.
 
 Human feedback can tune future email classifications. Feedback is scoped to the
 mailbox and matching message metadata. A prior `noise` or `review` feedback
-record for a matching subject and sender can override content rules on a later
-run. Feedback cannot override restricted mailbox sender allow-list or
-authentication failures.
+record can override content rules on a later run when the sender and subject
+match, or when the sender matches and the current message shares enough
+sanitized subject/preview terms with the prior message. Feedback cannot override
+restricted mailbox sender allow-list or authentication failures.
 
 ## Shared Boundary
 
@@ -384,6 +385,7 @@ Email memory stores:
 -   SPF/DKIM/DMARC result metadata when available
 -   Received timestamp
 -   Content hash
+-   Sanitized subject/preview learning terms
 -   Classification label and reason
 -   Proposed folder action and structured destination target
 

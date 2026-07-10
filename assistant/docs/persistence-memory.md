@@ -247,9 +247,10 @@ calendar, or any external system.
 
 For email, `noise` and `review` feedback records are also used as local learning
 input on later email review runs. Learning is scoped to the mailbox and matching
-message metadata. It can correct future review/noise classification for matching
-subjects and senders, but it cannot override restricted mailbox sender
-allow-list checks or email authentication failures.
+message metadata. It can correct future review/noise classification for
+matching subjects and senders, or for the same sender when sanitized
+subject/preview terms overlap enough. It cannot override restricted mailbox
+sender allow-list checks or email authentication failures.
 
 The first local delegation command is `assistant.src.delegate_task`. It records
 work the human wants Clarity to track, then surfaces it through `ask_memory
@@ -280,7 +281,9 @@ deterministic classifications, stores metadata and hashes in local
 memory, and generates the Clarity brief. The requested mailbox must be listed in
 local approved mailbox configuration with `read` or `read_write` access. It does
 not connect to live Exchange or Gmail, store raw bodies by default, or perform
-mailbox writes. Proposed folder destinations are stored as structured
+mailbox writes. It may store sanitized learning terms extracted from subject and
+preview/snippet metadata so future feedback can generalize without preserving
+raw message content. Proposed folder destinations are stored as structured
 `assistant_actions.action_target` values. Non-trash email move targets must live
 under the configured folder namespace, such as `Clarity/Review`; trash must use
 the system `Deleted Items` folder.

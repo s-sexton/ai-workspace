@@ -197,6 +197,7 @@ class FeedbackLearningRecord:
     subject: str
     sender_or_owner: str | None
     feedback_type: str
+    content_terms: tuple[str, ...]
     created_at: str
 
 
@@ -277,6 +278,16 @@ class DuckDbMemoryStore:
                 run_id VARCHAR NOT NULL,
                 feedback_type VARCHAR NOT NULL,
                 feedback_text VARCHAR NOT NULL,
+                created_at VARCHAR NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS item_learning_features (
+                item_id VARCHAR NOT NULL,
+                feature_type VARCHAR NOT NULL,
+                feature_value VARCHAR NOT NULL,
                 created_at VARCHAR NOT NULL
             )
             """
@@ -628,6 +639,37 @@ class DuckDbMemoryStore:
         )
         return record
 
+    def record_item_learning_features(
+        self,
+        *,
+        item_id: str,
+        feature_type: str,
+        feature_values: tuple[str, ...],
+        created_at: str | None = None,
+    ) -> None:
+        """Record sanitized learning features for a source item."""
+
+        _reject_secret_text(item_id, feature_type, *feature_values)
+        clean_item_id = _required_text(item_id, "item_id")
+        clean_feature_type = _required_text(feature_type, "feature_type")
+        clean_values = tuple(
+            _required_text(value, "feature_value") for value in feature_values
+        )
+        if not clean_values:
+            return
+        feature_created_at = created_at or _now()
+        self._connection.executemany(
+            """
+            INSERT INTO item_learning_features
+            (item_id, feature_type, feature_value, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (clean_item_id, clean_feature_type, value, feature_created_at)
+                for value in clean_values
+            ],
+        )
+
     def recent_feedback(self, *, limit: int = 25) -> tuple[FeedbackSummaryRecord, ...]:
         """Return recent human feedback with source item context."""
 
@@ -659,20 +701,39 @@ class DuckDbMemoryStore:
             raise MemoryStoreError("limit must be positive.")
         rows = self._connection.execute(
             """
-            SELECT i.subject, i.sender_or_owner, f.feedback_type, f.created_at
+            SELECT i.subject, i.sender_or_owner, f.feedback_type,
+                   COALESCE(
+                       STRING_AGG(DISTINCT lf.feature_value, '|' ORDER BY lf.feature_value),
+                       ''
+                   ) AS content_terms,
+                   f.created_at
             FROM human_feedback f
             JOIN items_seen i ON i.item_id = f.item_id
             JOIN sources s ON s.source_id = i.source_id
+            LEFT JOIN item_learning_features lf
+              ON lf.item_id = i.item_id
+             AND lf.feature_type = 'email_content_term'
             WHERE s.source_type = 'email'
               AND s.scope_label = ?
               AND i.item_type = 'email_message'
               AND f.feedback_type IN ('noise', 'review')
+            GROUP BY i.subject, i.sender_or_owner, f.feedback_type, f.created_at,
+                     f.feedback_id
             ORDER BY f.created_at DESC, f.feedback_id DESC
             LIMIT ?
             """,
             [_required_text(mailbox, "mailbox"), limit],
         ).fetchall()
-        return tuple(FeedbackLearningRecord(*row) for row in rows)
+        return tuple(
+            FeedbackLearningRecord(
+                subject=row[0],
+                sender_or_owner=row[1],
+                feedback_type=row[2],
+                content_terms=tuple(term for term in row[3].split("|") if term),
+                created_at=row[4],
+            )
+            for row in rows
+        )
 
     def record_generated_artifact(
         self,

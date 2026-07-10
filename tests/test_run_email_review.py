@@ -146,9 +146,9 @@ def test_run_email_review_uses_prior_email_feedback(tmp_path):
                 {
                     "message_id": "school-newsletter-1",
                     "mailbox": "inbox@example.invalid",
-                    "subject": "Monthly newsletter",
+                    "subject": "School update",
                     "sender": "school@example.invalid",
-                    "preview": "Unsubscribe here.",
+                    "preview": "Classroom field trip permission slips are due tomorrow.",
                 },
             )
         ),
@@ -163,8 +163,8 @@ def test_run_email_review_uses_prior_email_feedback(tmp_path):
         store.record_feedback(
             item_id=item.item_id,
             run_id=run.run_id,
-            feedback_type="review",
-            feedback_text="School newsletters should stay visible.",
+            feedback_type="noise",
+            feedback_text="These classroom reminders can skip review.",
         )
     finally:
         store.close()
@@ -179,9 +179,9 @@ def test_run_email_review_uses_prior_email_feedback(tmp_path):
                 {
                     "message_id": "school-newsletter-2",
                     "mailbox": "inbox@example.invalid",
-                    "subject": "Monthly newsletter",
+                    "subject": "Weekly bulletin",
                     "sender": "school@example.invalid",
-                    "preview": "Unsubscribe here.",
+                    "preview": "Classroom field trip permission slips are due tomorrow.",
                 },
             )
         ),
@@ -189,16 +189,16 @@ def test_run_email_review_uses_prior_email_feedback(tmp_path):
 
     store = DuckDbMemoryStore(memory_path)
     try:
-        review_items = store.recent_memory_by_label("review")
+        noise_items = store.recent_memory_by_label("noise")
     finally:
         store.close()
 
-    assert result.review_count == 1
-    assert result.noise_count == 0
+    assert result.review_count == 0
+    assert result.noise_count == 1
     assert any(
-        item.subject == "Monthly newsletter"
+        item.subject == "Weekly bulletin"
         and item.reason == "Matched prior human email feedback."
-        for item in review_items
+        for item in noise_items
     )
 
 

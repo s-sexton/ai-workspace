@@ -182,6 +182,69 @@ def test_prior_feedback_can_override_content_rules():
     assert classification.reason == "Matched prior human email feedback."
 
 
+def test_prior_feedback_can_match_sanitized_content_terms():
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "new-promo",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Another weekend update",
+                    "sender": "store@example.invalid",
+                    "preview": "Mystery savings and clearance deals are waiting.",
+                },
+            )
+        )
+    )
+    message = client.list_messages(mailbox="inbox@example.invalid").messages[0]
+
+    classification = classify_email_message(
+        message,
+        feedback_rules=(
+            EmailFeedbackRule(
+                label="noise",
+                subject="Old promo",
+                sender="store@example.invalid",
+                content_terms=("mystery", "savings", "clearance", "deals"),
+            ),
+        ),
+    )
+
+    assert classification.label == "noise"
+    assert classification.reason == "Matched prior human email feedback."
+
+
+def test_prior_feedback_content_terms_do_not_match_different_sender():
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "school-update",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Classroom update",
+                    "sender": "school@example.invalid",
+                    "preview": "Classroom field trip permission slips are due tomorrow.",
+                },
+            )
+        )
+    )
+    message = client.list_messages(mailbox="inbox@example.invalid").messages[0]
+
+    classification = classify_email_message(
+        message,
+        feedback_rules=(
+            EmailFeedbackRule(
+                label="noise",
+                subject="Old promo",
+                sender="store@example.invalid",
+                content_terms=("classroom", "field", "permission", "slips"),
+            ),
+        ),
+    )
+
+    assert classification.label == "review"
+
+
 def test_restricted_mailbox_security_rules_take_precedence_over_feedback():
     client = EmailClient(
         transport=StaticEmailTransport(

@@ -121,6 +121,7 @@ class EmailFeedbackRule:
     label: str
     subject: str
     sender: str | None
+    content_terms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -396,16 +397,83 @@ def _matching_feedback_rule(
 ) -> EmailFeedbackRule | None:
     message_subject = _normalize_feedback_text(message.subject)
     message_sender = _normalize_optional_feedback_text(message.sender)
+    message_terms = set(email_learning_terms(message))
     for rule in feedback_rules:
         if rule.label not in ("noise", "review"):
-            continue
-        if _normalize_feedback_text(rule.subject) != message_subject:
             continue
         rule_sender = _normalize_optional_feedback_text(rule.sender)
         if rule_sender is not None and rule_sender != message_sender:
             continue
-        return rule
+        if _normalize_feedback_text(rule.subject) == message_subject:
+            return rule
+        if _has_learning_term_match(message_terms, set(rule.content_terms)):
+            return rule
     return None
+
+
+def email_learning_terms(message: EmailMessage) -> tuple[str, ...]:
+    """Return sanitized content terms that can guide future email feedback."""
+
+    combined_text = _combined_lower_text(message)
+    terms: list[str] = []
+    seen: set[str] = set()
+    for token in re.findall(r"[a-z][a-z0-9']{2,}", combined_text):
+        clean_token = token.strip("'")
+        if clean_token in _EMAIL_LEARNING_STOP_WORDS:
+            continue
+        if any(marker.strip() in clean_token for marker in ("token", "password")):
+            continue
+        if clean_token not in seen:
+            terms.append(clean_token)
+            seen.add(clean_token)
+        if len(terms) >= 20:
+            break
+    return tuple(terms)
+
+
+def _has_learning_term_match(
+    message_terms: set[str],
+    rule_terms: set[str],
+) -> bool:
+    if len(rule_terms) < 3:
+        return False
+    shared_terms = message_terms & rule_terms
+    return len(shared_terms) >= 3
+
+
+_EMAIL_LEARNING_STOP_WORDS = {
+    "about",
+    "after",
+    "again",
+    "ahead",
+    "also",
+    "and",
+    "are",
+    "because",
+    "been",
+    "before",
+    "but",
+    "can",
+    "com",
+    "for",
+    "from",
+    "has",
+    "have",
+    "here",
+    "into",
+    "more",
+    "not",
+    "now",
+    "off",
+    "our",
+    "out",
+    "the",
+    "this",
+    "to",
+    "with",
+    "you",
+    "your",
+}
 
 
 def _normalize_feedback_text(value: str) -> str:

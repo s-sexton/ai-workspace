@@ -19,6 +19,7 @@ from common.email import (
     StaticGraphEmailTransport,
     StaticEmailTransport,
     classify_email_message,
+    email_learning_terms,
     propose_email_folder_action,
 )
 from common.google_gmail import (
@@ -306,6 +307,11 @@ def _record_email_memory(
                 content_hash=_message_hash(message),
                 first_seen_run_id=run.run_id,
             )
+            store.record_item_learning_features(
+                item_id=item.item_id,
+                feature_type="email_content_term",
+                feature_values=email_learning_terms(message),
+            )
             store.record_classification(
                 item_id=item.item_id,
                 run_id=run.run_id,
@@ -351,6 +357,7 @@ def _email_feedback_rules(
             label=record.feedback_type,
             subject=record.subject,
             sender=record.sender_or_owner,
+            content_terms=record.content_terms,
         )
         for record in store.email_feedback_learning(mailbox=mailbox)
     )

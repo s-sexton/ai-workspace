@@ -151,6 +151,11 @@ def test_returns_mailbox_scoped_email_feedback_for_learning(memory_store):
         feedback_type="review",
         feedback_text="School updates matter.",
     )
+    memory_store.record_item_learning_features(
+        item_id=item.item_id,
+        feature_type="email_content_term",
+        feature_values=("school", "newsletter", "classroom"),
+    )
     memory_store.record_feedback(
         item_id=other_item.item_id,
         run_id=run.run_id,
@@ -164,6 +169,7 @@ def test_returns_mailbox_scoped_email_feedback_for_learning(memory_store):
     assert records[0].subject == "Monthly newsletter"
     assert records[0].sender_or_owner == "school@example.invalid"
     assert records[0].feedback_type == "review"
+    assert records[0].content_terms == ("classroom", "newsletter", "school")
 
 
 def test_records_generated_artifact(memory_store):

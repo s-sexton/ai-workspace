@@ -33,6 +33,7 @@ Status: in progress.
 - Execute approved Gmail archive/trash actions only through explicit commands
 - Keep all moves scoped to the source mailbox
 - Learn future review/noise email classification from local human feedback
+- Learn from sanitized subject/preview content terms without storing raw bodies
 
 Next useful slices:
 
