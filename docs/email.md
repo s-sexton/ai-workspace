@@ -47,6 +47,7 @@ feedback learning:
 python -m assistant.src.clarity "always mark emails from sender@example.com as noise" --mailbox inbox@example.invalid
 python -m assistant.src.clarity "always mark emails from example.com as review" --mailbox inbox@example.invalid
 python -m assistant.src.ask_memory email-preferences
+python -m assistant.src.clarity "remove email preference PREFERENCE_ID"
 ```
 
 Preferences run after restricted mailbox sender/authentication checks and before

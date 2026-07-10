@@ -778,6 +778,35 @@ class DuckDbMemoryStore:
             ).fetchall()
         return tuple(EmailSenderPreferenceRecord(*row) for row in rows)
 
+    def remove_email_sender_preference(
+        self,
+        *,
+        preference_id: str,
+    ) -> EmailSenderPreferenceRecord:
+        """Remove a mailbox-scoped email sender/domain preference."""
+
+        _reject_secret_text(preference_id)
+        clean_preference_id = _required_text(preference_id, "preference_id")
+        row = self._connection.execute(
+            """
+            SELECT preference_id, mailbox, match_type, pattern, label,
+                   created_run_id, created_at
+            FROM email_sender_preferences
+            WHERE preference_id = ?
+            """,
+            [clean_preference_id],
+        ).fetchone()
+        if row is None:
+            raise MemoryStoreError(f"Unknown email preference: {clean_preference_id}")
+        self._connection.execute(
+            """
+            DELETE FROM email_sender_preferences
+            WHERE preference_id = ?
+            """,
+            [clean_preference_id],
+        )
+        return EmailSenderPreferenceRecord(*row)
+
     def recent_feedback(self, *, limit: int = 25) -> tuple[FeedbackSummaryRecord, ...]:
         """Return recent human feedback with source item context."""
 

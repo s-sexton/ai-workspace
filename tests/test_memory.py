@@ -193,6 +193,24 @@ def test_records_and_lists_email_sender_preferences(memory_store):
     assert preferences[0].label == "noise"
 
 
+def test_removes_email_sender_preference(memory_store):
+    run = memory_store.start_run(workflow="email-preference")
+    preference = memory_store.record_email_sender_preference(
+        mailbox="inbox@example.invalid",
+        match_type="sender",
+        pattern="promo@example.invalid",
+        label="noise",
+        created_run_id=run.run_id,
+    )
+
+    removed = memory_store.remove_email_sender_preference(
+        preference_id=preference.preference_id,
+    )
+
+    assert removed == preference
+    assert memory_store.list_email_sender_preferences() == ()
+
+
 def test_rejects_invalid_email_sender_preference(memory_store):
     run = memory_store.start_run(workflow="email-preference")
 

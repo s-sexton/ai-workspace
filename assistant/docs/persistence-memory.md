@@ -268,7 +268,8 @@ sender allow-list checks or email authentication failures.
 
 Mailbox-specific sender/domain preferences can also guide classification. They
 are local, auditable memory records, apply only to the configured mailbox, and
-run after restricted mailbox sender/authentication checks.
+run after restricted mailbox sender/authentication checks. Preferences can be
+listed from local memory and removed by preference ID.
 
 The first local delegation command is `assistant.src.delegate_task`. It records
 work the human wants Clarity to track, then surfaces it through `ask_memory

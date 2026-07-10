@@ -231,6 +231,57 @@ def test_clarity_records_domain_preference_from_natural_language(tmp_path):
     assert preferences[0].pattern == "example.invalid"
 
 
+def test_clarity_answers_email_preferences_question(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path)
+    answer_clarity_request(
+        "always mark emails from promo@example.invalid as noise",
+        root=tmp_path,
+        memory_path=memory_path,
+        mailbox="inbox@example.invalid",
+    )
+
+    answer = answer_clarity_request(
+        "show email preferences",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Email Preferences" in answer
+    assert "inbox@example.invalid: sender promo@example.invalid -> noise" in answer
+
+
+def test_clarity_removes_email_preference_from_natural_language(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path)
+    answer_clarity_request(
+        "always mark emails from promo@example.invalid as noise",
+        root=tmp_path,
+        memory_path=memory_path,
+        mailbox="inbox@example.invalid",
+    )
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        preference = store.list_email_sender_preferences()[0]
+    finally:
+        store.close()
+
+    answer = answer_clarity_request(
+        f"remove email preference {preference.preference_id}",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        preferences = store.list_email_sender_preferences()
+    finally:
+        store.close()
+
+    assert "Removed noise email preference" in answer
+    assert preferences == ()
+
+
 def test_clarity_answers_calendar_question_from_memory(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)

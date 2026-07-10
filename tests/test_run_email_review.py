@@ -254,6 +254,50 @@ def test_run_email_review_uses_sender_preferences(tmp_path):
     )
 
 
+def test_run_email_review_ignores_removed_sender_preferences(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    brief_path = tmp_path / "reports" / "brief.md"
+    _write_config(tmp_path)
+    memory_path.parent.mkdir(parents=True)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="email-preference")
+        preference = store.record_email_sender_preference(
+            mailbox="inbox@example.invalid",
+            match_type="sender",
+            pattern="vendor@example.invalid",
+            label="noise",
+            created_run_id=run.run_id,
+        )
+        store.remove_email_sender_preference(
+            preference_id=preference.preference_id,
+        )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+
+    result = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "vendor-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Legal review needed",
+                    "sender": "vendor@example.invalid",
+                },
+            )
+        ),
+    )
+
+    assert result.review_count == 1
+    assert result.noise_count == 0
+
+
 def test_run_email_review_is_mailbox_scoped(tmp_path):
     _write_config(
         tmp_path,

@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Sequence
 
 from assistant.src.ask_memory import answer_memory_question
-from assistant.src.email_preferences import record_email_sender_preference
+from assistant.src.email_preferences import (
+    record_email_sender_preference,
+    remove_email_sender_preference,
+)
 from assistant.src.record_feedback import record_memory_feedback
 from assistant.src.run_email_review import (
     build_graph_read_transport_from_config,
@@ -64,6 +67,14 @@ def answer_clarity_request(
             match_type=match_type,
             pattern=pattern,
             label=label,
+            root=root,
+            memory_path=memory_path,
+        )
+
+    remove_preference_request = _parse_remove_preference_request(request)
+    if remove_preference_request is not None:
+        return remove_email_sender_preference(
+            preference_id=remove_preference_request,
             root=root,
             memory_path=memory_path,
         )
@@ -172,6 +183,8 @@ def _route_request(request: str) -> str | None:
         return "last-cycle"
     if "pending" in clean_request or "needs approval" in clean_request:
         return "pending-actions"
+    if "email preference" in clean_request or "email preferences" in clean_request:
+        return "email-preferences"
     if "approved" in clean_request and "move" in clean_request:
         return "email-move-plan"
     if "move plan" in clean_request or "email move" in clean_request:
@@ -237,6 +250,22 @@ def _parse_preference_request(request: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _parse_remove_preference_request(request: str) -> str | None:
+    clean_request = " ".join(request.strip().split())
+    if not clean_request:
+        return None
+
+    patterns = (
+        r"^(?:remove|delete|forget)\s+email\s+preference\s+(?P<preference_id>\S+)$",
+        r"^(?:remove|delete|forget)\s+preference\s+(?P<preference_id>\S+)$",
+    )
+    for pattern in patterns:
+        match = re.match(pattern, clean_request, flags=re.IGNORECASE)
+        if match is not None:
+            return match.group("preference_id")
+    return None
+
+
 def _default_feedback_text(feedback_type: str) -> str:
     if feedback_type == "noise":
         return "Marked as noise from the Clarity command surface."
@@ -260,7 +289,8 @@ def _unsupported_response() -> str:
         "- Mark ITEM_ID as noise because this is promotional.\n"
         "- Mark ITEM_ID as review because this needs attention.\n"
         "- Always mark emails from sender@example.com as noise.\n"
-        "- Always mark emails from example.com as review."
+        "- Always mark emails from example.com as review.\n"
+        "- Remove email preference PREFERENCE_ID."
     )
 
 

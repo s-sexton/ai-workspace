@@ -80,10 +80,68 @@ def record_email_sender_preference(
     )
 
 
+def remove_email_sender_preference(
+    *,
+    preference_id: str,
+    root: Path | str | None = None,
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
+) -> str:
+    """Remove a local mailbox-scoped sender/domain classification preference."""
+
+    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    resolved_memory_path = _resolve_memory_path(workspace_root, Path(memory_path))
+    if not resolved_memory_path.is_file():
+        return f"No Clarity memory found at {resolved_memory_path}."
+
+    store = DuckDbMemoryStore(resolved_memory_path)
+    try:
+        store.initialize_schema()
+        preference = store.remove_email_sender_preference(
+            preference_id=preference_id,
+        )
+        run = store.start_run(workflow="email-preference")
+        store.record_assistant_action(
+            run_id=run.run_id,
+            action_type="remove_email_sender_preference",
+            approval_status="not_required",
+            action_target=preference.preference_id,
+            result=(
+                f"Removed {preference.label} preference for "
+                f"{preference.match_type} {preference.pattern} in {preference.mailbox}."
+            ),
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary=(
+                f"Removed {preference.label} email preference for "
+                f"{preference.match_type} {preference.pattern}."
+            ),
+        )
+    except MemoryStoreError as exc:
+        return str(exc)
+    finally:
+        store.close()
+
+    return (
+        f"Removed {preference.label} email preference for "
+        f"{preference.match_type} {preference.pattern} in {preference.mailbox}."
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Record a local email sender/domain preference from the command line."""
 
     args = _parse_args(argv)
+    if args.command == "remove":
+        print_text(
+            remove_email_sender_preference(
+                preference_id=args.preference_id,
+                memory_path=args.memory,
+            )
+        )
+        return
+
     print_text(
         record_email_sender_preference(
             mailbox=args.mailbox,
@@ -105,16 +163,33 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Record a local mailbox-scoped email sender/domain preference."
     )
-    parser.add_argument("match_type", choices=PREFERENCE_MATCH_TYPES)
-    parser.add_argument("pattern", help="Sender email address or domain.")
-    parser.add_argument("label", choices=PREFERENCE_LABELS)
-    parser.add_argument("--mailbox", default=None, help="Approved mailbox scope.")
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command")
+
+    add_parser = subparsers.add_parser("add", help="Add a sender/domain preference.")
+    add_parser.add_argument("match_type", choices=PREFERENCE_MATCH_TYPES)
+    add_parser.add_argument("pattern", help="Sender email address or domain.")
+    add_parser.add_argument("label", choices=PREFERENCE_LABELS)
+    add_parser.add_argument("--mailbox", default=None, help="Approved mailbox scope.")
+    add_parser.add_argument(
         "--memory",
         default=str(DEFAULT_MEMORY_PATH),
         help="Local Clarity memory path.",
     )
-    return parser.parse_args(argv)
+
+    remove_parser = subparsers.add_parser(
+        "remove",
+        help="Remove a sender/domain preference by ID.",
+    )
+    remove_parser.add_argument("preference_id", help="Email preference ID.")
+    remove_parser.add_argument(
+        "--memory",
+        default=str(DEFAULT_MEMORY_PATH),
+        help="Local Clarity memory path.",
+    )
+    args = parser.parse_args(argv)
+    if args.command is None:
+        parser.error("command required: add or remove")
+    return args
 
 
 if __name__ == "__main__":
