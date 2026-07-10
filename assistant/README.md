@@ -237,6 +237,13 @@ python -m assistant.src.record_feedback ITEM_ID noise "This sender is promotiona
 python -m assistant.src.record_feedback ITEM_ID review "Keep these updates visible."
 ```
 
+The same feedback can be captured through the Clarity command surface:
+
+``` powershell
+python -m assistant.src.clarity "mark ITEM_ID as noise because this sender is promotional"
+python -m assistant.src.clarity "mark ITEM_ID as review because keep these updates visible"
+```
+
 For email, `noise` and `review` feedback is used on future review runs for
 matching mailbox, subject, and sender metadata. It does not override restricted
 mailbox sender or authentication checks.

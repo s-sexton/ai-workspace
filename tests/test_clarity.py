@@ -141,6 +141,52 @@ def test_clarity_answers_email_move_plan(tmp_path):
     assert "email-noise-1 to Clarity/Noise" in answer
 
 
+def test_clarity_records_feedback_from_natural_language(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_clarity_request(
+        "mark email-review-1 as noise because this is promotional",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "Recorded feedback" in answer
+    assert "email-review-1: noise" in answer
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        feedback = store.recent_feedback()
+    finally:
+        store.close()
+
+    assert feedback[0].external_id == "email-review-1"
+    assert feedback[0].feedback_type == "noise"
+    assert feedback[0].feedback_text == "this is promotional"
+
+
+def test_clarity_records_default_feedback_note(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_clarity_request(
+        "mark email-review-1 as review",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "Recorded feedback" in answer
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        feedback = store.recent_feedback()
+    finally:
+        store.close()
+
+    assert feedback[0].feedback_type == "review"
+    assert feedback[0].feedback_text == "Marked for review from the Clarity command surface."
+
+
 def test_clarity_answers_calendar_question_from_memory(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)

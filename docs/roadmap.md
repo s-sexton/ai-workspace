@@ -36,7 +36,8 @@ Status: in progress.
 
 Next useful slices:
 
-- Make feedback easier to capture from the command center
+- Make feedback easier to capture from the command center: started with
+  natural-language `mark ITEM_ID as noise/review` commands
 - Add mailbox-specific sender/domain preferences
 - Add a review-before-execute cleanup workflow for approved Gmail filing
 

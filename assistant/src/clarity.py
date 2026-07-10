@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 from typing import Sequence
 
 from assistant.src.ask_memory import answer_memory_question
+from assistant.src.record_feedback import record_memory_feedback
 from assistant.src.run_email_review import (
     build_graph_read_transport_from_config,
     run_email_review,
@@ -40,6 +42,17 @@ def answer_clarity_request(
             use_graph=use_graph,
             use_graph_bearer=use_graph_bearer,
             use_sample_graph=use_sample_graph,
+        )
+
+    feedback_request = _parse_feedback_request(request)
+    if feedback_request is not None:
+        item_reference, feedback_type, feedback_text = feedback_request
+        return record_memory_feedback(
+            item_reference=item_reference,
+            feedback_type=feedback_type,
+            feedback_text=feedback_text,
+            root=root,
+            memory_path=memory_path,
         )
 
     intent = _route_request(request)
@@ -171,6 +184,32 @@ def _route_request(request: str) -> str | None:
     return None
 
 
+def _parse_feedback_request(request: str) -> tuple[str, str, str] | None:
+    clean_request = " ".join(request.strip().split())
+    if not clean_request:
+        return None
+
+    patterns = (
+        r"^(?:mark|classify|teach)\s+(?P<item>\S+)\s+as\s+(?P<type>noise|review)(?:\s+(?:because|as|since)\s+(?P<text>.+))?$",
+        r"^(?:this is|that is)\s+(?P<type>noise|review)\s+(?:for|on)\s+(?P<item>\S+)(?:\s+(?:because|as|since)\s+(?P<text>.+))?$",
+    )
+    for pattern in patterns:
+        match = re.match(pattern, clean_request, flags=re.IGNORECASE)
+        if match is None:
+            continue
+        item_reference = match.group("item")
+        feedback_type = match.group("type").lower()
+        feedback_text = match.group("text") or _default_feedback_text(feedback_type)
+        return item_reference, feedback_type, feedback_text
+    return None
+
+
+def _default_feedback_text(feedback_type: str) -> str:
+    if feedback_type == "noise":
+        return "Marked as noise from the Clarity command surface."
+    return "Marked for review from the Clarity command surface."
+
+
 def _unsupported_response() -> str:
     return (
         "I do not know how to answer that yet from local Clarity memory.\n\n"
@@ -184,7 +223,9 @@ def _unsupported_response() -> str:
         "- What did you do?\n"
         "- When did Clarity last run?\n"
         "- Show my email move plan.\n"
-        "- What tasks are open?"
+        "- What tasks are open?\n"
+        "- Mark ITEM_ID as noise because this is promotional.\n"
+        "- Mark ITEM_ID as review because this needs attention."
     )
 
 
