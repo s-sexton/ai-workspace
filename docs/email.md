@@ -10,7 +10,7 @@ The current email milestone keeps reads and writes explicit:
 -   Optionally read approved Gmail metadata with `--gmail`
 -   Require the mailbox to be listed in local approved mailbox config
 -   Normalize message metadata
--   Apply deterministic placeholder classifications
+-   Apply deterministic review/noise/trash classifications
 -   Apply mailbox sender allow-list and authentication rules before content rules
 -   Store metadata, hashes, and classifications in local Clarity memory
 -   Propose review/noise/trash folder destinations from local policy
@@ -27,6 +27,11 @@ recorded first as proposed local actions that require approval.
 Gmail execution supports archiving into configured Clarity labels and moving
 messages to trash. It does not send email and does not permanently delete Gmail
 messages.
+
+Classification is intentionally conservative. Restricted mailbox sender and
+authentication checks run first. Then operational, account, family, security,
+and approval signals are kept for review. Only after those checks does Clarity
+classify common promotional, digest, and subscription-style messages as noise.
 
 ## Shared Boundary
 

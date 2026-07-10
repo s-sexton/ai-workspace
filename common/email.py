@@ -41,6 +41,52 @@ AUTH_STATUS_VALUES = (
     "temperror",
     "permerror",
 )
+REVIEW_SIGNAL_TOKENS = (
+    "accounting",
+    "approval",
+    "approve",
+    "billing",
+    "calendar",
+    "contract",
+    "decision",
+    "dpo",
+    "family",
+    "invoice",
+    "legal",
+    "meeting",
+    "payment",
+    "password",
+    "security",
+    "statement",
+    "urgent",
+)
+NOISE_SIGNAL_TOKENS = (
+    "% off",
+    "all bottoms",
+    "birthday fun",
+    "boost your nutrition",
+    "buy 1",
+    "credit card recommendations",
+    "daily digest",
+    "deal",
+    "exclusive offer",
+    "free shipping",
+    "grab a",
+    "introducing the new",
+    "member savings",
+    "newsletter",
+    "points",
+    "sale",
+    "savings",
+    "sports extra",
+    "start watching",
+    "summer colors",
+    "today only",
+    "unsubscribe",
+    "vacation from",
+    "webinar",
+    "wiper refresh",
+)
 
 
 @dataclass(frozen=True)
@@ -238,19 +284,16 @@ def classify_email_message(
             ),
         )
 
-    combined_text = " ".join(
-        value.lower()
-        for value in (message.subject, message.sender or "", message.preview or "")
-    )
-    if any(token in combined_text for token in ("unsubscribe", "newsletter", "webinar")):
-        return EmailClassification(
-            label="noise",
-            reason="Marketing or subscription-style message.",
-        )
-    if any(token in combined_text for token in ("legal", "accounting", "dpo", "urgent")):
+    combined_text = _combined_lower_text(message)
+    if _contains_any(combined_text, REVIEW_SIGNAL_TOKENS):
         return EmailClassification(
             label="review",
             reason="Potentially important operational or risk-related message.",
+        )
+    if _contains_any(combined_text, NOISE_SIGNAL_TOKENS):
+        return EmailClassification(
+            label="noise",
+            reason="Marketing, digest, or subscription-style message.",
         )
     return EmailClassification(
         label="review",
@@ -317,6 +360,17 @@ def _message_authentication_passes(message: EmailMessage) -> bool:
 
 def _auth_status_passes(status: str | None) -> bool:
     return status is not None and status.strip().lower() == "pass"
+
+
+def _combined_lower_text(message: EmailMessage) -> str:
+    return " ".join(
+        value.lower()
+        for value in (message.subject, message.sender or "", message.preview or "")
+    )
+
+
+def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    return any(token in text for token in tokens)
 
 
 def _graph_sender(payload: Mapping[str, Any]) -> str | None:

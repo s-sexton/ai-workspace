@@ -91,6 +91,66 @@ def test_classifies_marketing_as_noise_and_sensitive_work_as_review():
     assert classify_email_message(result.messages[1]).label == "review"
 
 
+@pytest.mark.parametrize(
+    "subject",
+    (
+        "Scott, congrats! You have credit card recommendations!",
+        "Introducing the new HOKA Clifton PRO",
+        "Your Daily Digest for Fri, 7/10 is ready to view",
+        "Exclusive Offer on JET JWL-1440VSK 14 In. x 40 In. Wood Lathe",
+        "Keep the Birthday Fun Going with Your $5 Gift",
+        "Boost Your Nutrition for Less",
+        "Vacation From $37 Per Night - Where Will You Go?",
+        "ALL Bottoms Buy 1, Get 1 50% OFF!",
+        "K-State Sports Extra - July 10, 2026",
+        "grab a li'l something fun for $2.95 today only.",
+        "Wiper Refresh for the Sunny Days Ahead!",
+        "Beat the Heat with Summer Colors and Styles",
+        "Start watching I'm Not Afraid",
+        "Fresh color starts now: Emerald and Duration are 35% off",
+    ),
+)
+def test_classifies_common_promotional_subjects_as_noise(subject):
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "promo",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": subject,
+                    "sender": "marketing@example.invalid",
+                },
+            )
+        )
+    )
+
+    classification = classify_email_message(
+        client.list_messages(mailbox="inbox@example.invalid").messages[0]
+    )
+
+    assert classification.label == "noise"
+
+
+def test_review_signals_take_precedence_over_promotional_language():
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "billing-offer",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Billing approval needed for exclusive offer",
+                },
+            )
+        )
+    )
+
+    classification = classify_email_message(
+        client.list_messages(mailbox="inbox@example.invalid").messages[0]
+    )
+
+    assert classification.label == "review"
+
+
 def test_restricted_mailbox_sender_allow_list_classifies_unauthorized_as_trash():
     client = EmailClient(
         transport=StaticEmailTransport(
