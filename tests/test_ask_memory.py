@@ -38,6 +38,25 @@ def test_answers_last_clarity_cycle(tmp_path):
     assert "- Artifact: reports/clarity-cycle.md (markdown_cycle_report)" in answer
 
 
+def test_answers_latest_fake_llm_brief(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "latest-llm-brief",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Latest Fake LLM Brief" in answer
+    assert "- Workflow: fake-llm-brief" in answer
+    assert "- Status: completed" in answer
+    assert "- Summary: Generated local deterministic fake LLM brief." in answer
+    assert (
+        "- Artifact: reports/clarity-llm-brief.md (markdown_fake_llm_brief)"
+    ) in answer
+
+
 def test_answers_summary(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -421,6 +440,28 @@ def _seed_memory(memory_path):
                 "review=1, noise=0, trash=1, proposed_actions=2."
             ),
             completed_at="2026-07-09T16:01:00+00:00",
+        )
+        llm_run = store.start_run(
+            workflow="fake-llm-brief",
+            started_at="2026-07-09T16:05:00+00:00",
+        )
+        store.record_generated_artifact(
+            run_id=llm_run.run_id,
+            artifact_type="markdown_fake_llm_brief",
+            path="reports/clarity-llm-brief.md",
+            summary="Local deterministic fake LLM brief.",
+        )
+        store.record_assistant_action(
+            run_id=llm_run.run_id,
+            action_type="generate_fake_llm_brief",
+            approval_status="not_required",
+            result="Wrote reports/clarity-llm-brief.md",
+        )
+        store.finish_run(
+            llm_run.run_id,
+            status="completed",
+            summary="Generated local deterministic fake LLM brief.",
+            completed_at="2026-07-09T16:06:00+00:00",
         )
     finally:
         store.close()

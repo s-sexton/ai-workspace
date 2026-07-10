@@ -17,6 +17,7 @@ SUPPORTED_QUESTIONS = (
     "attention-brief",
     "llm-context",
     "llm-prompt",
+    "latest-llm-brief",
     "last-cycle",
     "latest-jira-run",
     "recent-items",
@@ -70,6 +71,13 @@ def answer_memory_question(
                 workflow="clarity-cycle",
                 title="Latest Clarity Cycle",
                 empty_message="No Clarity cycle runs found in Clarity memory.",
+            )
+        if question == "latest-llm-brief":
+            return _answer_latest_run(
+                store,
+                workflow="fake-llm-brief",
+                title="Latest Fake LLM Brief",
+                empty_message="No fake LLM brief runs found in Clarity memory.",
             )
         if question == "latest-jira-run":
             return _answer_latest_run(

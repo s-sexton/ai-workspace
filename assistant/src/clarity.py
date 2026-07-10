@@ -104,6 +104,16 @@ def _route_request(request: str) -> str | None:
     if any(
         phrase in clean_request
         for phrase in (
+            "last llm brief",
+            "latest llm brief",
+            "last fake llm brief",
+            "latest fake llm brief",
+        )
+    ):
+        return "latest-llm-brief"
+    if any(
+        phrase in clean_request
+        for phrase in (
             "last cycle",
             "last run",
             "when did you run",

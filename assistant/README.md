@@ -111,6 +111,7 @@ python -m assistant.src.ask_memory summary
 python -m assistant.src.ask_memory attention-brief
 python -m assistant.src.ask_memory llm-context
 python -m assistant.src.ask_memory llm-prompt
+python -m assistant.src.ask_memory latest-llm-brief
 python -m assistant.src.ask_memory last-cycle
 python -m assistant.src.ask_memory latest-jira-run
 python -m assistant.src.ask_memory recent-items
@@ -132,6 +133,7 @@ python -m assistant.src.clarity "What needs my attention?"
 python -m assistant.src.clarity "What needs approval?"
 python -m assistant.src.clarity "What did you do?"
 python -m assistant.src.clarity "When did Clarity last run?"
+python -m assistant.src.clarity "When was the latest fake LLM brief?"
 python -m assistant.src.clarity "Show my email move plan"
 ```
 

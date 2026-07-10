@@ -80,6 +80,21 @@ def test_clarity_answers_last_run_question(tmp_path):
     assert "- Workflow: clarity-cycle" in answer
 
 
+def test_clarity_answers_latest_llm_brief_question(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+    _seed_fake_llm_brief_run(memory_path)
+
+    answer = answer_clarity_request(
+        "When was the latest fake LLM brief?",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Latest Fake LLM Brief" in answer
+    assert "- Workflow: fake-llm-brief" in answer
+
+
 def test_clarity_answers_attention_brief_question(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -321,6 +336,30 @@ def _seed_cycle_run(memory_path):
             status="completed",
             summary="Read 1 message(s) from clarity@sendthisfile.ai.",
             completed_at="2026-07-09T16:01:00+00:00",
+        )
+    finally:
+        store.close()
+
+
+def _seed_fake_llm_brief_run(memory_path):
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(
+            workflow="fake-llm-brief",
+            started_at="2026-07-09T16:05:00+00:00",
+        )
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_fake_llm_brief",
+            path="reports/clarity-llm-brief.md",
+            summary="Local deterministic fake LLM brief.",
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary="Generated local deterministic fake LLM brief.",
+            completed_at="2026-07-09T16:06:00+00:00",
         )
     finally:
         store.close()
