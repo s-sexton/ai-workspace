@@ -68,6 +68,12 @@ cycle:
 python -m assistant.src.clarity "When did Clarity last run?"
 ```
 
+To ask for a compact attention brief from local memory:
+
+``` powershell
+python -m assistant.src.clarity "What needs my attention?"
+```
+
 To choose a different cycle report path:
 
 ``` powershell

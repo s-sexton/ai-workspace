@@ -58,6 +58,29 @@ def test_answers_summary(tmp_path):
     assert "Prepare ACCT review: Generate a short report." in answer
 
 
+def test_answers_attention_brief(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "attention-brief",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity Attention Brief" in answer
+    assert "- Last cycle: Read 2 message(s) from clarity@sendthisfile.ai" in answer
+    assert "- Items needing review: 2" in answer
+    assert "- Pending approvals: 1" in answer
+    assert "- Open delegated tasks: 1" in answer
+    assert "## Review" in answer
+    assert "Review support queue trends" in answer
+    assert "## Pending Approval" in answer
+    assert "propose_email_move_noise - July product newsletter" in answer
+    assert "## Open Tasks" in answer
+    assert "Prepare ACCT review [requested]" in answer
+
+
 def test_answers_recent_items(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -219,10 +242,10 @@ def test_main_prints_answer(tmp_path, monkeypatch, capsys):
     _seed_memory(memory_path)
     monkeypatch.chdir(tmp_path)
 
-    main(["latest-jira-run", "--memory", str(memory_path)])
+    main(["attention-brief", "--memory", str(memory_path)])
 
     output = capsys.readouterr().out
-    assert "# Latest Jira Report Run" in output
+    assert "# Clarity Attention Brief" in output
 
 
 def _seed_memory(memory_path):

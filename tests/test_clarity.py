@@ -80,6 +80,22 @@ def test_clarity_answers_last_run_question(tmp_path):
     assert "- Workflow: clarity-cycle" in answer
 
 
+def test_clarity_answers_attention_brief_question(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+    _seed_cycle_run(memory_path)
+
+    answer = answer_clarity_request(
+        "What needs my attention?",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity Attention Brief" in answer
+    assert "Review vendor terms" in answer
+    assert "propose_email_move_review - Review vendor terms" in answer
+
+
 def test_clarity_answers_email_move_plan(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)

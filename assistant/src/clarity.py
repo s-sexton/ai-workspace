@@ -89,6 +89,16 @@ def _route_request(request: str) -> str | None:
     if not clean_request:
         return None
 
+    if any(
+        phrase in clean_request
+        for phrase in (
+            "attention brief",
+            "brief me",
+            "what needs my attention",
+            "what should i know",
+        )
+    ):
+        return "attention-brief"
     if any(phrase in clean_request for phrase in ("what did you do", "what happened")):
         return "actions"
     if any(
@@ -121,7 +131,7 @@ def _route_request(request: str) -> str | None:
         return "review-items"
     if "review" in clean_request or "attention" in clean_request:
         return "review-items"
-    if "summary" in clean_request or "what should i know" in clean_request:
+    if "summary" in clean_request:
         return "summary"
     return None
 
@@ -131,6 +141,7 @@ def _unsupported_response() -> str:
         "I do not know how to answer that yet from local Clarity memory.\n\n"
         "Try one of:\n"
         "- What emails need immediate attention?\n"
+        "- What needs my attention?\n"
         "- What needs approval?\n"
         "- What did you do?\n"
         "- When did Clarity last run?\n"

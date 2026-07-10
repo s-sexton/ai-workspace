@@ -13,6 +13,7 @@ from common.memory import DuckDbMemoryStore
 
 SUPPORTED_QUESTIONS = (
     "summary",
+    "attention-brief",
     "last-cycle",
     "latest-jira-run",
     "recent-items",
@@ -45,6 +46,8 @@ def answer_memory_question(
     try:
         if question == "summary":
             return _format_summary(store, limit=limit)
+        if question == "attention-brief":
+            return _format_attention_brief(store, limit=limit)
         if question == "last-cycle":
             return _answer_latest_run(
                 store,
@@ -159,6 +162,52 @@ def _format_summary(store: DuckDbMemoryStore, *, limit: int) -> str:
         lines.append("## Next Attention")
         for task in open_tasks[:3]:
             lines.append(f"- {task.title}: {task.next_step or task.status}")
+    return "\n".join(lines)
+
+
+def _format_attention_brief(store: DuckDbMemoryStore, *, limit: int) -> str:
+    latest_cycle = store.latest_run(workflow="clarity-cycle")
+    review_items = store.recent_memory_by_label("review", limit=limit)
+    pending_actions = store.pending_actions(limit=limit)
+    open_tasks = store.list_open_delegated_tasks()
+
+    lines = ["# Clarity Attention Brief", ""]
+    if latest_cycle is None:
+        lines.append("- Last cycle: none")
+    else:
+        cycle_summary = latest_cycle.summary or latest_cycle.status
+        lines.append(f"- Last cycle: {cycle_summary}")
+    lines.append(f"- Items needing review: {len(review_items)}")
+    lines.append(f"- Pending approvals: {len(pending_actions)}")
+    lines.append(f"- Open delegated tasks: {len(open_tasks)}")
+
+    if review_items:
+        lines.append("")
+        lines.append("## Review")
+        for record in review_items:
+            lines.append(f"- {record.subject}")
+            lines.append(f"  Source: {record.display_name} ({record.source_type})")
+            if record.reason:
+                lines.append(f"  Reason: {record.reason}")
+
+    if pending_actions:
+        lines.append("")
+        lines.append("## Pending Approval")
+        for action in pending_actions:
+            subject = f" - {action.item_subject}" if action.item_subject else ""
+            lines.append(f"- {action.action_type}{subject}")
+            lines.append(f"  Action: {action.action_id}")
+            if action.action_target:
+                lines.append(f"  Target: {action.action_target}")
+
+    if open_tasks:
+        lines.append("")
+        lines.append("## Open Tasks")
+        for task in open_tasks:
+            lines.append(f"- {task.title} [{task.status}]")
+            if task.next_step:
+                lines.append(f"  Next step: {task.next_step}")
+
     return "\n".join(lines)
 
 

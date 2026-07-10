@@ -226,6 +226,7 @@ from local memory:
 
 ``` powershell
 python -m assistant.src.clarity "What emails need immediate attention?"
+python -m assistant.src.clarity "What needs my attention?"
 python -m assistant.src.clarity "What needs approval?"
 python -m assistant.src.clarity "When did Clarity last run?"
 ```
