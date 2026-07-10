@@ -39,6 +39,15 @@ Local output files can be checked with:
 python -m assistant.src.validate_llm_output path\to\summary.md
 ```
 
+The full prompt and validation path can be exercised without a model through:
+
+``` powershell
+python -m assistant.src.generate_llm_brief
+```
+
+That command uses a deterministic local provider and writes a local fake brief.
+It does not call an LLM or make network requests.
+
 Future provider integration should enter through the provider-neutral summary
 contract in `assistant.src.llm_summary`. That contract accepts an injected
 summarizer, builds the bounded prompt, validates returned text, and performs no

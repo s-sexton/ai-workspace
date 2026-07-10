@@ -161,6 +161,15 @@ To validate a local future LLM summary output file:
 python -m assistant.src.validate_llm_output path\to\summary.md
 ```
 
+To exercise the LLM summary pipeline with a deterministic local provider:
+
+``` powershell
+python -m assistant.src.generate_llm_brief
+```
+
+This writes `reports/clarity-llm-brief.md` by default. It does not call an LLM;
+it uses a fake local provider to test the prompt and output validation path.
+
 To refresh approved email metadata before answering:
 
 ``` powershell
