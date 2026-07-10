@@ -33,6 +33,11 @@ Future LLM summary output must pass local validation before display or storage.
 The validator rejects output that claims actions were performed, suggests direct
 execution, asks for credentials, or contains credential-shaped text.
 
+Future provider integration should enter through the provider-neutral summary
+contract in `assistant.src.llm_summary`. That contract accepts an injected
+summarizer, builds the bounded prompt, validates returned text, and performs no
+actions. It has no default provider and makes no network calls by itself.
+
 Execution remains deterministic:
 
 1. LLM may suggest.
