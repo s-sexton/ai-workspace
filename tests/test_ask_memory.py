@@ -131,6 +131,30 @@ def test_answers_focus_plan(tmp_path):
     assert "Prepare ACCT review [requested]" in answer
 
 
+def test_answers_command_center_and_calendar_items(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    command_center = answer_memory_question(
+        "command-center",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+    calendar_items = answer_memory_question(
+        "calendar-items",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity Command Center" in command_center
+    assert "# Clarity Focus Plan" in command_center
+    assert "# Calendar Items" in command_center
+    assert "Family dinner" in command_center
+    assert "# Calendar Items" in calendar_items
+    assert "Source: family calendar" in calendar_items
+    assert "Calendar event starts at 2026-07-10T18:00:00-05:00." in calendar_items
+
+
 def test_answers_llm_context(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -419,6 +443,25 @@ def _seed_memory(memory_path):
             title="Prepare ACCT review",
             request="Summarize ACCT tickets for review.",
             next_step="Generate a short report.",
+        )
+        calendar_source = store.record_source(
+            source_type="calendar",
+            display_name="family calendar",
+            scope_label="family",
+        )
+        calendar_item = store.record_item_seen(
+            source_id=calendar_source.source_id,
+            external_id="family-dinner",
+            item_type="calendar_event",
+            subject="Family dinner",
+            first_seen_run_id=run.run_id,
+            updated_at="2026-07-10T18:00:00-05:00",
+        )
+        store.record_classification(
+            item_id=calendar_item.item_id,
+            run_id=run.run_id,
+            label="calendar",
+            reason="Calendar event starts at 2026-07-10T18:00:00-05:00.",
         )
         store.record_generated_artifact(
             run_id=run.run_id,

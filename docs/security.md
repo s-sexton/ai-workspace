@@ -18,16 +18,17 @@ python -m assistant.src.ask_memory llm-prompt
 ```
 
 `llm-context` is metadata-only and intended for summarization. It may include
-run status, review subjects, source labels, pending action IDs, approved move
-IDs, folder targets, and delegated task summaries. `llm-prompt` wraps that
-context with explicit summarization-only instructions. Neither command calls an
-LLM.
+run status, review subjects, source labels, calendar event titles and times,
+pending action IDs, approved move IDs, folder targets, and delegated task
+summaries. `llm-prompt` wraps that context with explicit summarization-only
+instructions. Neither command calls an LLM.
 
 It must not include secrets, raw credentials, authentication headers, or raw
 email bodies.
 
 The LLM may summarize and recommend questions to ask the human. It must not
-approve, execute, send, move, delete, or modify anything.
+approve, execute, send, move, delete, create calendar events, respond to
+calendar invitations, or modify anything.
 
 Future LLM summary output must pass local validation before display or storage.
 The validator rejects output that claims actions were performed, suggests direct

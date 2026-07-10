@@ -92,6 +92,16 @@ def _route_request(request: str) -> str | None:
     if any(
         phrase in clean_request
         for phrase in (
+            "command center",
+            "daily brief",
+            "morning brief",
+            "organize my day",
+        )
+    ):
+        return "command-center"
+    if any(
+        phrase in clean_request
+        for phrase in (
             "focus plan",
             "what should i focus on",
             "help me focus",
@@ -141,6 +151,8 @@ def _route_request(request: str) -> str | None:
         return "email-move-plan"
     if "open task" in clean_request or "delegated" in clean_request:
         return "open-tasks"
+    if "calendar" in clean_request or "schedule" in clean_request:
+        return "calendar-items"
     if "noise" in clean_request or "junk" in clean_request:
         return "noise-items"
     if (
@@ -162,7 +174,9 @@ def _unsupported_response() -> str:
     return (
         "I do not know how to answer that yet from local Clarity memory.\n\n"
         "Try one of:\n"
+        "- Give me my command center.\n"
         "- What should I focus on?\n"
+        "- What is on my family calendar today?\n"
         "- What emails need immediate attention?\n"
         "- What needs my attention?\n"
         "- What needs approval?\n"

@@ -42,6 +42,13 @@ def generate_memory_brief(
         f"Generated: {(generated_at or datetime.now()).isoformat(timespec='seconds')}",
         "",
         answer_memory_question(
+            "command-center",
+            root=workspace_root,
+            memory_path=resolved_memory_path,
+            limit=limit,
+        ),
+        "",
+        answer_memory_question(
             "summary",
             root=workspace_root,
             memory_path=resolved_memory_path,

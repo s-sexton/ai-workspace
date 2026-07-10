@@ -141,15 +141,18 @@ def test_clarity_answers_email_move_plan(tmp_path):
     assert "email-noise-1 to Clarity/Noise" in answer
 
 
-def test_clarity_returns_unsupported_response_for_unwired_calendar_question(tmp_path):
+def test_clarity_answers_calendar_question_from_memory(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
     answer = answer_clarity_request(
         "What is on my family calendar today?",
         root=tmp_path,
-        memory_path=tmp_path / "logs" / "memory.duckdb",
+        memory_path=memory_path,
     )
 
-    assert "do not know how to answer that yet" in answer
-    assert "What emails need immediate attention?" in answer
+    assert "# Calendar Items" in answer
+    assert "Family dinner" in answer
 
 
 def test_main_prints_clarity_answer(tmp_path, monkeypatch, capsys):
@@ -323,6 +326,25 @@ def _seed_memory(memory_path):
             action_type="read_email_metadata",
             approval_status="not_required",
             result="Read 2 message(s) from clarity@sendthisfile.ai.",
+        )
+        calendar_source = store.record_source(
+            source_type="calendar",
+            display_name="family calendar",
+            scope_label="family",
+        )
+        calendar_item = store.record_item_seen(
+            source_id=calendar_source.source_id,
+            external_id="family-dinner",
+            item_type="calendar_event",
+            subject="Family dinner",
+            first_seen_run_id=run.run_id,
+            updated_at="2026-07-10T18:00:00-05:00",
+        )
+        store.record_classification(
+            item_id=calendar_item.item_id,
+            run_id=run.run_id,
+            label="calendar",
+            reason="Calendar event starts at 2026-07-10T18:00:00-05:00.",
         )
         store.finish_run(
             run.run_id,

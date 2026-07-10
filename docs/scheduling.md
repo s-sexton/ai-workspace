@@ -53,8 +53,8 @@ python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai
 
 The scheduled cycle reads approved mailbox metadata, updates local Clarity
 memory, writes the local brief, writes `reports/clarity-cycle.md`, and prints
-review and pending-action sections. It does not send, move, archive, or delete
-email.
+the command center plus review and pending-action sections. It does not send,
+move, archive, or delete email.
 
 If the cycle fails, the command exits with status `1`, writes a failure report
 to the configured cycle report path, and records a failed `clarity-cycle` run in
@@ -72,6 +72,12 @@ To ask for a compact attention brief from local memory:
 
 ``` powershell
 python -m assistant.src.clarity "What needs my attention?"
+```
+
+To ask for the broader daily command center:
+
+``` powershell
+python -m assistant.src.clarity "Give me my command center."
 ```
 
 To choose a different cycle report path:

@@ -35,6 +35,11 @@ def build_llm_context(
             and action.action_target
         ]
         open_tasks = store.list_open_delegated_tasks()
+        calendar_items = [
+            item
+            for item in store.recent_memory(limit=limit * 3)
+            if item.source_type == "calendar"
+        ][:limit]
     finally:
         store.close()
 
@@ -57,6 +62,13 @@ def build_llm_context(
         if latest_cycle.summary:
             lines.append(f"- Summary: {latest_cycle.summary}")
 
+    lines.extend(("", "## Focus Inputs"))
+    lines.append(f"- Review items: {len(review_items)}")
+    lines.append(f"- Pending approvals: {len(pending_actions)}")
+    lines.append(f"- Approved email moves: {len(approved_moves)}")
+    lines.append(f"- Calendar items: {len(calendar_items)}")
+    lines.append(f"- Open delegated tasks: {len(open_tasks)}")
+
     lines.extend(("", "## Review Items"))
     if review_items:
         for item in review_items:
@@ -64,6 +76,16 @@ def build_llm_context(
             lines.append(f"  Source: {item.display_name} ({item.source_type})")
             if item.reason:
                 lines.append(f"  Reason: {item.reason}")
+    else:
+        lines.append("- none")
+
+    lines.extend(("", "## Calendar Items"))
+    if calendar_items:
+        for item in calendar_items:
+            lines.append(f"- Subject: {item.subject}")
+            lines.append(f"  Source: {item.display_name}")
+            if item.reason:
+                lines.append(f"  Detail: {item.reason}")
     else:
         lines.append("- none")
 

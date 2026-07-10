@@ -35,6 +35,7 @@ class ClarityCycleResult:
     trash_count: int
     proposed_action_count: int
     cycle_report_path: Path
+    focus_answer: str
     review_answer: str
     pending_answer: str
 
@@ -73,6 +74,12 @@ def run_clarity_cycle(
         memory_path=review_result.memory_path,
         limit=limit,
     )
+    focus_answer = answer_memory_question(
+        "command-center",
+        root=root,
+        memory_path=review_result.memory_path,
+        limit=limit,
+    )
     resolved_cycle_report_path = _write_cycle_report(
         root=root,
         output_path=cycle_report_path,
@@ -83,6 +90,7 @@ def run_clarity_cycle(
         trash_count=review_result.trash_count,
         proposed_action_count=review_result.proposed_action_count,
         brief_path=review_result.brief_path,
+        focus_answer=focus_answer,
         review_answer=review_answer,
         pending_answer=pending_answer,
     )
@@ -106,6 +114,7 @@ def run_clarity_cycle(
         trash_count=review_result.trash_count,
         proposed_action_count=review_result.proposed_action_count,
         cycle_report_path=resolved_cycle_report_path,
+        focus_answer=focus_answer,
         review_answer=review_answer,
         pending_answer=pending_answer,
     )
@@ -157,6 +166,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Proposed actions: {result.proposed_action_count}")
     print(f"Brief: {result.brief_path}")
     print(f"Cycle report: {result.cycle_report_path}")
+    print()
+    print(result.focus_answer)
     print()
     print(result.review_answer)
     print()
@@ -221,6 +232,7 @@ def _write_cycle_report(
     trash_count: int,
     proposed_action_count: int,
     brief_path: Path,
+    focus_answer: str,
     review_answer: str,
     pending_answer: str,
 ) -> Path:
@@ -237,6 +249,8 @@ def _write_cycle_report(
             f"Trash: {trash_count}",
             f"Proposed actions: {proposed_action_count}",
             f"Brief: {brief_path}",
+            "",
+            focus_answer,
             "",
             review_answer,
             "",

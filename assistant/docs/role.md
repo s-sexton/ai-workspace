@@ -73,15 +73,16 @@ source control, logs, reports, or generated summaries.
 
 ## Current Milestone
 
-The current milestone remains the first Jira report:
+The current milestone is Clarity's local command surface and organizing loop:
 
--   Read Jira-shaped data
--   Normalize ticket data
--   Generate Markdown
--   No Jira writes
--   No Gmail integration
--   No calendar integration
--   No LLM-driven automation
+-   Answer deterministic local questions from Clarity memory
+-   Read approved Jira, email, and sample calendar metadata
+-   Generate local command-center and focus briefs
+-   Propose approved email folder moves from configured policy
+-   Execute approved email moves only through explicit Graph commands
+-   Keep LLM use bounded to summarization contracts until provider wiring is
+    approved
+-   Avoid autonomous writes
 
 The wider Clarity scope guides future design, but implementation should still
 advance in small, testable steps.

@@ -22,6 +22,8 @@ def test_generates_memory_brief(tmp_path):
     assert result == output_path
     assert "# Clarity Brief" in brief
     assert "Generated: 2026-07-09T12:00:00" in brief
+    assert "# Clarity Command Center" in brief
+    assert "# Clarity Focus Plan" in brief
     assert "# Clarity Memory Summary" in brief
     assert "# Items Marked For Review" in brief
     assert "# Items Marked As Noise" in brief

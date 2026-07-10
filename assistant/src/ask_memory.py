@@ -16,6 +16,8 @@ SUPPORTED_QUESTIONS = (
     "summary",
     "attention-brief",
     "focus-plan",
+    "command-center",
+    "calendar-items",
     "llm-context",
     "llm-prompt",
     "latest-llm-brief",
@@ -68,6 +70,10 @@ def answer_memory_question(
             return _format_attention_brief(store, limit=limit)
         if question == "focus-plan":
             return _format_focus_plan(store, limit=limit)
+        if question == "command-center":
+            return _format_command_center(store, limit=limit)
+        if question == "calendar-items":
+            return _format_calendar_items(store, limit=limit)
         if question == "last-cycle":
             return _answer_latest_run(
                 store,
@@ -304,6 +310,34 @@ def _format_focus_plan(store: DuckDbMemoryStore, *, limit: int) -> str:
             if task.next_step:
                 lines.append(f"     Next step: {task.next_step}")
 
+    return "\n".join(lines)
+
+
+def _format_command_center(store: DuckDbMemoryStore, *, limit: int) -> str:
+    lines = ["# Clarity Command Center", ""]
+    lines.append(_format_focus_plan(store, limit=limit))
+    lines.extend(("", _format_calendar_items(store, limit=limit)))
+    lines.extend(("", _format_pending_actions(store, limit=limit)))
+    lines.extend(("", _format_email_move_plan(store, limit=limit)))
+    lines.extend(("", _format_open_tasks(store)))
+    return "\n".join(lines)
+
+
+def _format_calendar_items(store: DuckDbMemoryStore, *, limit: int) -> str:
+    records = [
+        record
+        for record in store.recent_memory(limit=limit * 3)
+        if record.source_type == "calendar"
+    ][:limit]
+    if not records:
+        return "# Calendar Items\n\nNo calendar items found in Clarity memory."
+
+    lines = ["# Calendar Items", ""]
+    for record in records:
+        lines.append(f"- {record.subject}")
+        lines.append(f"  Source: {record.display_name}")
+        if record.reason:
+            lines.append(f"  Detail: {record.reason}")
     return "\n".join(lines)
 
 

@@ -20,6 +20,10 @@ def test_build_llm_context_uses_bounded_metadata(tmp_path):
     assert "Read 2 message(s) from clarity@sendthisfile.ai" in context
     assert "## Review Items" in context
     assert "Subject: Review vendor terms" in context
+    assert "## Focus Inputs" in context
+    assert "Calendar items: 1" in context
+    assert "## Calendar Items" in context
+    assert "Subject: Family dinner" in context
     assert "## Pending Approvals" in context
     assert "Type: propose_email_move_review" in context
     assert "## Approved Email Moves" in context
@@ -126,6 +130,25 @@ def _seed_memory(memory_path):
             approval_status="approved",
             action_target="Clarity/Noise",
             result="Approved move proposal.",
+        )
+        calendar_source = store.record_source(
+            source_type="calendar",
+            display_name="family calendar",
+            scope_label="family",
+        )
+        calendar_item = store.record_item_seen(
+            source_id=calendar_source.source_id,
+            external_id="family-dinner",
+            item_type="calendar_event",
+            subject="Family dinner",
+            first_seen_run_id=cycle.run_id,
+            updated_at="2026-07-10T18:00:00-05:00",
+        )
+        store.record_classification(
+            item_id=calendar_item.item_id,
+            run_id=cycle.run_id,
+            label="calendar",
+            reason="Calendar event starts at 2026-07-10T18:00:00-05:00.",
         )
         store.create_delegated_task(
             created_run_id=cycle.run_id,

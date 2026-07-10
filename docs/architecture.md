@@ -25,6 +25,9 @@ Current shared components:
 -   `common.email`: defines the read-only email metadata boundary, normalizes
     mailbox message metadata, and provides deterministic first-pass
     classifications using fake transports.
+-   `common.calendar`: defines the read-only calendar metadata boundary,
+    normalizes event metadata, and provides a fake local transport for calendar
+    workflow tests.
 -   `common.memory`: provides the first local Clarity memory boundary, backed by
     DuckDB, for recording runs, approved sources, items seen, classifications,
     human feedback, and delegated tasks without storing secrets.
@@ -63,6 +66,10 @@ Current assistant components:
 -   `assistant.src.run_email_review`: reads email metadata from a fake local
     transport, records message metadata and classifications in local memory, and
     generates the Clarity brief without live mailbox access or external writes.
+-   `assistant.src.run_calendar_review`: reads sample calendar metadata through
+    the shared calendar boundary, records event metadata in local memory, and
+    regenerates the Clarity brief without live calendar access or external
+    writes.
 -   Local assistant actions are recorded in `common.memory` so Clarity can
     answer what it did recently without inspecting logs.
 

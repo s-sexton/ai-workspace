@@ -36,8 +36,8 @@ Shared examples:
 ## Current Milestone
 
 The current implementation is intentionally narrow: a local Clarity command
-surface, Jira reporting, and an explicit email review loop over approved
-sources.
+surface, Jira reporting, explicit email review over approved sources, and local
+sample calendar awareness.
 
 Current components:
 
@@ -47,6 +47,8 @@ Current components:
     reading mail or writing files.
 -   `assistant.src.run_clarity_cycle`: runs one scheduled-friendly Clarity email
     refresh cycle and prints a safe local summary.
+-   `assistant.src.run_calendar_review`: runs the first local read-only sample
+    calendar review and records event metadata.
 -   `assistant.src.print_clarity_schedule`: prints PowerShell commands for
     registering a local Windows scheduled task.
 -   `assistant.src.jira_report`: generates Markdown from normalized Jira issues.
@@ -110,6 +112,8 @@ To ask deterministic questions from local memory:
 python -m assistant.src.ask_memory summary
 python -m assistant.src.ask_memory attention-brief
 python -m assistant.src.ask_memory focus-plan
+python -m assistant.src.ask_memory command-center
+python -m assistant.src.ask_memory calendar-items
 python -m assistant.src.ask_memory llm-context
 python -m assistant.src.ask_memory llm-prompt
 python -m assistant.src.ask_memory latest-llm-brief
@@ -131,6 +135,8 @@ To ask Clarity a first natural-language question:
 ``` powershell
 python -m assistant.src.clarity "What emails need immediate attention?"
 python -m assistant.src.clarity "What should I focus on?"
+python -m assistant.src.clarity "Give me my command center."
+python -m assistant.src.clarity "What is on my family calendar today?"
 python -m assistant.src.clarity "What needs my attention?"
 python -m assistant.src.clarity "What needs approval?"
 python -m assistant.src.clarity "What did you do?"
@@ -190,11 +196,11 @@ To run one non-interactive Clarity cycle suitable for a scheduler:
 python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph
 ```
 
-This performs the same read-only email refresh and prints review/pending-action
-sections. It also writes `reports/clarity-cycle.md` by default. Scheduling the
-command is an operator/environment concern; the command itself does not create
-an operating-system scheduled task. If a cycle fails, it writes a sanitized
-failure report and exits with status `1`.
+This performs the same read-only email refresh and prints the command center
+plus review/pending-action sections. It also writes `reports/clarity-cycle.md`
+by default. Scheduling the command is an operator/environment concern; the
+command itself does not create an operating-system scheduled task. If a cycle
+fails, it writes a sanitized failure report and exits with status `1`.
 
 To check local setup before scheduling:
 
@@ -253,6 +259,16 @@ Approved email move proposals can be previewed without execution with:
 ``` powershell
 python -m assistant.src.ask_memory email-move-plan
 ```
+
+To run the first local sample calendar review:
+
+``` powershell
+python -m assistant.src.run_calendar_review --calendar family --date 2026-07-10
+```
+
+This records local sample calendar metadata and regenerates the Clarity brief.
+It does not call live Google Calendar, Outlook Calendar, or Microsoft Graph
+calendar APIs.
 
 To dry-run approved email moves and record a local audit action:
 

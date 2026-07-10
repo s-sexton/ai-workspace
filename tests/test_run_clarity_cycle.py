@@ -42,6 +42,7 @@ def test_run_clarity_cycle_refreshes_email_and_returns_answers(tmp_path):
     assert result.message_count == 2
     assert result.review_count == 1
     assert result.noise_count == 1
+    assert "# Clarity Command Center" in result.focus_answer
     assert "# Items Marked For Review" in result.review_answer
     assert "Please review this [review]" in result.review_answer
     assert "# Pending Actions" in result.pending_answer
@@ -50,6 +51,7 @@ def test_run_clarity_cycle_refreshes_email_and_returns_answers(tmp_path):
     report = cycle_report_path.read_text(encoding="utf-8")
     assert "# Clarity Cycle" in report
     assert "Mailbox: inbox@example.invalid" in report
+    assert "# Clarity Command Center" in report
     assert "Please review this [review]" in report
     store = DuckDbMemoryStore(memory_path)
     try:
@@ -86,6 +88,7 @@ def test_main_prints_safe_cycle_summary(tmp_path, monkeypatch, capsys):
     assert "Read: 2" in output
     assert "Proposed actions: 2" in output
     assert "Cycle report:" in output
+    assert "# Clarity Command Center" in output
     assert "# Items Marked For Review" in output
     assert "# Pending Actions" in output
     cycle_report = (tmp_path / "reports" / "cycle.md").read_text(encoding="utf-8")
