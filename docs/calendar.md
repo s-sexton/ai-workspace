@@ -7,11 +7,13 @@ Calendar support starts as local, read-only metadata wiring.
 The current implementation:
 
 -   Uses a fake local calendar transport by default
+-   Optionally reads approved calendar metadata from Microsoft Graph with
+    `--graph`
+-   Requires the calendar to be listed in local approved calendar config
 -   Normalizes event metadata into a small shared model
 -   Stores event metadata and hashes in local Clarity memory
 -   Surfaces calendar items in the command center
--   Does not call Google Calendar, Outlook Calendar, or Microsoft Graph calendar
-    APIs
+-   Does not call live calendar APIs unless `--graph` is explicitly passed
 -   Does not create, update, delete, or respond to calendar events
 
 ## Shared Boundary
@@ -23,9 +25,20 @@ The current implementation:
 -   `CalendarEvent`
 -   `CalendarReadResult`
 -   `StaticCalendarTransport`
+-   `graph_event_to_calendar_payload`
 
 Assistant workflows consume normalized `CalendarEvent` objects. They should not
 parse provider-specific payloads directly.
+
+`common.graph_calendar` contains the Microsoft Graph-specific runtime adapter:
+
+-   `GraphCalendarReadTransport` lists event metadata from the Graph
+    `calendarView` endpoint.
+-   `build_graph_calendar_read_transport()` builds the transport from local
+    Graph credentials.
+
+The adapter is isolated from the assistant workflow so it can be tested with
+fake transports before live Graph reads are used.
 
 ## Local Review Command
 
@@ -37,6 +50,38 @@ python -m assistant.src.run_calendar_review --calendar family --date 2026-07-10
 
 This writes calendar metadata to local Clarity memory and regenerates
 `reports/clarity-brief.md`.
+
+To read an approved Graph calendar instead, configure `config/config.json` with
+a calendar entry like:
+
+``` json
+{
+  "assistant": {
+    "calendar": {
+      "approvedCalendars": [
+        {
+          "label": "work",
+          "provider": "graph",
+          "source": "scott.sexton@sendthisfile.com",
+          "accessMode": "read"
+        }
+      ],
+      "defaultCalendar": "work",
+      "maxEvents": 25
+    }
+  }
+}
+```
+
+Then run:
+
+``` powershell
+python -m assistant.src.run_calendar_review --calendar work --date 2026-07-10 --graph
+```
+
+Use `--graph-bearer` with `--graph` only when intentionally testing a local
+`GRAPH_ACCESS_TOKEN`; otherwise the command uses app-only client credentials
+from `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET`.
 
 To ask from remembered calendar metadata:
 
@@ -60,10 +105,10 @@ Calendar memory stores:
 
 Calendar memory does not store attachments or provider tokens.
 
-## Live Calendar Step
+## Future Calendar Step
 
-Before live Google Calendar or Outlook Calendar access is added, create a
-separate design proposal covering:
+Before Google Calendar access or calendar writes are added, create a separate
+design proposal covering:
 
 -   Approved calendars
 -   Read-only versus write scopes

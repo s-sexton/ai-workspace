@@ -123,6 +123,119 @@ def test_email_settings_are_validated_and_typed(tmp_path):
     assert email_settings.max_messages == 50
 
 
+def test_calendar_settings_are_validated_and_typed(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "family",
+                  "provider": "sample",
+                  "source": "family",
+                  "accessMode": "read"
+                },
+                {
+                  "label": "work",
+                  "provider": "graph",
+                  "source": "scott.sexton@example.invalid",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "family",
+              "maxEvents": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+    calendar_settings = config.calendar_settings
+
+    assert tuple(calendar_settings.approved_calendars) == ("family", "work")
+    family = calendar_settings.scope_for("family")
+    work = calendar_settings.scope_for("work")
+    assert family is not None
+    assert family.provider == "sample"
+    assert family.source == "family"
+    assert work is not None
+    assert work.provider == "graph"
+    assert work.source == "scott.sexton@example.invalid"
+    assert calendar_settings.default_calendar == "family"
+    assert calendar_settings.max_events == 50
+
+
+def test_calendar_default_calendar_must_be_approved(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "family",
+                  "provider": "sample",
+                  "source": "family",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "work",
+              "maxEvents": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.calendar_settings
+
+    assert "defaultCalendar" in str(exc_info.value)
+
+
+def test_calendar_provider_must_be_valid(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "family",
+                  "provider": "google",
+                  "source": "family",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "family",
+              "maxEvents": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.calendar_settings
+
+    assert "provider" in str(exc_info.value)
+
+
 def test_email_default_mailbox_must_be_approved(tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()

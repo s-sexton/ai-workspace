@@ -115,6 +115,30 @@ class EmailSettings:
 
 
 @dataclass(frozen=True)
+class CalendarScope:
+    """One approved calendar Clarity may read."""
+
+    label: str
+    source: str
+    provider: str
+    access_mode: str
+
+
+@dataclass(frozen=True)
+class CalendarSettings:
+    """Shared calendar settings loaded from committed configuration."""
+
+    approved_calendars: Mapping[str, CalendarScope]
+    default_calendar: str
+    max_events: int
+
+    def scope_for(self, calendar: str) -> CalendarScope | None:
+        """Return the configured scope for a calendar label."""
+
+        return self.approved_calendars.get(calendar)
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     """Loaded workspace configuration and local environment values."""
 
@@ -183,6 +207,24 @@ class WorkspaceConfig:
             ),
             default_mailbox=default_mailbox,
             max_messages=_require_positive_int(settings, "maxMessages"),
+        )
+
+    @property
+    def calendar_settings(self) -> CalendarSettings:
+        """Return validated calendar review settings."""
+
+        settings = _get_mapping(self.settings, ("assistant", "calendar"))
+        approved_calendars = _require_calendar_scopes(settings, "approvedCalendars")
+        default_calendar = _require_non_empty_string(settings, "defaultCalendar")
+        if default_calendar not in approved_calendars:
+            raise ConfigurationError(
+                "Calendar defaultCalendar must be listed in approvedCalendars."
+            )
+
+        return CalendarSettings(
+            approved_calendars=MappingProxyType(approved_calendars),
+            default_calendar=default_calendar,
+            max_events=_require_positive_int(settings, "maxEvents"),
         )
 
     def require_jira_credentials(
@@ -411,6 +453,53 @@ def _require_mailbox_access(settings: Mapping[str, Any], key: str) -> dict[str, 
         mailbox_access[clean_address] = access_mode
 
     return mailbox_access
+
+
+def _require_calendar_scopes(
+    settings: Mapping[str, Any],
+    key: str,
+) -> dict[str, CalendarScope]:
+    value = settings.get(key)
+    if not isinstance(value, list) or not value:
+        raise ConfigurationError(
+            f"Configuration value must be a non-empty list of calendar objects: {key}"
+        )
+
+    approved_calendars: dict[str, CalendarScope] = {}
+    for index, item in enumerate(value, 1):
+        if not isinstance(item, Mapping):
+            raise ConfigurationError(f"Calendar entry must be an object: {key}[{index}]")
+        label = item.get("label")
+        source = item.get("source")
+        provider = item.get("provider", "sample")
+        access_mode = item.get("accessMode", "read")
+        if not isinstance(label, str) or not label.strip():
+            raise ConfigurationError(
+                f"Calendar label must be a non-empty string: {key}[{index}]"
+            )
+        if not isinstance(source, str) or not source.strip():
+            raise ConfigurationError(
+                f"Calendar source must be a non-empty string: {key}[{index}]"
+            )
+        if provider not in ("sample", "graph"):
+            raise ConfigurationError(
+                f"Calendar provider must be sample or graph: {key}[{index}]"
+            )
+        if access_mode != "read":
+            raise ConfigurationError(
+                f"Calendar accessMode must be read: {key}[{index}]"
+            )
+        clean_label = label.strip()
+        if clean_label in approved_calendars:
+            raise ConfigurationError(f"Duplicate approved calendar: {clean_label}")
+        approved_calendars[clean_label] = CalendarScope(
+            label=clean_label,
+            source=source.strip(),
+            provider=provider,
+            access_mode=access_mode,
+        )
+
+    return approved_calendars
 
 
 def _mailbox_allowed_senders(

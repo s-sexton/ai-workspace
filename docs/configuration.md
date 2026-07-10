@@ -101,8 +101,8 @@ Error messages must not include secret values.
 
 ## Validation
 
-The configuration subsystem currently validates only the settings needed for
-the first Jira report milestone:
+The configuration subsystem currently validates the settings needed for the
+Clarity Jira, email, calendar, and Graph read paths:
 
 -   `assistant.jira.projects`: non-empty list of strings
 -   `assistant.jira.maxResults`: positive integer
@@ -119,10 +119,19 @@ the first Jira report milestone:
     labels to proposed folder destinations; must include `review`, `noise`, and
     `trash`
 -   `assistant.email.maxMessages`: positive integer
+-   `assistant.calendar.approvedCalendars`: non-empty list of calendar objects
+    with `label`, `provider`, `source`, and `accessMode`
+-   `assistant.calendar.defaultCalendar`: non-empty label listed in
+    `approvedCalendars`
+-   `assistant.calendar.maxEvents`: positive integer
 
 Email `accessMode` must be either `read` or `read_write`. Current email
 workflows only read fake metadata; `read_write` is reserved for future approved
 mailbox actions.
+
+Calendar `provider` must be `sample` or `graph`. Calendar `accessMode` must be
+`read`; calendar writes are not supported. For Graph calendars, `source` is the
+Graph user principal name used in the `/users/{source}/calendarView` request.
 
 Email folder policy is used only to record proposed local actions. Non-trash
 destinations must live under `assistant.email.folderNamespace`, such as

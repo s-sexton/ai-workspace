@@ -6,6 +6,7 @@ from common.memory import DuckDbMemoryStore
 
 
 def test_run_calendar_review_records_events_and_generates_brief(tmp_path):
+    _write_config(tmp_path)
     memory_path = tmp_path / "logs" / "memory.duckdb"
     brief_path = tmp_path / "reports" / "brief.md"
 
@@ -53,6 +54,7 @@ def test_run_calendar_review_records_events_and_generates_brief(tmp_path):
 
 
 def test_main_prints_calendar_result(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
     monkeypatch.chdir(tmp_path)
 
     main(
@@ -71,3 +73,103 @@ def test_main_prints_calendar_result(tmp_path, monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "Read 2 calendar event(s) from family for 2026-07-10" in output
     assert "Wrote brief" in output
+
+
+def test_main_can_use_graph_calendar_transport(tmp_path, monkeypatch, capsys):
+    _write_graph_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_build_graph_calendar_read_transport_from_config(
+        *,
+        use_bearer_auth=False,
+        **_,
+    ):
+        calls.append(use_bearer_auth)
+        return StaticCalendarTransport(
+            (
+                {
+                    "event_id": "work-1",
+                    "calendar": "scott.sexton@example.invalid",
+                    "title": "Work review",
+                    "starts_at": "2026-07-10T09:00:00-05:00",
+                },
+            )
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.run_calendar_review."
+        "build_graph_calendar_read_transport_from_config",
+        fake_build_graph_calendar_read_transport_from_config,
+    )
+
+    main(
+        [
+            "--calendar",
+            "work",
+            "--date",
+            "2026-07-10",
+            "--graph",
+            "--graph-bearer",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert calls == [True]
+    assert "Read 1 calendar event(s) from work for 2026-07-10" in output
+
+
+def _write_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "family",
+                  "provider": "sample",
+                  "source": "family",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "family",
+              "maxEvents": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+
+def _write_graph_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "work",
+                  "provider": "graph",
+                  "source": "scott.sexton@example.invalid",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "work",
+              "maxEvents": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )

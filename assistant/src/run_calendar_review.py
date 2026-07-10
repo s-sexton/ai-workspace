@@ -17,7 +17,9 @@ from common.calendar import (
     CalendarTransport,
     StaticCalendarTransport,
 )
-from common.configuration import find_workspace_root
+from common.configuration import ConfigurationError, load_workspace_config
+from common.graph_calendar import build_graph_calendar_read_transport
+from common.graph_email import GraphTokenTransport, GraphTransport
 from common.memory import DuckDbMemoryStore
 
 
@@ -68,23 +70,49 @@ def run_calendar_review(
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     brief_output_path: Path | str | None = None,
     transport: CalendarTransport | None = None,
+    use_graph: bool = False,
 ) -> CalendarReviewResult:
     """Read local calendar metadata, write memory, and generate a local brief."""
 
-    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    config = load_workspace_config(root, include_process_env=False)
+    workspace_root = config.root
+    calendar_settings = config.calendar_settings
+    requested_calendar = calendar or calendar_settings.default_calendar
+    calendar_scope = calendar_settings.scope_for(requested_calendar)
+    if calendar_scope is None:
+        raise ConfigurationError(f"Calendar is not approved: {requested_calendar}")
+    if calendar_scope.access_mode != "read":
+        raise ConfigurationError(
+            f"Calendar is not approved for read access: {requested_calendar}"
+        )
+    if use_graph and calendar_scope.provider != "graph":
+        raise ConfigurationError(
+            f"Calendar is not configured for Graph access: {requested_calendar}"
+        )
+    if not use_graph and calendar_scope.provider != "sample":
+        raise ConfigurationError(
+            f"Calendar requires --graph for provider: {requested_calendar}"
+        )
+
     selected_date = review_date or date.today().isoformat()
+    effective_limit = min(limit, calendar_settings.max_events)
     resolved_memory_path = _resolve_path(workspace_root, Path(memory_path))
     client = CalendarClient(
-        transport=transport or StaticCalendarTransport(SAMPLE_CALENDAR_EVENTS)
+        transport=transport
+        or (
+            build_graph_calendar_read_transport_from_config(root=workspace_root)
+            if use_graph
+            else StaticCalendarTransport(SAMPLE_CALENDAR_EVENTS)
+        )
     )
     read_result = client.list_events(
-        calendar=calendar,
+        calendar=calendar_scope.source,
         date=selected_date,
-        limit=limit,
+        limit=effective_limit,
     )
     run_id = _record_calendar_memory(
         memory_path=resolved_memory_path,
-        calendar=read_result.calendar,
+        calendar=calendar_scope.label,
         review_date=read_result.date,
         events=read_result.events,
     )
@@ -97,7 +125,7 @@ def run_calendar_review(
         memory_path=resolved_memory_path,
         brief_path=brief_path,
         run_id=run_id,
-        calendar=read_result.calendar,
+        calendar=calendar_scope.label,
         review_date=read_result.date,
         event_count=len(read_result.events),
     )
@@ -113,12 +141,39 @@ def main(argv: Sequence[str] | None = None) -> None:
         limit=args.limit,
         memory_path=args.memory,
         brief_output_path=args.brief,
+        transport=(
+            build_graph_calendar_read_transport_from_config(
+                use_bearer_auth=args.graph_bearer
+            )
+            if args.graph
+            else None
+        ),
+        use_graph=args.graph,
     )
     print(
         f"Read {result.event_count} calendar event(s) "
         f"from {result.calendar} for {result.review_date}"
     )
     print(f"Wrote brief {result.brief_path}")
+
+
+def build_graph_calendar_read_transport_from_config(
+    *,
+    root: Path | str | None = None,
+    graph_transport: GraphTransport | None = None,
+    token_transport: GraphTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> CalendarTransport:
+    """Build a Graph calendar read transport from local workspace configuration."""
+
+    config = load_workspace_config(root)
+    credentials = config.require_graph_credentials(use_bearer_auth=use_bearer_auth)
+    return build_graph_calendar_read_transport(
+        credentials,
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+        use_bearer_auth=use_bearer_auth,
+    )
 
 
 def _record_calendar_memory(
@@ -217,6 +272,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help="Date to review in YYYY-MM-DD format. Defaults to today.",
     )
+    parser.add_argument(
+        "--graph",
+        action="store_true",
+        help="Read approved calendar metadata from Microsoft Graph.",
+    )
+    parser.add_argument(
+        "--graph-bearer",
+        action="store_true",
+        help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
+    )
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument(
         "--memory",
@@ -228,7 +293,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help="Local brief output path.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.graph_bearer and not args.graph:
+        parser.error("--graph-bearer requires --graph.")
+    return args
 
 
 if __name__ == "__main__":

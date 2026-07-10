@@ -53,11 +53,11 @@ Current implementation:
 
 ## Phase 4: Calendar Awareness
 
-Status: started with local sample wiring.
+Status: read-only Graph wiring started.
 
 Calendar support begins as read-only metadata:
 
-- Read calendar event metadata
+- Read sample or approved Microsoft Graph calendar event metadata
 - Store event title, source, start/end, location, organizer, and hash
 - Surface calendar items in the command center
 - Avoid creating, updating, deleting, or responding to calendar events

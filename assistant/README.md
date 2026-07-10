@@ -270,6 +270,16 @@ This records local sample calendar metadata and regenerates the Clarity brief.
 It does not call live Google Calendar, Outlook Calendar, or Microsoft Graph
 calendar APIs.
 
+To read an approved Microsoft Graph calendar instead, configure
+`assistant.calendar.approvedCalendars` with a `graph` provider, then run:
+
+``` powershell
+python -m assistant.src.run_calendar_review --calendar work --date 2026-07-10 --graph
+```
+
+This live Graph mode is still read-only. It records local calendar event
+metadata and does not create, update, delete, or respond to calendar events.
+
 To dry-run approved email moves and record a local audit action:
 
 ``` powershell

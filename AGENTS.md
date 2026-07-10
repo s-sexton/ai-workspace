@@ -127,7 +127,7 @@ Scope:
 
 - Answer deterministic local questions from Clarity memory
 - Read approved email mailbox metadata
-- Read local sample calendar metadata
+- Read approved calendar metadata
 - Normalize and classify email metadata
 - Generate local Markdown briefs
 - Generate command-center and focus-plan answers

@@ -56,6 +56,18 @@
         "trash": "Deleted Items"
       },
       "maxMessages": 25
+    },
+    "calendar": {
+      "approvedCalendars": [
+        {
+          "label": "family",
+          "provider": "sample",
+          "source": "family",
+          "accessMode": "read"
+        }
+      ],
+      "defaultCalendar": "family",
+      "maxEvents": 25
     }
   }
 }

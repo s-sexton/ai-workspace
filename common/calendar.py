@@ -98,6 +98,32 @@ class CalendarClient:
         return CalendarReadResult(calendar=calendar, date=date, events=events)
 
 
+def graph_event_to_calendar_payload(
+    event: Mapping[str, Any],
+    *,
+    calendar: str,
+) -> Mapping[str, Any]:
+    """Convert a Microsoft Graph event payload into Clarity calendar metadata."""
+
+    event_id = event.get("id")
+    subject = event.get("subject")
+    start = event.get("start")
+    end = event.get("end")
+    location = event.get("location")
+    organizer = event.get("organizer")
+
+    return {
+        "event_id": event_id,
+        "calendar": calendar,
+        "title": subject,
+        "starts_at": _graph_date_time(start),
+        "ends_at": _graph_date_time(end),
+        "location": _graph_location(location),
+        "organizer": _graph_organizer(organizer),
+        "status": "cancelled" if event.get("isCancelled") is True else event.get("showAs"),
+    }
+
+
 def _normalize_event(event: Mapping[str, Any], *, calendar: str) -> CalendarEvent:
     event_id = _required_text(event, "event_id")
     title = _required_text(event, "title")
@@ -128,3 +154,39 @@ def _optional_text(value: Any) -> str | None:
         return str(value)
     stripped = value.strip()
     return stripped or None
+
+
+def _graph_date_time(value: Any) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    date_time = value.get("dateTime")
+    time_zone = value.get("timeZone")
+    if not isinstance(date_time, str) or not date_time.strip():
+        return None
+    if isinstance(time_zone, str) and time_zone.strip():
+        return f"{date_time.strip()} {time_zone.strip()}"
+    return date_time.strip()
+
+
+def _graph_location(value: Any) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    display_name = value.get("displayName")
+    if not isinstance(display_name, str) or not display_name.strip():
+        return None
+    return display_name.strip()
+
+
+def _graph_organizer(value: Any) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    email_address = value.get("emailAddress")
+    if not isinstance(email_address, Mapping):
+        return None
+    address = email_address.get("address")
+    name = email_address.get("name")
+    if isinstance(address, str) and address.strip():
+        return address.strip()
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return None

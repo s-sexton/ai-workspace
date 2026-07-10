@@ -255,7 +255,7 @@ Current scope:
 - Deterministic local question answering from Clarity memory
 - Read-only Jira Cloud reporting
 - Approved email mailbox metadata review
-- Local sample calendar metadata review
+- Approved calendar metadata review
 - Local memory and Markdown briefs
 - Daily command-center and focus-plan answers
 - Proposed email folder moves with local approval records
