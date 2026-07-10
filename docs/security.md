@@ -33,6 +33,12 @@ Future LLM summary output must pass local validation before display or storage.
 The validator rejects output that claims actions were performed, suggests direct
 execution, asks for credentials, or contains credential-shaped text.
 
+Local output files can be checked with:
+
+``` powershell
+python -m assistant.src.validate_llm_output path\to\summary.md
+```
+
 Future provider integration should enter through the provider-neutral summary
 contract in `assistant.src.llm_summary`. That contract accepts an injected
 summarizer, builds the bounded prompt, validates returned text, and performs no

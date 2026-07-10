@@ -155,6 +155,12 @@ These do not call an LLM. `llm-context` prints the local metadata-only context
 Clarity would be allowed to summarize. `llm-prompt` wraps that context with the
 future summarization instructions.
 
+To validate a local future LLM summary output file:
+
+``` powershell
+python -m assistant.src.validate_llm_output path\to\summary.md
+```
+
 To refresh approved email metadata before answering:
 
 ``` powershell
