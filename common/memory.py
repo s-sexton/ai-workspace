@@ -190,6 +190,16 @@ class FeedbackSummaryRecord:
     created_at: str
 
 
+@dataclass(frozen=True)
+class FeedbackLearningRecord:
+    """A feedback record compact enough to guide future classification."""
+
+    subject: str
+    sender_or_owner: str | None
+    feedback_type: str
+    created_at: str
+
+
 class DuckDbMemoryStore:
     """Small local DuckDB-backed memory store for Clarity."""
 
@@ -635,6 +645,34 @@ class DuckDbMemoryStore:
             [limit],
         ).fetchall()
         return tuple(FeedbackSummaryRecord(*row) for row in rows)
+
+    def email_feedback_learning(
+        self,
+        *,
+        mailbox: str,
+        limit: int = 100,
+    ) -> tuple[FeedbackLearningRecord, ...]:
+        """Return recent email feedback for a mailbox that may guide classification."""
+
+        _reject_secret_text(mailbox)
+        if limit < 1:
+            raise MemoryStoreError("limit must be positive.")
+        rows = self._connection.execute(
+            """
+            SELECT i.subject, i.sender_or_owner, f.feedback_type, f.created_at
+            FROM human_feedback f
+            JOIN items_seen i ON i.item_id = f.item_id
+            JOIN sources s ON s.source_id = i.source_id
+            WHERE s.source_type = 'email'
+              AND s.scope_label = ?
+              AND i.item_type = 'email_message'
+              AND f.feedback_type IN ('noise', 'review')
+            ORDER BY f.created_at DESC, f.feedback_id DESC
+            LIMIT ?
+            """,
+            [_required_text(mailbox, "mailbox"), limit],
+        ).fetchall()
+        return tuple(FeedbackLearningRecord(*row) for row in rows)
 
     def record_generated_artifact(
         self,

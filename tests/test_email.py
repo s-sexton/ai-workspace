@@ -5,6 +5,7 @@ import pytest
 from common.email import (
     EmailClient,
     EmailClientError,
+    EmailFeedbackRule,
     EmailMoveClient,
     StaticGraphEmailTransport,
     StaticEmailTransport,
@@ -149,6 +150,70 @@ def test_review_signals_take_precedence_over_promotional_language():
     )
 
     assert classification.label == "review"
+
+
+def test_prior_feedback_can_override_content_rules():
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "newsletter",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Monthly newsletter",
+                    "sender": "school@example.invalid",
+                },
+            )
+        )
+    )
+    message = client.list_messages(mailbox="inbox@example.invalid").messages[0]
+
+    classification = classify_email_message(
+        message,
+        feedback_rules=(
+            EmailFeedbackRule(
+                label="review",
+                subject="monthly newsletter",
+                sender="school@example.invalid",
+            ),
+        ),
+    )
+
+    assert classification.label == "review"
+    assert classification.reason == "Matched prior human email feedback."
+
+
+def test_restricted_mailbox_security_rules_take_precedence_over_feedback():
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "spoofed",
+                    "mailbox": "clarity@sendthisfile.ai",
+                    "subject": "Monthly newsletter",
+                    "sender": "scott.sexton@sendthisfile.com",
+                    "spf": "fail",
+                    "dkim": "fail",
+                    "dmarc": "fail",
+                },
+            )
+        )
+    )
+    message = client.list_messages(mailbox="clarity@sendthisfile.ai").messages[0]
+
+    classification = classify_email_message(
+        message,
+        allowed_senders=("scott.sexton@sendthisfile.com",),
+        feedback_rules=(
+            EmailFeedbackRule(
+                label="review",
+                subject="Monthly newsletter",
+                sender="scott.sexton@sendthisfile.com",
+            ),
+        ),
+    )
+
+    assert classification.label == "trash"
+    assert "authentication checks" in classification.reason
 
 
 def test_restricted_mailbox_sender_allow_list_classifies_unauthorized_as_trash():

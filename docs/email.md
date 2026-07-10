@@ -33,6 +33,12 @@ authentication checks run first. Then operational, account, family, security,
 and approval signals are kept for review. Only after those checks does Clarity
 classify common promotional, digest, and subscription-style messages as noise.
 
+Human feedback can tune future email classifications. Feedback is scoped to the
+mailbox and matching message metadata. A prior `noise` or `review` feedback
+record for a matching subject and sender can override content rules on a later
+run. Feedback cannot override restricted mailbox sender allow-list or
+authentication failures.
+
 ## Shared Boundary
 
 `common.email` owns the reusable email metadata boundary:
@@ -388,6 +394,17 @@ Noise classifications can be inspected with:
 ``` powershell
 python -m assistant.src.ask_memory noise-items
 ```
+
+Review and noise lists include a local `Item ID`. Use that ID to teach Clarity
+when a classification was wrong or should be repeated:
+
+``` powershell
+python -m assistant.src.record_feedback ITEM_ID noise "This sender is promotional."
+python -m assistant.src.record_feedback ITEM_ID review "Keep these school updates visible."
+```
+
+The next email review run consults those local feedback records before applying
+general content rules.
 
 ## Next Live-Mail Step
 

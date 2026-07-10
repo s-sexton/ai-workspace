@@ -32,6 +32,13 @@ Status: in progress.
 - Execute approved email moves only through explicit Graph commands
 - Execute approved Gmail archive/trash actions only through explicit commands
 - Keep all moves scoped to the source mailbox
+- Learn future review/noise email classification from local human feedback
+
+Next useful slices:
+
+- Make feedback easier to capture from the command center
+- Add mailbox-specific sender/domain preferences
+- Add a review-before-execute cleanup workflow for approved Gmail filing
 
 ## Phase 3: Daily Command Center
 

@@ -117,6 +117,55 @@ def test_finds_item_by_item_id_or_external_id(memory_store):
     assert memory_store.find_item_seen("missing") is None
 
 
+def test_returns_mailbox_scoped_email_feedback_for_learning(memory_store):
+    run = memory_store.start_run(workflow="email-review")
+    source = memory_store.record_source(
+        source_type="email",
+        display_name="inbox@example.invalid",
+        scope_label="inbox@example.invalid",
+    )
+    other_source = memory_store.record_source(
+        source_type="email",
+        display_name="other@example.invalid",
+        scope_label="other@example.invalid",
+    )
+    item = memory_store.record_item_seen(
+        source_id=source.source_id,
+        external_id="email-1",
+        item_type="email_message",
+        subject="Monthly newsletter",
+        sender_or_owner="school@example.invalid",
+        first_seen_run_id=run.run_id,
+    )
+    other_item = memory_store.record_item_seen(
+        source_id=other_source.source_id,
+        external_id="email-2",
+        item_type="email_message",
+        subject="Monthly newsletter",
+        sender_or_owner="school@example.invalid",
+        first_seen_run_id=run.run_id,
+    )
+    memory_store.record_feedback(
+        item_id=item.item_id,
+        run_id=run.run_id,
+        feedback_type="review",
+        feedback_text="School updates matter.",
+    )
+    memory_store.record_feedback(
+        item_id=other_item.item_id,
+        run_id=run.run_id,
+        feedback_type="noise",
+        feedback_text="Other mailbox does not matter.",
+    )
+
+    records = memory_store.email_feedback_learning(mailbox="inbox@example.invalid")
+
+    assert len(records) == 1
+    assert records[0].subject == "Monthly newsletter"
+    assert records[0].sender_or_owner == "school@example.invalid"
+    assert records[0].feedback_type == "review"
+
+
 def test_records_generated_artifact(memory_store):
     run = memory_store.start_run(workflow="jira-report")
 
@@ -364,3 +413,6 @@ def test_recent_memory_limit_must_be_positive(memory_store):
 
     with pytest.raises(MemoryStoreError):
         memory_store.actions_by_approval_status("approved", limit=0)
+
+    with pytest.raises(MemoryStoreError):
+        memory_store.email_feedback_learning(mailbox="inbox@example.invalid", limit=0)

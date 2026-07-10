@@ -115,6 +115,15 @@ class EmailClassification:
 
 
 @dataclass(frozen=True)
+class EmailFeedbackRule:
+    """A local human feedback rule for future email classification."""
+
+    label: str
+    subject: str
+    sender: str | None
+
+
+@dataclass(frozen=True)
 class EmailFolderProposal:
     """A local proposal for where an email should be reviewed."""
 
@@ -267,6 +276,7 @@ def classify_email_message(
     message: EmailMessage,
     *,
     allowed_senders: tuple[str, ...] = (),
+    feedback_rules: tuple[EmailFeedbackRule, ...] = (),
 ) -> EmailClassification:
     """Classify email metadata with deterministic first-pass rules."""
 
@@ -282,6 +292,13 @@ def classify_email_message(
                 "Message sent to a restricted mailbox without passing required "
                 "SPF/DKIM/DMARC authentication checks."
             ),
+        )
+
+    feedback_rule = _matching_feedback_rule(message, feedback_rules)
+    if feedback_rule is not None:
+        return EmailClassification(
+            label=feedback_rule.label,
+            reason="Matched prior human email feedback.",
         )
 
     combined_text = _combined_lower_text(message)
@@ -371,6 +388,34 @@ def _combined_lower_text(message: EmailMessage) -> str:
 
 def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
     return any(token in text for token in tokens)
+
+
+def _matching_feedback_rule(
+    message: EmailMessage,
+    feedback_rules: tuple[EmailFeedbackRule, ...],
+) -> EmailFeedbackRule | None:
+    message_subject = _normalize_feedback_text(message.subject)
+    message_sender = _normalize_optional_feedback_text(message.sender)
+    for rule in feedback_rules:
+        if rule.label not in ("noise", "review"):
+            continue
+        if _normalize_feedback_text(rule.subject) != message_subject:
+            continue
+        rule_sender = _normalize_optional_feedback_text(rule.sender)
+        if rule_sender is not None and rule_sender != message_sender:
+            continue
+        return rule
+    return None
+
+
+def _normalize_feedback_text(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
+def _normalize_optional_feedback_text(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    return _normalize_feedback_text(value)
 
 
 def _graph_sender(payload: Mapping[str, Any]) -> str | None:

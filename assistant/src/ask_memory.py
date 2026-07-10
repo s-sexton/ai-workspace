@@ -350,6 +350,7 @@ def _format_recent_items(title: str, records) -> str:
     for record in records:
         label = f" [{record.label}]" if record.label else ""
         lines.append(f"- {record.subject}{label}")
+        lines.append(f"  Item ID: {record.item_id}")
         lines.append(f"  Source: {record.display_name} ({record.source_type})")
         if record.reason:
             lines.append(f"  Reason: {record.reason}")

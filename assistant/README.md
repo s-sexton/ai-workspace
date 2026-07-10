@@ -228,6 +228,19 @@ python -m assistant.src.record_feedback STF-1 noise "This was just an automated 
 python -m assistant.src.record_feedback ACCT-9 review "Keep surfacing billing issues."
 ```
 
+Email review and noise lists include a local `Item ID` that can be used for
+feedback:
+
+``` powershell
+python -m assistant.src.ask_memory review-items
+python -m assistant.src.record_feedback ITEM_ID noise "This sender is promotional."
+python -m assistant.src.record_feedback ITEM_ID review "Keep these updates visible."
+```
+
+For email, `noise` and `review` feedback is used on future review runs for
+matching mailbox, subject, and sender metadata. It does not override restricted
+mailbox sender or authentication checks.
+
 To delegate local work for Clarity to track:
 
 ``` powershell

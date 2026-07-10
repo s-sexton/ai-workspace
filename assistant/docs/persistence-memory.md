@@ -245,6 +245,12 @@ human feedback for remembered items by internal item ID or external ID, such as 
 Jira key. Feedback is stored locally and does not write back to Jira, email,
 calendar, or any external system.
 
+For email, `noise` and `review` feedback records are also used as local learning
+input on later email review runs. Learning is scoped to the mailbox and matching
+message metadata. It can correct future review/noise classification for matching
+subjects and senders, but it cannot override restricted mailbox sender
+allow-list checks or email authentication failures.
+
 The first local delegation command is `assistant.src.delegate_task`. It records
 work the human wants Clarity to track, then surfaces it through `ask_memory
 open-tasks` and `ask_memory summary`. It only writes to local memory.
@@ -270,7 +276,7 @@ artifact and action.
 
 The first email milestone is `assistant.src.run_email_review`. It reads fake
 mailbox metadata through `common.email`, normalizes message metadata, applies
-deterministic placeholder classifications, stores metadata and hashes in local
+deterministic classifications, stores metadata and hashes in local
 memory, and generates the Clarity brief. The requested mailbox must be listed in
 local approved mailbox configuration with `read` or `read_write` access. It does
 not connect to live Exchange or Gmail, store raw bodies by default, or perform

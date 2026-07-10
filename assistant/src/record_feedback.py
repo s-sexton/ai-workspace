@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Sequence
 
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
+from common.console import print_text
 from common.configuration import find_workspace_root
 from common.memory import DuckDbMemoryStore
 
@@ -74,7 +75,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     """Record local human feedback for a remembered item."""
 
     args = _parse_args(argv)
-    print(
+    print_text(
         record_memory_feedback(
             item_reference=args.item,
             feedback_type=args.feedback_type,

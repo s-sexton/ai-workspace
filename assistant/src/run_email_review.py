@@ -13,6 +13,7 @@ from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import ConfigurationError, load_workspace_config
 from common.email import (
     EmailClient,
+    EmailFeedbackRule,
     EmailMessage,
     EmailTransport,
     StaticGraphEmailTransport,
@@ -282,10 +283,12 @@ def _record_email_memory(
             scope_label=mailbox,
             access_mode="read",
         )
+        feedback_rules = _email_feedback_rules(store, mailbox=mailbox)
         for message in messages:
             classification = classify_email_message(
                 message,
                 allowed_senders=allowed_senders,
+                feedback_rules=feedback_rules,
             )
             if classification.label == "review":
                 review_count += 1
@@ -336,6 +339,21 @@ def _record_email_memory(
         return run.run_id, review_count, noise_count, trash_count, proposed_action_count
     finally:
         store.close()
+
+
+def _email_feedback_rules(
+    store: DuckDbMemoryStore,
+    *,
+    mailbox: str,
+) -> tuple[EmailFeedbackRule, ...]:
+    return tuple(
+        EmailFeedbackRule(
+            label=record.feedback_type,
+            subject=record.subject,
+            sender=record.sender_or_owner,
+        )
+        for record in store.email_feedback_learning(mailbox=mailbox)
+    )
 
 
 def _message_hash(message: EmailMessage) -> str:

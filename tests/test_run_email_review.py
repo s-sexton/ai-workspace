@@ -131,6 +131,77 @@ def test_run_email_review_records_metadata_and_generates_brief(tmp_path):
     assert any("Clarity/Noise" in (action.result or "") for action in proposals)
 
 
+def test_run_email_review_uses_prior_email_feedback(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    brief_path = tmp_path / "reports" / "brief.md"
+    _write_config(tmp_path)
+
+    run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "school-newsletter-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Monthly newsletter",
+                    "sender": "school@example.invalid",
+                    "preview": "Unsubscribe here.",
+                },
+            )
+        ),
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        item = store.find_item_seen("school-newsletter-1")
+        run = store.latest_run()
+        assert item is not None
+        assert run is not None
+        store.record_feedback(
+            item_id=item.item_id,
+            run_id=run.run_id,
+            feedback_type="review",
+            feedback_text="School newsletters should stay visible.",
+        )
+    finally:
+        store.close()
+
+    result = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "school-newsletter-2",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Monthly newsletter",
+                    "sender": "school@example.invalid",
+                    "preview": "Unsubscribe here.",
+                },
+            )
+        ),
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        review_items = store.recent_memory_by_label("review")
+    finally:
+        store.close()
+
+    assert result.review_count == 1
+    assert result.noise_count == 0
+    assert any(
+        item.subject == "Monthly newsletter"
+        and item.reason == "Matched prior human email feedback."
+        for item in review_items
+    )
+
+
 def test_run_email_review_is_mailbox_scoped(tmp_path):
     _write_config(
         tmp_path,
