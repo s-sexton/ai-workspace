@@ -23,12 +23,14 @@ Status: implemented.
 Status: in progress.
 
 - Read approved mailbox metadata
+- Read approved Gmail inbox metadata
 - Normalize Microsoft Graph-shaped email payloads
 - Apply allowed-sender and authentication checks
 - Classify messages as review, noise, or trash
 - Propose folder moves from configured policy
 - Create approved Clarity folders on explicit command
 - Execute approved email moves only through explicit Graph commands
+- Execute approved Gmail archive/trash actions only through explicit commands
 - Keep all moves scoped to the source mailbox
 
 ## Phase 3: Daily Command Center

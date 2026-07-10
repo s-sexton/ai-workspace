@@ -255,10 +255,12 @@ Current scope:
 - Deterministic local question answering from Clarity memory
 - Read-only Jira Cloud reporting
 - Approved email mailbox metadata review
+- Approved Gmail inbox metadata review
 - Approved calendar metadata review
 - Local memory and Markdown briefs
 - Daily command-center and focus-plan answers
 - Proposed email folder moves with local approval records
+- Approved Gmail archive/trash execution through explicit commands
 - Scheduler-friendly local cycle commands
 - No Jira writes
 - No LLM

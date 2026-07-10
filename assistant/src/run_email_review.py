@@ -20,6 +20,11 @@ from common.email import (
     classify_email_message,
     propose_email_folder_action,
 )
+from common.google_gmail import (
+    GoogleCalendarTransport,
+    GoogleTokenTransport,
+    build_google_gmail_read_transport,
+)
 from common.graph_email import (
     GraphTokenTransport,
     GraphTransport,
@@ -118,6 +123,7 @@ def run_email_review(
     brief_output_path: Path | str | None = None,
     transport: EmailTransport | None = None,
     use_sample_graph: bool = False,
+    use_gmail: bool = False,
 ) -> EmailReviewResult:
     """Read fake email metadata, write memory, and generate a local brief."""
 
@@ -137,10 +143,10 @@ def run_email_review(
     resolved_memory_path = _resolve_path(workspace_root, Path(memory_path))
     client = EmailClient(
         transport=transport
-        or (
-            StaticGraphEmailTransport(SAMPLE_GRAPH_EMAIL_MESSAGES)
-            if use_sample_graph
-            else StaticEmailTransport(SAMPLE_EMAIL_MESSAGES)
+        or _default_email_transport(
+            workspace_root=workspace_root,
+            use_gmail=use_gmail,
+            use_sample_graph=use_sample_graph,
         )
     )
     read_result = client.list_messages(mailbox=requested_mailbox, limit=effective_limit)
@@ -179,6 +185,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     transport = (
         build_graph_read_transport_from_config(use_bearer_auth=args.graph_bearer)
         if args.graph
+        else build_gmail_read_transport_from_config(
+            use_bearer_auth=args.gmail_bearer
+        )
+        if args.gmail
         else None
     )
     result = run_email_review(
@@ -188,6 +198,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         brief_output_path=args.brief,
         transport=transport,
         use_sample_graph=args.sample_graph,
+        use_gmail=args.gmail,
     )
     print(f"Read {result.message_count} email message(s) from {result.mailbox}")
     print(f"Review: {result.review_count}")
@@ -214,6 +225,38 @@ def build_graph_read_transport_from_config(
         token_transport=token_transport,
         use_bearer_auth=use_bearer_auth,
     )
+
+
+def build_gmail_read_transport_from_config(
+    *,
+    root: Path | str | None = None,
+    gmail_transport: GoogleCalendarTransport | None = None,
+    token_transport: GoogleTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> EmailTransport:
+    """Build a Gmail read transport from local workspace configuration."""
+
+    config = load_workspace_config(root)
+    credentials = config.require_google_credentials(use_bearer_auth=use_bearer_auth)
+    return build_google_gmail_read_transport(
+        credentials,
+        gmail_transport=gmail_transport,
+        token_transport=token_transport,
+        use_bearer_auth=use_bearer_auth,
+    )
+
+
+def _default_email_transport(
+    *,
+    workspace_root: Path,
+    use_gmail: bool,
+    use_sample_graph: bool,
+) -> EmailTransport:
+    if use_gmail:
+        return build_gmail_read_transport_from_config(root=workspace_root)
+    if use_sample_graph:
+        return StaticGraphEmailTransport(SAMPLE_GRAPH_EMAIL_MESSAGES)
+    return StaticEmailTransport(SAMPLE_EMAIL_MESSAGES)
 
 
 def _record_email_memory(
@@ -339,10 +382,20 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Read approved mailbox metadata from Microsoft Graph.",
     )
+    source_group.add_argument(
+        "--gmail",
+        action="store_true",
+        help="Read approved mailbox metadata from Gmail.",
+    )
     parser.add_argument(
         "--graph-bearer",
         action="store_true",
         help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
+    )
+    parser.add_argument(
+        "--gmail-bearer",
+        action="store_true",
+        help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials.",
     )
     parser.add_argument(
         "--memory",
@@ -357,6 +410,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
+    if args.gmail_bearer and not args.gmail:
+        parser.error("--gmail-bearer requires --gmail.")
     return args
 
 

@@ -32,6 +32,8 @@ Current shared components:
     behind the shared calendar boundary.
 -   `common.google_calendar`: provides the Google Calendar read adapter behind
     the shared calendar boundary.
+-   `common.google_gmail`: provides Gmail read and move/trash adapters behind
+    the shared email boundary.
 -   `common.memory`: provides the first local Clarity memory boundary, backed by
     DuckDB, for recording runs, approved sources, items seen, classifications,
     human feedback, and delegated tasks without storing secrets.

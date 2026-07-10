@@ -49,7 +49,7 @@ app-only client credentials token acquisition. `GRAPH_ACCESS_TOKEN` is available
 for explicit Bearer-token experiments. These values are local secrets and must
 not be committed.
 
-Google Calendar runtime wiring uses these local values:
+Google Calendar and Gmail runtime wiring use these local values:
 
 -   `GOOGLE_CLIENT_ID`
 -   `GOOGLE_CLIENT_SECRET`
@@ -57,9 +57,9 @@ Google Calendar runtime wiring uses these local values:
 -   `GOOGLE_ACCESS_TOKEN`
 
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` support
-Google OAuth refresh-token access. `GOOGLE_ACCESS_TOKEN` is available for
-explicit Bearer-token experiments. These values are local secrets and must not
-be committed.
+Google OAuth refresh-token access for approved Google integrations.
+`GOOGLE_ACCESS_TOKEN` is available for explicit Bearer-token experiments. These
+values are local secrets and must not be committed.
 
 ## Shared Settings
 

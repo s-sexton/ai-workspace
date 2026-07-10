@@ -27,6 +27,14 @@ class GoogleCalendarTransport(Protocol):
     def get(self, url: str, headers: Mapping[str, str]) -> GoogleCalendarResponse:
         """Send a GET request and return a response."""
 
+    def post(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+    ) -> GoogleCalendarResponse:
+        """Send a JSON POST request and return a response."""
+
 
 class GoogleTokenTransport(Protocol):
     """Minimal HTTP transport interface for Google token refresh."""
@@ -88,7 +96,32 @@ class UrllibGoogleCalendarTransport:
     ) -> UrllibGoogleCalendarResponse:
         """Send a GET request to Google Calendar."""
 
-        request = Request(url, headers=dict(headers), method="GET")
+        return self._send("GET", url, headers=headers)
+
+    def post(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+    ) -> UrllibGoogleCalendarResponse:
+        """Send a JSON POST request to Google APIs."""
+
+        return self._send("POST", url, headers=headers, body=body)
+
+    def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any] | None = None,
+    ) -> UrllibGoogleCalendarResponse:
+        data = None
+        request_headers = dict(headers)
+        if body is not None:
+            data = json.dumps(body).encode("utf-8")
+            request_headers.setdefault("Content-Type", "application/json")
+        request = Request(url, headers=request_headers, data=data, method=method)
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 status_code = int(response.status)

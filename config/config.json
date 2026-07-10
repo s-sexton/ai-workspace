@@ -46,6 +46,10 @@
             "scott.sexton@sendthisfile.com",
             "sesexton@gmail.com"
           ]
+        },
+        {
+          "address": "sesexton@gmail.com",
+          "accessMode": "read_write"
         }
       ],
       "defaultMailbox": "inbox@example.invalid",
@@ -60,9 +64,9 @@
     "calendar": {
       "approvedCalendars": [
         {
-          "label": "family",
-          "provider": "sample",
-          "source": "family",
+          "label": "sexton-family",
+          "provider": "google",
+          "source": "7u1kmojd4tva0ea3j4gng46s3g@group.calendar.google.com",
           "accessMode": "read"
         },
         {
@@ -72,7 +76,7 @@
           "accessMode": "read_write"
         }
       ],
-      "defaultCalendar": "family",
+      "defaultCalendar": "sexton-family",
       "maxEvents": 25
     }
   }

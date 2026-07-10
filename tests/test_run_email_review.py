@@ -6,6 +6,7 @@ from typing import Any, Mapping
 import pytest
 
 from assistant.src.run_email_review import (
+    build_gmail_read_transport_from_config,
     build_graph_read_transport_from_config,
     run_email_review,
     main,
@@ -344,6 +345,21 @@ def test_build_graph_read_transport_from_config_can_use_bearer_token(tmp_path):
     assert token_transport.calls == []
 
 
+def test_build_gmail_read_transport_from_config_can_use_bearer_token(tmp_path):
+    _write_graph_env(tmp_path, "GOOGLE_ACCESS_TOKEN=direct-token\n")
+    token_transport = FakeGraphTokenTransport()
+
+    transport = build_gmail_read_transport_from_config(
+        root=tmp_path,
+        gmail_transport=FakeGraphTransport(),
+        token_transport=token_transport,
+        use_bearer_auth=True,
+    )
+
+    assert "direct-token" not in repr(transport)
+    assert token_transport.calls == []
+
+
 def test_run_email_review_rejects_unapproved_mailbox(tmp_path):
     _write_config(tmp_path)
 
@@ -466,9 +482,62 @@ def test_main_can_use_graph_read_transport(tmp_path, monkeypatch, capsys):
     assert "Live Graph review" not in output
 
 
+def test_main_can_use_gmail_read_transport(tmp_path, monkeypatch, capsys):
+    _write_config(
+        tmp_path,
+        approved_mailboxes=("sesexton@gmail.com",),
+        default_mailbox="sesexton@gmail.com",
+        access_mode="read_write",
+    )
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_build_gmail_read_transport_from_config(*, use_bearer_auth=False, **_):
+        calls.append(use_bearer_auth)
+        return StaticEmailTransport(
+            (
+                {
+                    "message_id": "gmail-live-1",
+                    "mailbox": "sesexton@gmail.com",
+                    "subject": "Live Gmail review",
+                    "sender": "friend@example.invalid",
+                },
+            )
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.run_email_review.build_gmail_read_transport_from_config",
+        fake_build_gmail_read_transport_from_config,
+    )
+
+    main(
+        [
+            "--gmail",
+            "--gmail-bearer",
+            "--mailbox",
+            "sesexton@gmail.com",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert calls == [True]
+    assert "Read 1 email message(s) from sesexton@gmail.com" in output
+    assert "Review: 1" in output
+    assert "Live Gmail review" not in output
+
+
 def test_main_rejects_graph_bearer_without_graph():
     with pytest.raises(SystemExit):
         main(["--graph-bearer"])
+
+
+def test_main_rejects_gmail_bearer_without_gmail():
+    with pytest.raises(SystemExit):
+        main(["--gmail-bearer"])
 
 
 def test_main_rejects_sample_graph_with_live_graph():
@@ -483,6 +552,7 @@ def _write_config(
     default_mailbox="inbox@example.invalid",
     max_messages=25,
     allowed_senders=None,
+    access_mode="read",
 ):
     config_dir = root / "config"
     config_dir.mkdir()
@@ -495,7 +565,7 @@ def _write_config(
             sender_values = ", ".join(f'"{sender}"' for sender in senders)
             allowed = f', "allowedSenders": [{sender_values}]'
         approved_entries.append(
-            f'{{"address": "{mailbox}", "accessMode": "read"{allowed}}}'
+            f'{{"address": "{mailbox}", "accessMode": "{access_mode}"{allowed}}}'
         )
     approved = ", ".join(approved_entries)
     (config_dir / "config.json").write_text(

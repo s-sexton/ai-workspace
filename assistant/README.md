@@ -306,6 +306,12 @@ To execute approved moves through Microsoft Graph:
 python -m assistant.src.execute_email_moves --graph --execute
 ```
 
+To execute approved Gmail cleanup actions:
+
+``` powershell
+python -m assistant.src.execute_email_moves --gmail --execute
+```
+
 Execution still requires an approved local action, an email source item, a
 `read_write` mailbox, and a configured destination folder.
 
@@ -351,6 +357,15 @@ python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --gra
 
 This live Graph mode is still read-only. It records local proposed actions but
 does not move, archive, delete, or send email.
+
+To read approved Gmail inbox metadata instead, enable the Gmail API, authorize
+Google with `https://www.googleapis.com/auth/gmail.modify`, then run:
+
+``` powershell
+python -m assistant.src.run_email_review --mailbox sesexton@gmail.com --gmail
+```
+
+This records local proposed actions but does not execute cleanup.
 
 To check whether configured Clarity folders exist in an approved `read_write`
 mailbox:

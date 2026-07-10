@@ -7,6 +7,7 @@ The current email milestone keeps reads and writes explicit:
 -   Read fake mailbox metadata by default
 -   Optionally read approved mailbox metadata from Microsoft Graph with
     `--graph`
+-   Optionally read approved Gmail metadata with `--gmail`
 -   Require the mailbox to be listed in local approved mailbox config
 -   Normalize message metadata
 -   Apply deterministic placeholder classifications
@@ -16,12 +17,16 @@ The current email milestone keeps reads and writes explicit:
 -   Generate the local Clarity brief
 -   Surface both review and noise classifications for inspection
 -   Allow approved move proposals to be executed only with explicit
-    `--graph --execute`
+    `--graph --execute` or `--gmail --execute`
 
 By default it does not connect to live Exchange, Gmail, or Microsoft Graph.
-Explicit `--graph` review mode reads message metadata from Microsoft Graph, but
-does not send, move, archive, or delete email. Folder moves are recorded first
-as proposed local actions that require approval.
+Explicit `--graph` review mode reads message metadata from Microsoft Graph.
+Explicit `--gmail` review mode reads Gmail inbox metadata. Folder moves are
+recorded first as proposed local actions that require approval.
+
+Gmail execution supports archiving into configured Clarity labels and moving
+messages to trash. It does not send email and does not permanently delete Gmail
+messages.
 
 ## Shared Boundary
 
@@ -73,6 +78,24 @@ local Graph credentials and builds the Graph read transport for explicit live
 review paths. The public command-line review path still defaults to fake local
 data unless `--graph` is passed.
 
+`common.google_gmail` contains the Gmail-specific runtime adapters:
+
+-   `GoogleGmailReadTransport` lists inbox message IDs and fetches metadata.
+-   `GoogleGmailMoveTransport` moves messages to trash or archives them into a
+    configured Clarity label.
+-   `build_google_gmail_read_transport()` and
+    `build_google_gmail_move_transport()` build Gmail transports from local
+    Google credentials.
+
+Gmail support uses Google OAuth credentials from `config/.env`. The intended
+scope is:
+
+``` text
+https://www.googleapis.com/auth/gmail.modify
+```
+
+Do not use a Gmail send scope. Clarity does not send Gmail messages.
+
 ## Approved Mailboxes
 
 Approved mailbox scope is configured in `config/config.json`:
@@ -93,6 +116,10 @@ Approved mailbox scope is configured in `config/config.json`:
             "scott.sexton@sendthisfile.com",
             "sesexton@gmail.com"
           ]
+        },
+        {
+          "address": "sesexton@gmail.com",
+          "accessMode": "read_write"
         },
         {
           "address": "legal@example.invalid",
@@ -116,9 +143,8 @@ Even the fake local workflow must use an approved mailbox. Live mail connectors
 must keep this approval boundary.
 
 `read` means Clarity may inspect metadata and remember results. `read_write`
-means a future approved design may allow scoped write actions such as moving
-messages into approved review folders. The current implementation only reads
-fake metadata regardless of access mode.
+means approved move/trash actions may execute for that mailbox through an
+explicit provider command.
 
 `allowedSenders` restricts a mailbox to messages from specific senders. For
 `clarity@sendthisfile.ai`, Clarity should ignore anything not sent by
@@ -246,6 +272,16 @@ python -m assistant.src.clarity "What emails need immediate attention?" --refres
 This refresh path records email metadata, classifications, proposed actions, and
 the local brief before answering from memory. It does not execute proposed moves.
 
+The live Gmail read path can be exercised with:
+
+``` powershell
+python -m assistant.src.run_email_review --mailbox sesexton@gmail.com --gmail
+```
+
+Use `--gmail-bearer` with `--gmail` only when intentionally testing a local
+`GOOGLE_ACCESS_TOKEN`; otherwise the command uses refresh-token credentials
+from `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`.
+
 One non-interactive Clarity cycle can be run by a local scheduler:
 
 ``` powershell
@@ -308,9 +344,16 @@ Approved email moves can be executed through Microsoft Graph with:
 python -m assistant.src.execute_email_moves --graph --execute
 ```
 
+Approved Gmail cleanup actions can be executed with:
+
+``` powershell
+python -m assistant.src.execute_email_moves --gmail --execute
+```
+
 The dry run records a local audit action but does not call Graph or move
 mailbox items. The command-line `--execute` path still fails closed unless
-`--graph` is also passed. Before a move can appear in the executable section,
+`--graph` or `--gmail` is also passed. Before a move can appear in the
+executable section,
 the approved action must still be attached to an `email_message` from an `email`
 source, the source mailbox must still be configured with `read_write` access,
 and the target folder must still be present in the current folder policy.

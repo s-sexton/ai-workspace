@@ -10,6 +10,11 @@ from typing import Sequence
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import EmailSettings, find_workspace_root, load_workspace_config
 from common.email import EmailMoveClient, EmailMoveTransport
+from common.google_gmail import (
+    GoogleCalendarTransport,
+    GoogleTokenTransport,
+    build_google_gmail_move_transport,
+)
 from common.graph_email import (
     GraphTokenTransport,
     GraphTransport,
@@ -133,6 +138,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     move_transport = (
         build_graph_move_transport_from_config(use_bearer_auth=args.graph_bearer)
         if args.graph and args.execute
+        else build_gmail_move_transport_from_config(use_bearer_auth=args.gmail_bearer)
+        if args.gmail and args.execute
         else None
     )
     print(
@@ -160,6 +167,26 @@ def build_graph_move_transport_from_config(
     return build_graph_email_move_transport(
         credentials,
         graph_transport=graph_transport,
+        token_transport=token_transport,
+        use_bearer_auth=use_bearer_auth,
+    )
+
+
+def build_gmail_move_transport_from_config(
+    *,
+    root: Path | str | None = None,
+    gmail_transport: GoogleCalendarTransport | None = None,
+    token_transport: GoogleTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> EmailMoveTransport:
+    """Build a Gmail move transport from local workspace configuration."""
+
+    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    config = load_workspace_config(workspace_root)
+    credentials = config.require_google_credentials(use_bearer_auth=use_bearer_auth)
+    return build_google_gmail_move_transport(
+        credentials,
+        gmail_transport=gmail_transport,
         token_transport=token_transport,
         use_bearer_auth=use_bearer_auth,
     )
@@ -301,15 +328,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Execute approved moves. Requires --graph for live Graph moves.",
     )
-    parser.add_argument(
+    provider_group = parser.add_mutually_exclusive_group()
+    provider_group.add_argument(
         "--graph",
         action="store_true",
         help="Use Microsoft Graph for live move execution.",
+    )
+    provider_group.add_argument(
+        "--gmail",
+        action="store_true",
+        help="Use Gmail for live move/trash execution.",
     )
     parser.add_argument(
         "--graph-bearer",
         action="store_true",
         help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
+    )
+    parser.add_argument(
+        "--gmail-bearer",
+        action="store_true",
+        help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials.",
     )
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument(
@@ -320,8 +358,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.graph and not args.execute:
         parser.error("--graph requires --execute.")
+    if args.gmail and not args.execute:
+        parser.error("--gmail requires --execute.")
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
+    if args.gmail_bearer and not args.gmail:
+        parser.error("--gmail-bearer requires --gmail.")
     return args
 
 

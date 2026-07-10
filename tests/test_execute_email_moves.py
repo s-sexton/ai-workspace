@@ -6,6 +6,7 @@ from typing import Any, Mapping
 import pytest
 
 from assistant.src.execute_email_moves import (
+    build_gmail_move_transport_from_config,
     build_graph_move_transport_from_config,
     execute_email_moves,
     main,
@@ -193,6 +194,21 @@ def test_build_graph_move_transport_from_config_can_use_bearer_token(tmp_path):
     assert token_transport.calls == []
 
 
+def test_build_gmail_move_transport_from_config_can_use_bearer_token(tmp_path):
+    _write_graph_env(tmp_path, "GOOGLE_ACCESS_TOKEN=direct-token\n")
+    token_transport = FakeGraphTokenTransport()
+
+    transport = build_gmail_move_transport_from_config(
+        root=tmp_path,
+        gmail_transport=FakeGraphTransport(),
+        token_transport=token_transport,
+        use_bearer_auth=True,
+    )
+
+    assert "direct-token" not in repr(transport)
+    assert token_transport.calls == []
+
+
 def test_execute_email_moves_can_execute_with_injected_transport(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
@@ -289,9 +305,19 @@ def test_main_rejects_graph_without_execute():
         main(["--graph"])
 
 
+def test_main_rejects_gmail_without_execute():
+    with pytest.raises(SystemExit):
+        main(["--gmail"])
+
+
 def test_main_rejects_graph_bearer_without_graph():
     with pytest.raises(SystemExit):
         main(["--graph-bearer"])
+
+
+def test_main_rejects_gmail_bearer_without_gmail():
+    with pytest.raises(SystemExit):
+        main(["--gmail-bearer"])
 
 
 def test_main_can_execute_with_graph_transport(tmp_path, monkeypatch, capsys):
@@ -312,6 +338,37 @@ def test_main_can_execute_with_graph_transport(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
 
     main(["--memory", str(memory_path), "--graph", "--graph-bearer", "--execute"])
+
+    output = capsys.readouterr().out
+    assert calls == [True]
+    assert "# Email Move Execution" in output
+    assert f"Action: {action_id}" in output
+    assert len(transport.moved_messages) == 1
+
+
+def test_main_can_execute_with_gmail_transport(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path, "sesexton@gmail.com", "read_write")
+    action_id = _seed_approved_email_move(
+        memory_path,
+        source_scope_label="sesexton@gmail.com",
+        message_id="gmail-message-1",
+        target_folder="Deleted Items",
+    )
+    transport = StaticEmailMoveTransport(moved_messages=[])
+    calls = []
+
+    def fake_build_gmail_move_transport_from_config(*, use_bearer_auth=False, **_):
+        calls.append(use_bearer_auth)
+        return transport
+
+    monkeypatch.setattr(
+        "assistant.src.execute_email_moves.build_gmail_move_transport_from_config",
+        fake_build_gmail_move_transport_from_config,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    main(["--memory", str(memory_path), "--gmail", "--gmail-bearer", "--execute"])
 
     output = capsys.readouterr().out
     assert calls == [True]
