@@ -169,6 +169,7 @@ def _format_attention_brief(store: DuckDbMemoryStore, *, limit: int) -> str:
     latest_cycle = store.latest_run(workflow="clarity-cycle")
     review_items = store.recent_memory_by_label("review", limit=limit)
     pending_actions = store.pending_actions(limit=limit)
+    approved_email_moves = _approved_email_move_actions(store, limit=limit)
     open_tasks = store.list_open_delegated_tasks()
 
     lines = ["# Clarity Attention Brief", ""]
@@ -179,6 +180,7 @@ def _format_attention_brief(store: DuckDbMemoryStore, *, limit: int) -> str:
         lines.append(f"- Last cycle: {cycle_summary}")
     lines.append(f"- Items needing review: {len(review_items)}")
     lines.append(f"- Pending approvals: {len(pending_actions)}")
+    lines.append(f"- Approved email moves: {len(approved_email_moves)}")
     lines.append(f"- Open delegated tasks: {len(open_tasks)}")
 
     if review_items:
@@ -199,6 +201,19 @@ def _format_attention_brief(store: DuckDbMemoryStore, *, limit: int) -> str:
             lines.append(f"  Action: {action.action_id}")
             if action.action_target:
                 lines.append(f"  Target: {action.action_target}")
+
+    if approved_email_moves:
+        lines.append("")
+        lines.append("## Approved Email Moves")
+        for action in approved_email_moves:
+            source_scope = action.source_scope_label or "unknown mailbox"
+            lines.append(
+                f"- In mailbox {source_scope}, move message "
+                f"{action.item_external_id} to {action.action_target}"
+            )
+            if action.item_subject:
+                lines.append(f"  Subject: {action.item_subject}")
+            lines.append(f"  Action: {action.action_id}")
 
     if open_tasks:
         lines.append("")
@@ -284,14 +299,7 @@ def _format_approved_actions(store: DuckDbMemoryStore, *, limit: int) -> str:
 
 
 def _format_email_move_plan(store: DuckDbMemoryStore, *, limit: int) -> str:
-    approved_actions = store.actions_by_approval_status("approved", limit=limit)
-    move_actions = [
-        action
-        for action in approved_actions
-        if action.action_type.startswith("propose_email_move_")
-        and action.item_external_id
-        and action.action_target
-    ]
+    move_actions = _approved_email_move_actions(store, limit=limit)
     if not move_actions:
         return "# Email Move Plan\n\nNo approved email moves found."
 
@@ -306,6 +314,17 @@ def _format_email_move_plan(store: DuckDbMemoryStore, *, limit: int) -> str:
             lines.append(f"  Subject: {action.item_subject}")
         lines.append(f"  Action: {action.action_id}")
     return "\n".join(lines)
+
+
+def _approved_email_move_actions(store: DuckDbMemoryStore, *, limit: int):
+    approved_actions = store.actions_by_approval_status("approved", limit=limit)
+    return [
+        action
+        for action in approved_actions
+        if action.action_type.startswith("propose_email_move_")
+        and action.item_external_id
+        and action.action_target
+    ]
 
 
 def _format_action_queue(title: str, actions) -> str:

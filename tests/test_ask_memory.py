@@ -72,11 +72,17 @@ def test_answers_attention_brief(tmp_path):
     assert "- Last cycle: Read 2 message(s) from clarity@sendthisfile.ai" in answer
     assert "- Items needing review: 2" in answer
     assert "- Pending approvals: 1" in answer
+    assert "- Approved email moves: 1" in answer
     assert "- Open delegated tasks: 1" in answer
     assert "## Review" in answer
     assert "Review support queue trends" in answer
     assert "## Pending Approval" in answer
     assert "propose_email_move_noise - July product newsletter" in answer
+    assert "## Approved Email Moves" in answer
+    assert (
+        "In mailbox scott.sexton@sendthisfile.com, move message "
+        "email-review-1 to Clarity/Review"
+    ) in answer
     assert "## Open Tasks" in answer
     assert "Prepare ACCT review [requested]" in answer
 
