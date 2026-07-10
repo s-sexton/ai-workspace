@@ -280,6 +280,16 @@ python -m assistant.src.run_calendar_review --calendar work --date 2026-07-10 --
 This live Graph mode is still read-only. It records local calendar event
 metadata and does not create, update, delete, or respond to calendar events.
 
+To read an approved Google Calendar instead, configure
+`assistant.calendar.approvedCalendars` with a `google` provider, then run:
+
+``` powershell
+python -m assistant.src.run_calendar_review --calendar google-family --date 2026-07-10 --google
+```
+
+This live Google mode is still read-only. It records local calendar event
+metadata and does not create, update, delete, or respond to calendar events.
+
 To dry-run approved email moves and record a local audit action:
 
 ``` powershell

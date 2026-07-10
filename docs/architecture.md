@@ -30,6 +30,8 @@ Current shared components:
     workflow tests.
 -   `common.graph_calendar`: provides the Microsoft Graph calendar read adapter
     behind the shared calendar boundary.
+-   `common.google_calendar`: provides the Google Calendar read adapter behind
+    the shared calendar boundary.
 -   `common.memory`: provides the first local Clarity memory boundary, backed by
     DuckDB, for recording runs, approved sources, items seen, classifications,
     human feedback, and delegated tasks without storing secrets.
@@ -70,8 +72,8 @@ Current assistant components:
     generates the Clarity brief without live mailbox access or external writes.
 -   `assistant.src.run_calendar_review`: reads sample calendar metadata through
     the shared calendar boundary, records event metadata in local memory, and
-    can explicitly read approved Graph calendar metadata without external
-    writes.
+    can explicitly read approved Graph or Google calendar metadata without
+    external writes.
 -   Local assistant actions are recorded in `common.memory` so Clarity can
     answer what it did recently without inspecting logs.
 

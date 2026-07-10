@@ -77,6 +77,28 @@ class GraphCredentials:
 
 
 @dataclass(frozen=True)
+class GoogleCredentials:
+    """Local Google credentials loaded from environment values."""
+
+    client_id: str | None = None
+    client_secret: str | None = field(default=None, repr=False)
+    refresh_token: str | None = field(default=None, repr=False)
+    access_token: str | None = field(default=None, repr=False)
+
+    @property
+    def is_refresh_token_complete(self) -> bool:
+        """Return whether refresh-token credentials are present."""
+
+        return all((self.client_id, self.client_secret, self.refresh_token))
+
+    @property
+    def is_bearer_auth_complete(self) -> bool:
+        """Return whether a direct Google access token is present."""
+
+        return bool(self.access_token)
+
+
+@dataclass(frozen=True)
 class JiraSettings:
     """Shared Jira report settings loaded from committed configuration."""
 
@@ -167,6 +189,17 @@ class WorkspaceConfig:
             client_id=self.env.get("GRAPH_CLIENT_ID"),
             client_secret=self.env.get("GRAPH_CLIENT_SECRET"),
             access_token=self.env.get("GRAPH_ACCESS_TOKEN"),
+        )
+
+    @property
+    def google_credentials(self) -> GoogleCredentials:
+        """Return Google credentials from local environment values."""
+
+        return GoogleCredentials(
+            client_id=self.env.get("GOOGLE_CLIENT_ID"),
+            client_secret=self.env.get("GOOGLE_CLIENT_SECRET"),
+            refresh_token=self.env.get("GOOGLE_REFRESH_TOKEN"),
+            access_token=self.env.get("GOOGLE_ACCESS_TOKEN"),
         )
 
     @property
@@ -285,6 +318,31 @@ class WorkspaceConfig:
         if missing:
             raise ConfigurationError(
                 "Missing required Graph environment values: " + ", ".join(missing)
+            )
+
+        return credentials
+
+    def require_google_credentials(
+        self,
+        *,
+        use_bearer_auth: bool = False,
+    ) -> GoogleCredentials:
+        """Return Google credentials or raise when required values are missing."""
+
+        credentials = self.google_credentials
+        required = (
+            (("GOOGLE_ACCESS_TOKEN", credentials.access_token),)
+            if use_bearer_auth
+            else (
+                ("GOOGLE_CLIENT_ID", credentials.client_id),
+                ("GOOGLE_CLIENT_SECRET", credentials.client_secret),
+                ("GOOGLE_REFRESH_TOKEN", credentials.refresh_token),
+            )
+        )
+        missing = [name for name, value in required if not value]
+        if missing:
+            raise ConfigurationError(
+                "Missing required Google environment values: " + ", ".join(missing)
             )
 
         return credentials
@@ -481,13 +539,13 @@ def _require_calendar_scopes(
             raise ConfigurationError(
                 f"Calendar source must be a non-empty string: {key}[{index}]"
             )
-        if provider not in ("sample", "graph"):
+        if provider not in ("sample", "graph", "google"):
             raise ConfigurationError(
-                f"Calendar provider must be sample or graph: {key}[{index}]"
+                f"Calendar provider must be sample, graph, or google: {key}[{index}]"
             )
-        if access_mode != "read":
+        if access_mode not in ("read", "read_write"):
             raise ConfigurationError(
-                f"Calendar accessMode must be read: {key}[{index}]"
+                f"Calendar accessMode must be read or read_write: {key}[{index}]"
             )
         clean_label = label.strip()
         if clean_label in approved_calendars:

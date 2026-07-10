@@ -49,6 +49,18 @@ app-only client credentials token acquisition. `GRAPH_ACCESS_TOKEN` is available
 for explicit Bearer-token experiments. These values are local secrets and must
 not be committed.
 
+Google Calendar runtime wiring uses these local values:
+
+-   `GOOGLE_CLIENT_ID`
+-   `GOOGLE_CLIENT_SECRET`
+-   `GOOGLE_REFRESH_TOKEN`
+-   `GOOGLE_ACCESS_TOKEN`
+
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` support
+Google OAuth refresh-token access. `GOOGLE_ACCESS_TOKEN` is available for
+explicit Bearer-token experiments. These values are local secrets and must not
+be committed.
+
 ## Shared Settings
 
 `config/config.json` (committed)
@@ -70,6 +82,8 @@ The loader:
 -   Keeps Jira access tokens out of object representations
 -   Keeps Graph client secrets out of object representations
 -   Keeps Graph access tokens out of object representations
+-   Keeps Google client secrets out of object representations
+-   Keeps Google refresh and access tokens out of object representations
 
 ## Public API
 
@@ -81,6 +95,7 @@ Use these public objects from `common.configuration`:
 -   `JiraSettings`
 -   `JiraCredentials`
 -   `GraphCredentials`
+-   `GoogleCredentials`
 -   `EmailSettings`
 -   `ConfigurationError`
 
@@ -98,6 +113,11 @@ names when values are incomplete. Error messages must not include secret values.
 credentials for client-secret token acquisition or Bearer-token experiments. It
 raises `ConfigurationError` with missing key names when values are incomplete.
 Error messages must not include secret values.
+
+`WorkspaceConfig.require_google_credentials()` returns Google credentials for
+refresh-token access or Bearer-token experiments. It raises
+`ConfigurationError` with missing key names when values are incomplete. Error
+messages must not include secret values.
 
 ## Validation
 
@@ -129,9 +149,12 @@ Email `accessMode` must be either `read` or `read_write`. Current email
 workflows only read fake metadata; `read_write` is reserved for future approved
 mailbox actions.
 
-Calendar `provider` must be `sample` or `graph`. Calendar `accessMode` must be
-`read`; calendar writes are not supported. For Graph calendars, `source` is the
-Graph user principal name used in the `/users/{source}/calendarView` request.
+Calendar `provider` must be `sample`, `graph`, or `google`. Calendar
+`accessMode` must be `read` or `read_write`, but current workflows only read
+calendar metadata. For Graph calendars, `source` is the Graph user principal
+name used in the `/users/{source}/calendarView` request. For Google calendars,
+`source` is the Google Calendar ID used in the
+`/calendars/{source}/events` request.
 
 Email folder policy is used only to record proposed local actions. Non-trash
 destinations must live under `assistant.email.folderNamespace`, such as

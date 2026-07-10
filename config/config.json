@@ -64,6 +64,12 @@
           "provider": "sample",
           "source": "family",
           "accessMode": "read"
+        },
+        {
+          "label": "work",
+          "provider": "graph",
+          "source": "scott.sexton@sendthisfile.com",
+          "accessMode": "read_write"
         }
       ],
       "defaultCalendar": "family",

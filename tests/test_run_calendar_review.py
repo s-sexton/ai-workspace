@@ -123,6 +123,54 @@ def test_main_can_use_graph_calendar_transport(tmp_path, monkeypatch, capsys):
     assert "Read 1 calendar event(s) from work for 2026-07-10" in output
 
 
+def test_main_can_use_google_calendar_transport(tmp_path, monkeypatch, capsys):
+    _write_google_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_build_google_calendar_read_transport_from_config(
+        *,
+        use_bearer_auth=False,
+        **_,
+    ):
+        calls.append(use_bearer_auth)
+        return StaticCalendarTransport(
+            (
+                {
+                    "event_id": "family-google-1",
+                    "calendar": "family-calendar@example.invalid",
+                    "title": "Family dinner",
+                    "starts_at": "2026-07-10T18:00:00-05:00",
+                },
+            )
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.run_calendar_review."
+        "build_google_calendar_read_transport_from_config",
+        fake_build_google_calendar_read_transport_from_config,
+    )
+
+    main(
+        [
+            "--calendar",
+            "google-family",
+            "--date",
+            "2026-07-10",
+            "--google",
+            "--google-bearer",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert calls == [True]
+    assert "Read 1 calendar event(s) from google-family for 2026-07-10" in output
+
+
 def _write_config(root):
     config_dir = root / "config"
     config_dir.mkdir()
@@ -166,6 +214,32 @@ def _write_graph_config(root):
                 }
               ],
               "defaultCalendar": "work",
+              "maxEvents": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+
+def _write_google_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "google-family",
+                  "provider": "google",
+                  "source": "family-calendar@example.invalid",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "google-family",
               "maxEvents": 25
             }
           }

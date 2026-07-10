@@ -124,6 +124,28 @@ def graph_event_to_calendar_payload(
     }
 
 
+def google_event_to_calendar_payload(
+    event: Mapping[str, Any],
+    *,
+    calendar: str,
+) -> Mapping[str, Any]:
+    """Convert a Google Calendar event payload into Clarity calendar metadata."""
+
+    start = event.get("start")
+    end = event.get("end")
+    organizer = event.get("organizer")
+    return {
+        "event_id": event.get("id"),
+        "calendar": calendar,
+        "title": event.get("summary"),
+        "starts_at": _google_date_time(start),
+        "ends_at": _google_date_time(end),
+        "location": event.get("location"),
+        "organizer": _google_organizer(organizer),
+        "status": event.get("status"),
+    }
+
+
 def _normalize_event(event: Mapping[str, Any], *, calendar: str) -> CalendarEvent:
     event_id = _required_text(event, "event_id")
     title = _required_text(event, "title")
@@ -189,4 +211,28 @@ def _graph_organizer(value: Any) -> str | None:
         return address.strip()
     if isinstance(name, str) and name.strip():
         return name.strip()
+    return None
+
+
+def _google_date_time(value: Any) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    date_time = value.get("dateTime")
+    date_value = value.get("date")
+    if isinstance(date_time, str) and date_time.strip():
+        return date_time.strip()
+    if isinstance(date_value, str) and date_value.strip():
+        return date_value.strip()
+    return None
+
+
+def _google_organizer(value: Any) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    email = value.get("email")
+    display_name = value.get("displayName")
+    if isinstance(email, str) and email.strip():
+        return email.strip()
+    if isinstance(display_name, str) and display_name.strip():
+        return display_name.strip()
     return None

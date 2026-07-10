@@ -9,6 +9,8 @@ The current implementation:
 -   Uses a fake local calendar transport by default
 -   Optionally reads approved calendar metadata from Microsoft Graph with
     `--graph`
+-   Optionally reads approved calendar metadata from Google Calendar with
+    `--google`
 -   Requires the calendar to be listed in local approved calendar config
 -   Normalizes event metadata into a small shared model
 -   Stores event metadata and hashes in local Clarity memory
@@ -39,6 +41,13 @@ parse provider-specific payloads directly.
 
 The adapter is isolated from the assistant workflow so it can be tested with
 fake transports before live Graph reads are used.
+
+`common.google_calendar` contains the Google Calendar-specific runtime adapter:
+
+-   `GoogleCalendarReadTransport` lists event metadata from the Google Calendar
+    `events` endpoint.
+-   `build_google_calendar_read_transport()` builds the transport from either a
+    local refresh token or a direct access token.
 
 ## Local Review Command
 
@@ -82,6 +91,38 @@ python -m assistant.src.run_calendar_review --calendar work --date 2026-07-10 --
 Use `--graph-bearer` with `--graph` only when intentionally testing a local
 `GRAPH_ACCESS_TOKEN`; otherwise the command uses app-only client credentials
 from `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET`.
+
+To read an approved Google Calendar instead, configure `config/config.json`
+with a calendar entry like:
+
+``` json
+{
+  "assistant": {
+    "calendar": {
+      "approvedCalendars": [
+        {
+          "label": "google-family",
+          "provider": "google",
+          "source": "your-family-calendar-id@group.calendar.google.com",
+          "accessMode": "read"
+        }
+      ],
+      "defaultCalendar": "google-family",
+      "maxEvents": 25
+    }
+  }
+}
+```
+
+Then run:
+
+``` powershell
+python -m assistant.src.run_calendar_review --calendar google-family --date 2026-07-10 --google
+```
+
+Use `--google-bearer` with `--google` only when intentionally testing a local
+`GOOGLE_ACCESS_TOKEN`; otherwise the command uses refresh-token credentials
+from `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`.
 
 To ask from remembered calendar metadata:
 

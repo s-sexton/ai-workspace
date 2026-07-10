@@ -15,7 +15,7 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
         encoding="utf-8",
     )
     (config_dir / ".env").write_text(
-        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\nGRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=graph-secret\nGRAPH_ACCESS_TOKEN=graph-access\n",
+        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\nGRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=graph-secret\nGRAPH_ACCESS_TOKEN=graph-access\nGOOGLE_CLIENT_ID=google-client\nGOOGLE_CLIENT_SECRET=google-secret\nGOOGLE_REFRESH_TOKEN=google-refresh\nGOOGLE_ACCESS_TOKEN=google-access\n",
         encoding="utf-8",
     )
 
@@ -35,6 +35,12 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
     assert config.graph_credentials.access_token == "graph-access"
     assert config.graph_credentials.is_client_secret_complete
     assert config.graph_credentials.is_bearer_auth_complete
+    assert config.google_credentials.client_id == "google-client"
+    assert config.google_credentials.client_secret == "google-secret"
+    assert config.google_credentials.refresh_token == "google-refresh"
+    assert config.google_credentials.access_token == "google-access"
+    assert config.google_credentials.is_refresh_token_complete
+    assert config.google_credentials.is_bearer_auth_complete
 
 
 def test_jira_settings_are_validated_and_typed(tmp_path):
@@ -142,6 +148,12 @@ def test_calendar_settings_are_validated_and_typed(tmp_path):
                   "label": "work",
                   "provider": "graph",
                   "source": "scott.sexton@example.invalid",
+                  "accessMode": "read_write"
+                },
+                {
+                  "label": "google-family",
+                  "provider": "google",
+                  "source": "family-calendar@example.invalid",
                   "accessMode": "read"
                 }
               ],
@@ -157,15 +169,24 @@ def test_calendar_settings_are_validated_and_typed(tmp_path):
     config = load_workspace_config(tmp_path, include_process_env=False)
     calendar_settings = config.calendar_settings
 
-    assert tuple(calendar_settings.approved_calendars) == ("family", "work")
+    assert tuple(calendar_settings.approved_calendars) == (
+        "family",
+        "work",
+        "google-family",
+    )
     family = calendar_settings.scope_for("family")
     work = calendar_settings.scope_for("work")
+    google_family = calendar_settings.scope_for("google-family")
     assert family is not None
     assert family.provider == "sample"
     assert family.source == "family"
     assert work is not None
     assert work.provider == "graph"
     assert work.source == "scott.sexton@example.invalid"
+    assert work.access_mode == "read_write"
+    assert google_family is not None
+    assert google_family.provider == "google"
+    assert google_family.source == "family-calendar@example.invalid"
     assert calendar_settings.default_calendar == "family"
     assert calendar_settings.max_events == 50
 
@@ -214,7 +235,7 @@ def test_calendar_provider_must_be_valid(tmp_path):
               "approvedCalendars": [
                 {
                   "label": "family",
-                  "provider": "google",
+                  "provider": "icloud",
                   "source": "family",
                   "accessMode": "read"
                 }
@@ -509,6 +530,53 @@ def test_require_graph_credentials_can_validate_bearer_auth_values(tmp_path):
     config = load_workspace_config(tmp_path, include_process_env=False)
 
     assert config.require_graph_credentials(use_bearer_auth=True).is_bearer_auth_complete
+
+
+def test_require_google_credentials_returns_complete_refresh_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "GOOGLE_CLIENT_ID=client\nGOOGLE_CLIENT_SECRET=secret\nGOOGLE_REFRESH_TOKEN=refresh\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.require_google_credentials().is_refresh_token_complete
+
+
+def test_require_google_credentials_can_validate_bearer_auth_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "GOOGLE_ACCESS_TOKEN=access-token\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.require_google_credentials(use_bearer_auth=True).is_bearer_auth_complete
+
+
+def test_require_google_credentials_reports_missing_values_without_secret_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "GOOGLE_CLIENT_ID=client\nGOOGLE_CLIENT_SECRET=super-secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.require_google_credentials()
+
+    message = str(exc_info.value)
+    assert "GOOGLE_REFRESH_TOKEN" in message
+    assert "super-secret" not in message
 
 
 def test_require_graph_credentials_reports_missing_values_without_secret_values(tmp_path):

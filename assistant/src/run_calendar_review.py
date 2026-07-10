@@ -18,6 +18,11 @@ from common.calendar import (
     StaticCalendarTransport,
 )
 from common.configuration import ConfigurationError, load_workspace_config
+from common.google_calendar import (
+    GoogleCalendarTransport,
+    GoogleTokenTransport,
+    build_google_calendar_read_transport,
+)
 from common.graph_calendar import build_graph_calendar_read_transport
 from common.graph_email import GraphTokenTransport, GraphTransport
 from common.memory import DuckDbMemoryStore
@@ -71,6 +76,7 @@ def run_calendar_review(
     brief_output_path: Path | str | None = None,
     transport: CalendarTransport | None = None,
     use_graph: bool = False,
+    use_google: bool = False,
 ) -> CalendarReviewResult:
     """Read local calendar metadata, write memory, and generate a local brief."""
 
@@ -81,17 +87,24 @@ def run_calendar_review(
     calendar_scope = calendar_settings.scope_for(requested_calendar)
     if calendar_scope is None:
         raise ConfigurationError(f"Calendar is not approved: {requested_calendar}")
-    if calendar_scope.access_mode != "read":
+    if calendar_scope.access_mode not in ("read", "read_write"):
         raise ConfigurationError(
             f"Calendar is not approved for read access: {requested_calendar}"
         )
+    if use_graph and use_google:
+        raise ConfigurationError("Choose only one live calendar provider.")
     if use_graph and calendar_scope.provider != "graph":
         raise ConfigurationError(
             f"Calendar is not configured for Graph access: {requested_calendar}"
         )
-    if not use_graph and calendar_scope.provider != "sample":
+    if use_google and calendar_scope.provider != "google":
         raise ConfigurationError(
-            f"Calendar requires --graph for provider: {requested_calendar}"
+            f"Calendar is not configured for Google access: {requested_calendar}"
+        )
+    if not use_graph and not use_google and calendar_scope.provider != "sample":
+        raise ConfigurationError(
+            f"Calendar requires --{calendar_scope.provider} for provider: "
+            f"{requested_calendar}"
         )
 
     selected_date = review_date or date.today().isoformat()
@@ -102,6 +115,8 @@ def run_calendar_review(
         or (
             build_graph_calendar_read_transport_from_config(root=workspace_root)
             if use_graph
+            else build_google_calendar_read_transport_from_config(root=workspace_root)
+            if use_google
             else StaticCalendarTransport(SAMPLE_CALENDAR_EVENTS)
         )
     )
@@ -146,9 +161,14 @@ def main(argv: Sequence[str] | None = None) -> None:
                 use_bearer_auth=args.graph_bearer
             )
             if args.graph
+            else build_google_calendar_read_transport_from_config(
+                use_bearer_auth=args.google_bearer
+            )
+            if args.google
             else None
         ),
         use_graph=args.graph,
+        use_google=args.google,
     )
     print(
         f"Read {result.event_count} calendar event(s) "
@@ -171,6 +191,25 @@ def build_graph_calendar_read_transport_from_config(
     return build_graph_calendar_read_transport(
         credentials,
         graph_transport=graph_transport,
+        token_transport=token_transport,
+        use_bearer_auth=use_bearer_auth,
+    )
+
+
+def build_google_calendar_read_transport_from_config(
+    *,
+    root: Path | str | None = None,
+    calendar_transport: GoogleCalendarTransport | None = None,
+    token_transport: GoogleTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> CalendarTransport:
+    """Build a Google Calendar read transport from local workspace config."""
+
+    config = load_workspace_config(root)
+    credentials = config.require_google_credentials(use_bearer_auth=use_bearer_auth)
+    return build_google_calendar_read_transport(
+        credentials,
+        calendar_transport=calendar_transport,
         token_transport=token_transport,
         use_bearer_auth=use_bearer_auth,
     )
@@ -272,15 +311,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help="Date to review in YYYY-MM-DD format. Defaults to today.",
     )
-    parser.add_argument(
+    source_group = parser.add_mutually_exclusive_group()
+    source_group.add_argument(
         "--graph",
         action="store_true",
         help="Read approved calendar metadata from Microsoft Graph.",
+    )
+    source_group.add_argument(
+        "--google",
+        action="store_true",
+        help="Read approved calendar metadata from Google Calendar.",
     )
     parser.add_argument(
         "--graph-bearer",
         action="store_true",
         help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
+    )
+    parser.add_argument(
+        "--google-bearer",
+        action="store_true",
+        help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials.",
     )
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument(
@@ -296,6 +346,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
+    if args.google_bearer and not args.google:
+        parser.error("--google-bearer requires --google.")
     return args
 
 
