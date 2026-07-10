@@ -7,6 +7,7 @@ from common.email import (
     EmailClientError,
     EmailFeedbackRule,
     EmailMoveClient,
+    EmailSenderPreference,
     StaticGraphEmailTransport,
     StaticEmailTransport,
     StaticEmailMoveTransport,
@@ -180,6 +181,68 @@ def test_prior_feedback_can_override_content_rules():
 
     assert classification.label == "review"
     assert classification.reason == "Matched prior human email feedback."
+
+
+def test_sender_preference_takes_precedence_over_content_rules():
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "sender-pref",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Legal newsletter",
+                    "sender": "promo@example.invalid",
+                },
+            )
+        )
+    )
+    message = client.list_messages(mailbox="inbox@example.invalid").messages[0]
+
+    classification = classify_email_message(
+        message,
+        sender_preferences=(
+            EmailSenderPreference(
+                mailbox="inbox@example.invalid",
+                match_type="sender",
+                pattern="promo@example.invalid",
+                label="noise",
+            ),
+        ),
+    )
+
+    assert classification.label == "noise"
+    assert classification.reason == "Matched mailbox-specific sender preference."
+
+
+def test_domain_preference_matches_sender_domain():
+    client = EmailClient(
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "domain-pref",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Weekly update",
+                    "sender": "alerts@example.invalid",
+                },
+            )
+        )
+    )
+    message = client.list_messages(mailbox="inbox@example.invalid").messages[0]
+
+    classification = classify_email_message(
+        message,
+        sender_preferences=(
+            EmailSenderPreference(
+                mailbox="inbox@example.invalid",
+                match_type="domain",
+                pattern="example.invalid",
+                label="review",
+            ),
+        ),
+    )
+
+    assert classification.label == "review"
+    assert classification.reason == "Matched mailbox-specific domain preference."
 
 
 def test_prior_feedback_can_match_sanitized_content_terms():

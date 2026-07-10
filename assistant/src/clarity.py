@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from assistant.src.ask_memory import answer_memory_question
+from assistant.src.email_preferences import record_email_sender_preference
 from assistant.src.record_feedback import record_memory_feedback
 from assistant.src.run_email_review import (
     build_graph_read_transport_from_config,
@@ -51,6 +52,18 @@ def answer_clarity_request(
             item_reference=item_reference,
             feedback_type=feedback_type,
             feedback_text=feedback_text,
+            root=root,
+            memory_path=memory_path,
+        )
+
+    preference_request = _parse_preference_request(request)
+    if preference_request is not None:
+        match_type, pattern, label = preference_request
+        return record_email_sender_preference(
+            mailbox=mailbox,
+            match_type=match_type,
+            pattern=pattern,
+            label=label,
             root=root,
             memory_path=memory_path,
         )
@@ -204,6 +217,26 @@ def _parse_feedback_request(request: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _parse_preference_request(request: str) -> tuple[str, str, str] | None:
+    clean_request = " ".join(request.strip().split())
+    if not clean_request:
+        return None
+
+    patterns = (
+        r"^(?:always\s+)?mark\s+emails\s+from\s+(?P<pattern>\S+)\s+as\s+(?P<label>noise|review)$",
+        r"^(?:always\s+)?classify\s+emails\s+from\s+(?P<pattern>\S+)\s+as\s+(?P<label>noise|review)$",
+    )
+    for pattern in patterns:
+        match = re.match(pattern, clean_request, flags=re.IGNORECASE)
+        if match is None:
+            continue
+        preference_pattern = match.group("pattern").strip().lower()
+        label = match.group("label").lower()
+        match_type = "sender" if "@" in preference_pattern else "domain"
+        return match_type, preference_pattern, label
+    return None
+
+
 def _default_feedback_text(feedback_type: str) -> str:
     if feedback_type == "noise":
         return "Marked as noise from the Clarity command surface."
@@ -225,7 +258,9 @@ def _unsupported_response() -> str:
         "- Show my email move plan.\n"
         "- What tasks are open?\n"
         "- Mark ITEM_ID as noise because this is promotional.\n"
-        "- Mark ITEM_ID as review because this needs attention."
+        "- Mark ITEM_ID as review because this needs attention.\n"
+        "- Always mark emails from sender@example.com as noise.\n"
+        "- Always mark emails from example.com as review."
     )
 
 
@@ -278,8 +313,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
-    if (args.mailbox or args.sample_graph or args.graph) and not args.refresh_email:
-        parser.error("--mailbox, --sample-graph, and --graph require --refresh-email.")
+    if (args.sample_graph or args.graph) and not args.refresh_email:
+        parser.error("--sample-graph and --graph require --refresh-email.")
     return args
 
 

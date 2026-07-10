@@ -202,6 +202,58 @@ def test_run_email_review_uses_prior_email_feedback(tmp_path):
     )
 
 
+def test_run_email_review_uses_sender_preferences(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    brief_path = tmp_path / "reports" / "brief.md"
+    _write_config(tmp_path)
+    memory_path.parent.mkdir(parents=True)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="email-preference")
+        store.record_email_sender_preference(
+            mailbox="inbox@example.invalid",
+            match_type="sender",
+            pattern="vendor@example.invalid",
+            label="noise",
+            created_run_id=run.run_id,
+        )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+
+    result = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "vendor-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Legal review needed",
+                    "sender": "vendor@example.invalid",
+                },
+            )
+        ),
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        noise_items = store.recent_memory_by_label("noise")
+    finally:
+        store.close()
+
+    assert result.review_count == 0
+    assert result.noise_count == 1
+    assert any(
+        item.subject == "Legal review needed"
+        and item.reason == "Matched mailbox-specific sender preference."
+        for item in noise_items
+    )
+
+
 def test_run_email_review_is_mailbox_scoped(tmp_path):
     _write_config(
         tmp_path,

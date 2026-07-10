@@ -249,6 +249,17 @@ matching mailbox, sender, subject, and sanitized subject/preview terms. It does
 not store raw message bodies by default, and it does not override restricted
 mailbox sender or authentication checks.
 
+Mailbox-specific sender and domain preferences can also be recorded:
+
+``` powershell
+python -m assistant.src.clarity "always mark emails from sender@example.com as noise" --mailbox inbox@example.invalid
+python -m assistant.src.clarity "always mark emails from example.com as review" --mailbox inbox@example.invalid
+python -m assistant.src.ask_memory email-preferences
+```
+
+Preferences apply after restricted mailbox sender/authentication checks and
+before feedback or general content rules.
+
 To delegate local work for Clarity to track:
 
 ``` powershell

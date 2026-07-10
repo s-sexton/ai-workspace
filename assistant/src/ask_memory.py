@@ -28,6 +28,7 @@ SUPPORTED_QUESTIONS = (
     "review-items",
     "noise-items",
     "feedback",
+    "email-preferences",
     "actions",
     "pending-actions",
     "approved-actions",
@@ -113,6 +114,8 @@ def answer_memory_question(
             )
         if question == "feedback":
             return _format_feedback(store, limit=limit)
+        if question == "email-preferences":
+            return _format_email_preferences(store, limit=limit)
         if question == "actions":
             return _format_actions(store, limit=limit)
         if question == "pending-actions":
@@ -383,6 +386,22 @@ def _format_feedback(store: DuckDbMemoryStore, *, limit: int) -> str:
             f"- {feedback.external_id}: {feedback.feedback_type} - {feedback.subject}"
         )
         lines.append(f"  Feedback: {feedback.feedback_text}")
+    return "\n".join(lines)
+
+
+def _format_email_preferences(store: DuckDbMemoryStore, *, limit: int) -> str:
+    preferences = store.list_email_sender_preferences(limit=limit)
+    if not preferences:
+        return "# Email Preferences\n\nNo email preferences found."
+
+    lines = ["# Email Preferences", ""]
+    for preference in preferences:
+        lines.append(
+            f"- {preference.mailbox}: {preference.match_type} "
+            f"{preference.pattern} -> {preference.label}"
+        )
+        lines.append(f"  Preference ID: {preference.preference_id}")
+        lines.append(f"  Created: {preference.created_at}")
     return "\n".join(lines)
 
 

@@ -40,6 +40,18 @@ match, or when the sender matches and the current message shares enough
 sanitized subject/preview terms with the prior message. Feedback cannot override
 restricted mailbox sender allow-list or authentication failures.
 
+Mailbox-scoped sender and domain preferences provide a stronger local rule than
+feedback learning:
+
+``` powershell
+python -m assistant.src.clarity "always mark emails from sender@example.com as noise" --mailbox inbox@example.invalid
+python -m assistant.src.clarity "always mark emails from example.com as review" --mailbox inbox@example.invalid
+python -m assistant.src.ask_memory email-preferences
+```
+
+Preferences run after restricted mailbox sender/authentication checks and before
+feedback or general content rules.
+
 ## Shared Boundary
 
 `common.email` owns the reusable email metadata boundary:
@@ -386,6 +398,7 @@ Email memory stores:
 -   Received timestamp
 -   Content hash
 -   Sanitized subject/preview learning terms
+-   Mailbox-scoped sender/domain preferences
 -   Classification label and reason
 -   Proposed folder action and structured destination target
 

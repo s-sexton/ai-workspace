@@ -108,6 +108,20 @@ Suggested fields:
 -   `feedback_text`
 -   `created_at`
 
+### email_sender_preferences
+
+Mailbox-scoped sender/domain classification preferences.
+
+Suggested fields:
+
+-   `preference_id`
+-   `mailbox`
+-   `match_type`
+-   `pattern`
+-   `label`
+-   `created_run_id`
+-   `created_at`
+
 ### assistant_actions
 
 Actions Clarity prepared or performed.
@@ -251,6 +265,10 @@ message metadata. It can correct future review/noise classification for
 matching subjects and senders, or for the same sender when sanitized
 subject/preview terms overlap enough. It cannot override restricted mailbox
 sender allow-list checks or email authentication failures.
+
+Mailbox-specific sender/domain preferences can also guide classification. They
+are local, auditable memory records, apply only to the configured mailbox, and
+run after restricted mailbox sender/authentication checks.
 
 The first local delegation command is `assistant.src.delegate_task`. It records
 work the human wants Clarity to track, then surfaces it through `ask_memory

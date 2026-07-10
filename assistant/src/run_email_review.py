@@ -15,6 +15,7 @@ from common.email import (
     EmailClient,
     EmailFeedbackRule,
     EmailMessage,
+    EmailSenderPreference,
     EmailTransport,
     StaticGraphEmailTransport,
     StaticEmailTransport,
@@ -285,10 +286,12 @@ def _record_email_memory(
             access_mode="read",
         )
         feedback_rules = _email_feedback_rules(store, mailbox=mailbox)
+        sender_preferences = _email_sender_preferences(store, mailbox=mailbox)
         for message in messages:
             classification = classify_email_message(
                 message,
                 allowed_senders=allowed_senders,
+                sender_preferences=sender_preferences,
                 feedback_rules=feedback_rules,
             )
             if classification.label == "review":
@@ -360,6 +363,22 @@ def _email_feedback_rules(
             content_terms=record.content_terms,
         )
         for record in store.email_feedback_learning(mailbox=mailbox)
+    )
+
+
+def _email_sender_preferences(
+    store: DuckDbMemoryStore,
+    *,
+    mailbox: str,
+) -> tuple[EmailSenderPreference, ...]:
+    return tuple(
+        EmailSenderPreference(
+            mailbox=record.mailbox,
+            match_type=record.match_type,
+            pattern=record.pattern,
+            label=record.label,
+        )
+        for record in store.list_email_sender_preferences(mailbox=mailbox)
     )
 
 

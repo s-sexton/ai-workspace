@@ -201,6 +201,19 @@ class FeedbackLearningRecord:
     created_at: str
 
 
+@dataclass(frozen=True)
+class EmailSenderPreferenceRecord:
+    """A mailbox-scoped email sender or domain classification preference."""
+
+    preference_id: str
+    mailbox: str
+    match_type: str
+    pattern: str
+    label: str
+    created_run_id: str
+    created_at: str
+
+
 class DuckDbMemoryStore:
     """Small local DuckDB-backed memory store for Clarity."""
 
@@ -288,6 +301,19 @@ class DuckDbMemoryStore:
                 item_id VARCHAR NOT NULL,
                 feature_type VARCHAR NOT NULL,
                 feature_value VARCHAR NOT NULL,
+                created_at VARCHAR NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS email_sender_preferences (
+                preference_id VARCHAR PRIMARY KEY,
+                mailbox VARCHAR NOT NULL,
+                match_type VARCHAR NOT NULL,
+                pattern VARCHAR NOT NULL,
+                label VARCHAR NOT NULL,
+                created_run_id VARCHAR NOT NULL,
                 created_at VARCHAR NOT NULL
             )
             """
@@ -669,6 +695,88 @@ class DuckDbMemoryStore:
                 for value in clean_values
             ],
         )
+
+    def record_email_sender_preference(
+        self,
+        *,
+        mailbox: str,
+        match_type: str,
+        pattern: str,
+        label: str,
+        created_run_id: str,
+        created_at: str | None = None,
+    ) -> EmailSenderPreferenceRecord:
+        """Record a mailbox-scoped email sender/domain classification preference."""
+
+        _reject_secret_text(mailbox, match_type, pattern, label, created_run_id)
+        clean_match_type = _required_text(match_type, "match_type")
+        if clean_match_type not in ("sender", "domain"):
+            raise MemoryStoreError("match_type must be one of: sender, domain")
+        clean_label = _required_text(label, "label")
+        if clean_label not in ("noise", "review"):
+            raise MemoryStoreError("label must be one of: noise, review")
+        record = EmailSenderPreferenceRecord(
+            preference_id=_new_id(),
+            mailbox=_required_text(mailbox, "mailbox").lower(),
+            match_type=clean_match_type,
+            pattern=_required_text(pattern, "pattern").lower(),
+            label=clean_label,
+            created_run_id=_required_text(created_run_id, "created_run_id"),
+            created_at=created_at or _now(),
+        )
+        self._connection.execute(
+            """
+            INSERT INTO email_sender_preferences
+            (preference_id, mailbox, match_type, pattern, label, created_run_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                record.preference_id,
+                record.mailbox,
+                record.match_type,
+                record.pattern,
+                record.label,
+                record.created_run_id,
+                record.created_at,
+            ],
+        )
+        return record
+
+    def list_email_sender_preferences(
+        self,
+        *,
+        mailbox: str | None = None,
+        limit: int = 100,
+    ) -> tuple[EmailSenderPreferenceRecord, ...]:
+        """Return mailbox-scoped email sender/domain preferences."""
+
+        if limit < 1:
+            raise MemoryStoreError("limit must be positive.")
+        if mailbox is None:
+            rows = self._connection.execute(
+                """
+                SELECT preference_id, mailbox, match_type, pattern, label,
+                       created_run_id, created_at
+                FROM email_sender_preferences
+                ORDER BY created_at DESC, preference_id DESC
+                LIMIT ?
+                """,
+                [limit],
+            ).fetchall()
+        else:
+            _reject_secret_text(mailbox)
+            rows = self._connection.execute(
+                """
+                SELECT preference_id, mailbox, match_type, pattern, label,
+                       created_run_id, created_at
+                FROM email_sender_preferences
+                WHERE mailbox = ?
+                ORDER BY created_at DESC, preference_id DESC
+                LIMIT ?
+                """,
+                [_required_text(mailbox, "mailbox").lower(), limit],
+            ).fetchall()
+        return tuple(EmailSenderPreferenceRecord(*row) for row in rows)
 
     def recent_feedback(self, *, limit: int = 25) -> tuple[FeedbackSummaryRecord, ...]:
         """Return recent human feedback with source item context."""

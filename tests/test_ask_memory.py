@@ -261,6 +261,21 @@ def test_answers_recent_feedback(tmp_path):
     assert "Feedback: This was just an automated update." in answer
 
 
+def test_answers_email_preferences(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "email-preferences",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Email Preferences" in answer
+    assert "scott.sexton@sendthisfile.com: sender promo@example.invalid -> noise" in answer
+    assert "Preference ID:" in answer
+
+
 def test_answers_recent_actions(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -395,6 +410,13 @@ def _seed_memory(memory_path):
             source_type="email",
             display_name="scott.sexton@sendthisfile.com",
             scope_label="scott.sexton@sendthisfile.com",
+        )
+        store.record_email_sender_preference(
+            mailbox="scott.sexton@sendthisfile.com",
+            match_type="sender",
+            pattern="promo@example.invalid",
+            label="noise",
+            created_run_id=run.run_id,
         )
         noise_item = store.record_item_seen(
             source_id=email_source.source_id,

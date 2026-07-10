@@ -187,6 +187,50 @@ def test_clarity_records_default_feedback_note(tmp_path):
     assert feedback[0].feedback_text == "Marked for review from the Clarity command surface."
 
 
+def test_clarity_records_sender_preference_from_natural_language(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path)
+
+    answer = answer_clarity_request(
+        "always mark emails from Promo@Example.Invalid as noise",
+        root=tmp_path,
+        memory_path=memory_path,
+        mailbox="inbox@example.invalid",
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        preferences = store.list_email_sender_preferences()
+    finally:
+        store.close()
+
+    assert "Recorded noise email preference" in answer
+    assert preferences[0].match_type == "sender"
+    assert preferences[0].pattern == "promo@example.invalid"
+
+
+def test_clarity_records_domain_preference_from_natural_language(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path)
+
+    answer = answer_clarity_request(
+        "always mark emails from example.invalid as review",
+        root=tmp_path,
+        memory_path=memory_path,
+        mailbox="inbox@example.invalid",
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        preferences = store.list_email_sender_preferences()
+    finally:
+        store.close()
+
+    assert "Recorded review email preference" in answer
+    assert preferences[0].match_type == "domain"
+    assert preferences[0].pattern == "example.invalid"
+
+
 def test_clarity_answers_calendar_question_from_memory(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -399,6 +443,33 @@ def _seed_memory(memory_path):
         )
     finally:
         store.close()
+
+
+def _write_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "read_write"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
 
 
 def _seed_cycle_run(memory_path):

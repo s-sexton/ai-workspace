@@ -125,6 +125,16 @@ class EmailFeedbackRule:
 
 
 @dataclass(frozen=True)
+class EmailSenderPreference:
+    """A mailbox-scoped sender or domain classification preference."""
+
+    mailbox: str
+    match_type: str
+    pattern: str
+    label: str
+
+
+@dataclass(frozen=True)
 class EmailFolderProposal:
     """A local proposal for where an email should be reviewed."""
 
@@ -277,6 +287,7 @@ def classify_email_message(
     message: EmailMessage,
     *,
     allowed_senders: tuple[str, ...] = (),
+    sender_preferences: tuple[EmailSenderPreference, ...] = (),
     feedback_rules: tuple[EmailFeedbackRule, ...] = (),
 ) -> EmailClassification:
     """Classify email metadata with deterministic first-pass rules."""
@@ -292,6 +303,16 @@ def classify_email_message(
             reason=(
                 "Message sent to a restricted mailbox without passing required "
                 "SPF/DKIM/DMARC authentication checks."
+            ),
+        )
+
+    sender_preference = _matching_sender_preference(message, sender_preferences)
+    if sender_preference is not None:
+        return EmailClassification(
+            label=sender_preference.label,
+            reason=(
+                "Matched mailbox-specific "
+                f"{sender_preference.match_type} preference."
             ),
         )
 
@@ -389,6 +410,25 @@ def _combined_lower_text(message: EmailMessage) -> str:
 
 def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
     return any(token in text for token in tokens)
+
+
+def _matching_sender_preference(
+    message: EmailMessage,
+    sender_preferences: tuple[EmailSenderPreference, ...],
+) -> EmailSenderPreference | None:
+    sender = _normalize_optional_feedback_text(message.sender)
+    if sender is None:
+        return None
+    sender_domain = sender.rsplit("@", 1)[1] if "@" in sender else sender
+    for preference in sender_preferences:
+        if preference.label not in ("noise", "review"):
+            continue
+        pattern = _normalize_feedback_text(preference.pattern)
+        if preference.match_type == "sender" and sender == pattern:
+            return preference
+        if preference.match_type == "domain" and sender_domain == pattern:
+            return preference
+    return None
 
 
 def _matching_feedback_rule(

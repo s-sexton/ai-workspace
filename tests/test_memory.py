@@ -172,6 +172,49 @@ def test_returns_mailbox_scoped_email_feedback_for_learning(memory_store):
     assert records[0].content_terms == ("classroom", "newsletter", "school")
 
 
+def test_records_and_lists_email_sender_preferences(memory_store):
+    run = memory_store.start_run(workflow="email-preference")
+
+    preference = memory_store.record_email_sender_preference(
+        mailbox="Inbox@Example.Invalid",
+        match_type="sender",
+        pattern="PROMO@Example.Invalid",
+        label="noise",
+        created_run_id=run.run_id,
+    )
+
+    preferences = memory_store.list_email_sender_preferences(
+        mailbox="inbox@example.invalid"
+    )
+
+    assert preferences == (preference,)
+    assert preferences[0].mailbox == "inbox@example.invalid"
+    assert preferences[0].pattern == "promo@example.invalid"
+    assert preferences[0].label == "noise"
+
+
+def test_rejects_invalid_email_sender_preference(memory_store):
+    run = memory_store.start_run(workflow="email-preference")
+
+    with pytest.raises(MemoryStoreError):
+        memory_store.record_email_sender_preference(
+            mailbox="inbox@example.invalid",
+            match_type="subject",
+            pattern="promo@example.invalid",
+            label="noise",
+            created_run_id=run.run_id,
+        )
+
+    with pytest.raises(MemoryStoreError):
+        memory_store.record_email_sender_preference(
+            mailbox="inbox@example.invalid",
+            match_type="sender",
+            pattern="promo@example.invalid",
+            label="trash",
+            created_run_id=run.run_id,
+        )
+
+
 def test_records_generated_artifact(memory_store):
     run = memory_store.start_run(workflow="jira-report")
 
@@ -422,3 +465,6 @@ def test_recent_memory_limit_must_be_positive(memory_store):
 
     with pytest.raises(MemoryStoreError):
         memory_store.email_feedback_learning(mailbox="inbox@example.invalid", limit=0)
+
+    with pytest.raises(MemoryStoreError):
+        memory_store.list_email_sender_preferences(limit=0)

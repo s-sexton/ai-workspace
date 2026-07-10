@@ -34,12 +34,13 @@ Status: in progress.
 - Keep all moves scoped to the source mailbox
 - Learn future review/noise email classification from local human feedback
 - Learn from sanitized subject/preview content terms without storing raw bodies
+- Apply mailbox-specific sender/domain preferences
 
 Next useful slices:
 
 - Make feedback easier to capture from the command center: started with
   natural-language `mark ITEM_ID as noise/review` commands
-- Add mailbox-specific sender/domain preferences
+- Make preference review and removal explicit
 - Add a review-before-execute cleanup workflow for approved Gmail filing
 
 ## Phase 3: Daily Command Center
