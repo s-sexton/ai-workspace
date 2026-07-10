@@ -111,6 +111,22 @@ def test_clarity_answers_attention_brief_question(tmp_path):
     assert "propose_email_move_review - Review vendor terms" in answer
 
 
+def test_clarity_answers_focus_question(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_clarity_request(
+        "What should I focus on?",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity Focus Plan" in answer
+    assert "1. Review pending approvals" in answer
+    assert "Review vendor terms" in answer
+    assert "3. Review approved email moves" in answer
+
+
 def test_clarity_answers_email_move_plan(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)

@@ -109,6 +109,7 @@ To ask deterministic questions from local memory:
 ``` powershell
 python -m assistant.src.ask_memory summary
 python -m assistant.src.ask_memory attention-brief
+python -m assistant.src.ask_memory focus-plan
 python -m assistant.src.ask_memory llm-context
 python -m assistant.src.ask_memory llm-prompt
 python -m assistant.src.ask_memory latest-llm-brief
@@ -129,6 +130,7 @@ To ask Clarity a first natural-language question:
 
 ``` powershell
 python -m assistant.src.clarity "What emails need immediate attention?"
+python -m assistant.src.clarity "What should I focus on?"
 python -m assistant.src.clarity "What needs my attention?"
 python -m assistant.src.clarity "What needs approval?"
 python -m assistant.src.clarity "What did you do?"

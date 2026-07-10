@@ -92,6 +92,18 @@ def _route_request(request: str) -> str | None:
     if any(
         phrase in clean_request
         for phrase in (
+            "focus plan",
+            "what should i focus on",
+            "help me focus",
+            "get organized",
+            "organize me",
+            "what should i work on",
+        )
+    ):
+        return "focus-plan"
+    if any(
+        phrase in clean_request
+        for phrase in (
             "attention brief",
             "brief me",
             "what needs my attention",
@@ -150,6 +162,7 @@ def _unsupported_response() -> str:
     return (
         "I do not know how to answer that yet from local Clarity memory.\n\n"
         "Try one of:\n"
+        "- What should I focus on?\n"
         "- What emails need immediate attention?\n"
         "- What needs my attention?\n"
         "- What needs approval?\n"

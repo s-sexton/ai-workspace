@@ -106,6 +106,31 @@ def test_answers_attention_brief(tmp_path):
     assert "Prepare ACCT review [requested]" in answer
 
 
+def test_answers_focus_plan(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "focus-plan",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity Focus Plan" in answer
+    assert "1. Review pending approvals" in answer
+    assert "propose_email_move_noise - July product newsletter" in answer
+    assert "Target: Clarity/Noise" in answer
+    assert "2. Review items needing attention" in answer
+    assert "Review support queue trends" in answer
+    assert "3. Review approved email moves" in answer
+    assert (
+        "In mailbox scott.sexton@sendthisfile.com, move message "
+        "email-review-1 to Clarity/Review"
+    ) in answer
+    assert "4. Advance open delegated tasks" in answer
+    assert "Prepare ACCT review [requested]" in answer
+
+
 def test_answers_llm_context(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)

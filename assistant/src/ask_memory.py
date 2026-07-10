@@ -15,6 +15,7 @@ from common.memory import DuckDbMemoryStore
 SUPPORTED_QUESTIONS = (
     "summary",
     "attention-brief",
+    "focus-plan",
     "llm-context",
     "llm-prompt",
     "latest-llm-brief",
@@ -65,6 +66,8 @@ def answer_memory_question(
             return _format_summary(store, limit=limit)
         if question == "attention-brief":
             return _format_attention_brief(store, limit=limit)
+        if question == "focus-plan":
+            return _format_focus_plan(store, limit=limit)
         if question == "last-cycle":
             return _answer_latest_run(
                 store,
@@ -246,6 +249,60 @@ def _format_attention_brief(store: DuckDbMemoryStore, *, limit: int) -> str:
             lines.append(f"- {task.title} [{task.status}]")
             if task.next_step:
                 lines.append(f"  Next step: {task.next_step}")
+
+    return "\n".join(lines)
+
+
+def _format_focus_plan(store: DuckDbMemoryStore, *, limit: int) -> str:
+    pending_actions = store.pending_actions(limit=limit)
+    review_items = store.recent_memory_by_label("review", limit=limit)
+    approved_email_moves = _approved_email_move_actions(store, limit=limit)
+    open_tasks = store.list_open_delegated_tasks()
+
+    lines = ["# Clarity Focus Plan", ""]
+    if not any((pending_actions, review_items, approved_email_moves, open_tasks)):
+        lines.append("No focus items found in Clarity memory.")
+        return "\n".join(lines)
+
+    step = 1
+    if pending_actions:
+        lines.append(f"{step}. Review pending approvals")
+        for action in pending_actions:
+            subject = f" - {action.item_subject}" if action.item_subject else ""
+            lines.append(f"   - {action.action_type}{subject}")
+            lines.append(f"     Action: {action.action_id}")
+            if action.action_target:
+                lines.append(f"     Target: {action.action_target}")
+        step += 1
+
+    if review_items:
+        lines.append(f"{step}. Review items needing attention")
+        for record in review_items:
+            lines.append(f"   - {record.subject}")
+            lines.append(f"     Source: {record.display_name} ({record.source_type})")
+            if record.reason:
+                lines.append(f"     Reason: {record.reason}")
+        step += 1
+
+    if approved_email_moves:
+        lines.append(f"{step}. Review approved email moves")
+        for action in approved_email_moves:
+            source_scope = action.source_scope_label or "unknown mailbox"
+            lines.append(
+                f"   - In mailbox {source_scope}, move message "
+                f"{action.item_external_id} to {action.action_target}"
+            )
+            if action.item_subject:
+                lines.append(f"     Subject: {action.item_subject}")
+            lines.append(f"     Action: {action.action_id}")
+        step += 1
+
+    if open_tasks:
+        lines.append(f"{step}. Advance open delegated tasks")
+        for task in open_tasks:
+            lines.append(f"   - {task.title} [{task.status}]")
+            if task.next_step:
+                lines.append(f"     Next step: {task.next_step}")
 
     return "\n".join(lines)
 
