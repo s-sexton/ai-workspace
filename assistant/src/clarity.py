@@ -12,6 +12,7 @@ from assistant.src.run_email_review import (
     run_email_review,
 )
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
+from common.console import print_text
 
 
 def answer_clarity_request(
@@ -69,7 +70,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         return
 
-    print(
+    print_text(
         answer_clarity_request(
             args.request,
             memory_path=args.memory,
@@ -252,12 +253,12 @@ def _run_prompt(
     use_sample_graph: bool,
     brief_path: Path | str | None,
 ) -> None:
-    print("Clarity local prompt. Type 'exit' or 'quit' to leave.")
+    print_text("Clarity local prompt. Type 'exit' or 'quit' to leave.")
     while True:
         try:
             request = input("Clarity> ")
         except EOFError:
-            print()
+            print_text()
             return
 
         clean_request = request.strip()
@@ -266,7 +267,7 @@ def _run_prompt(
         if not clean_request:
             continue
 
-        print(
+        print_text(
             answer_clarity_request(
                 clean_request,
                 memory_path=memory_path,

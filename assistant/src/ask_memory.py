@@ -8,6 +8,7 @@ from typing import Sequence
 
 from assistant.src.llm_context import build_llm_context, build_llm_prompt
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
+from common.console import print_text
 from common.configuration import find_workspace_root
 from common.memory import DuckDbMemoryStore
 
@@ -133,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     """Print an answer from local Clarity memory."""
 
     args = _parse_args(argv)
-    print(
+    print_text(
         answer_memory_question(
             args.question,
             memory_path=args.memory,
