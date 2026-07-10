@@ -87,6 +87,22 @@ def test_answers_attention_brief(tmp_path):
     assert "Prepare ACCT review [requested]" in answer
 
 
+def test_answers_llm_context(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "llm-context",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity LLM Context" in answer
+    assert "summarization only" in answer
+    assert "## Pending Approvals" in answer
+    assert "Action:" in answer
+
+
 def test_answers_recent_items(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
