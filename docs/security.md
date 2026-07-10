@@ -46,7 +46,8 @@ python -m assistant.src.generate_llm_brief
 ```
 
 That command uses a deterministic local provider and writes a local fake brief.
-It does not call an LLM or make network requests.
+It does not call an LLM or make network requests. When the report is written,
+it records a local `fake-llm-brief` run and generated artifact for auditability.
 
 Future provider integration should enter through the provider-neutral summary
 contract in `assistant.src.llm_summary`. That contract accepts an injected

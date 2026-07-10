@@ -20,6 +20,20 @@ def test_generate_fake_llm_brief_writes_safe_report(tmp_path):
     assert "Review items: 1" in report
     assert "Pending approvals: 1" in report
     assert output_path.read_text(encoding="utf-8") == report
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        latest_run = store.latest_run(workflow="fake-llm-brief")
+        artifacts = store.list_generated_artifacts(run_id=latest_run.run_id)
+        actions = store.recent_actions()
+    finally:
+        store.close()
+
+    assert latest_run is not None
+    assert latest_run.status == "completed"
+    assert latest_run.summary == "Generated local deterministic fake LLM brief."
+    assert artifacts[0].path == str(output_path)
+    assert artifacts[0].artifact_type == "markdown_fake_llm_brief"
+    assert actions[0].action_type == "generate_fake_llm_brief"
 
 
 def test_generate_fake_llm_brief_can_skip_write(tmp_path):
@@ -36,6 +50,13 @@ def test_generate_fake_llm_brief_can_skip_write(tmp_path):
 
     assert "Clarity Fake LLM Brief" in report
     assert not output_path.exists()
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        latest_run = store.latest_run(workflow="fake-llm-brief")
+    finally:
+        store.close()
+
+    assert latest_run is None
 
 
 def test_main_prints_and_writes_report(tmp_path, monkeypatch, capsys):

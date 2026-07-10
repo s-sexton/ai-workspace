@@ -169,6 +169,7 @@ python -m assistant.src.generate_llm_brief
 
 This writes `reports/clarity-llm-brief.md` by default. It does not call an LLM;
 it uses a fake local provider to test the prompt and output validation path.
+When it writes the report, it records a local `fake-llm-brief` memory run.
 
 To refresh approved email metadata before answering:
 

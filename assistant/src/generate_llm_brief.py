@@ -9,6 +9,7 @@ from typing import Sequence
 from assistant.src.llm_summary import generate_llm_summary
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import find_workspace_root
+from common.memory import DuckDbMemoryStore
 
 
 DEFAULT_LLM_BRIEF_PATH = Path("reports") / "clarity-llm-brief.md"
@@ -76,6 +77,10 @@ def generate_fake_llm_brief(
         resolved_output_path = _resolve_path(workspace_root, Path(output_path))
         resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
         resolved_output_path.write_text(report, encoding="utf-8")
+        _record_llm_brief_memory(
+            memory_path=_resolve_path(workspace_root, Path(memory_path)),
+            output_path=resolved_output_path,
+        )
     return report
 
 
@@ -114,6 +119,32 @@ def _resolve_path(workspace_root: Path, path: Path) -> Path:
     if path.is_absolute():
         return path
     return workspace_root / path
+
+
+def _record_llm_brief_memory(*, memory_path: Path, output_path: Path) -> None:
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="fake-llm-brief")
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_fake_llm_brief",
+            path=output_path,
+            summary="Local deterministic fake LLM brief.",
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            action_type="generate_fake_llm_brief",
+            approval_status="not_required",
+            result=f"Wrote {output_path}",
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary="Generated local deterministic fake LLM brief.",
+        )
+    finally:
+        store.close()
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
