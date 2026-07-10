@@ -29,6 +29,10 @@ email bodies.
 The LLM may summarize and recommend questions to ask the human. It must not
 approve, execute, send, move, delete, or modify anything.
 
+Future LLM summary output must pass local validation before display or storage.
+The validator rejects output that claims actions were performed, suggests direct
+execution, asks for credentials, or contains credential-shaped text.
+
 Execution remains deterministic:
 
 1. LLM may suggest.
