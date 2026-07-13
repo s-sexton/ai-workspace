@@ -154,6 +154,10 @@ python -m assistant.src.clarity
 This is a deterministic command surface over local memory. It does not use an
 LLM router yet.
 
+The command center includes a compact email cleanup section with approved moves
+ready for cleanup review, proposed moves still needing approval, and the command
+for the full cleanup plan.
+
 To inspect the bounded context intended for future LLM summarization:
 
 ``` powershell

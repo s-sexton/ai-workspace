@@ -38,12 +38,13 @@ Status: in progress.
 - Review and remove mailbox-specific sender/domain preferences
 - Review proposed and approved cleanup before executing Gmail filing
 - Summarize Gmail filing dry-runs and executions by count, mailbox, and destination
+- Surface email cleanup status in the daily command center
 
 Next useful slices:
 
 - Make feedback easier to capture from the command center: started with
   natural-language `mark ITEM_ID as noise/review` commands
-- Improve the daily command center email cleanup section
+- Improve calendar awareness in the daily command center
 
 ## Phase 3: Daily Command Center
 

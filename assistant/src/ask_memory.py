@@ -329,6 +329,7 @@ def _format_command_center(store: DuckDbMemoryStore, *, limit: int) -> str:
     lines = ["# Clarity Command Center", ""]
     lines.append(_format_focus_plan(store, limit=limit))
     lines.extend(("", _format_calendar_items(store, limit=limit)))
+    lines.extend(("", _format_command_center_cleanup(store, limit=limit)))
     lines.extend(("", _format_pending_actions(store, limit=limit)))
     lines.extend(("", _format_email_move_plan(store, limit=limit)))
     lines.extend(("", _format_open_tasks(store)))
@@ -410,6 +411,65 @@ def _format_email_preferences(store: DuckDbMemoryStore, *, limit: int) -> str:
         )
         lines.append(f"  Preference ID: {preference.preference_id}")
         lines.append(f"  Created: {preference.created_at}")
+    return "\n".join(lines)
+
+
+def _format_command_center_cleanup(store: DuckDbMemoryStore, *, limit: int) -> str:
+    approved_email_moves = _approved_email_move_actions(store, limit=limit)
+    pending_email_moves = [
+        action
+        for action in store.pending_actions(limit=limit)
+        if action.action_type.startswith("propose_email_move_")
+        and action.item_external_id
+        and action.action_target
+    ]
+
+    lines = ["# Email Cleanup"]
+    if not approved_email_moves and not pending_email_moves:
+        lines.append("")
+        lines.append("No email cleanup actions found.")
+        return "\n".join(lines)
+
+    lines.extend(
+        (
+            "",
+            f"- Approved moves ready for cleanup review: {len(approved_email_moves)}",
+            f"- Proposed moves needing approval: {len(pending_email_moves)}",
+        )
+    )
+    if approved_email_moves:
+        lines.append("")
+        lines.append("## Ready")
+        for action in approved_email_moves[:limit]:
+            source_scope = action.source_scope_label or "unknown mailbox"
+            lines.append(
+                f"- {action.item_external_id} in {source_scope} to "
+                f"{action.action_target}"
+            )
+            if action.item_subject:
+                lines.append(f"  Subject: {action.item_subject}")
+            lines.append(f"  Action: {action.action_id}")
+
+    if pending_email_moves:
+        lines.append("")
+        lines.append("## Needs Approval")
+        for action in pending_email_moves[:limit]:
+            source_scope = action.source_scope_label or "unknown mailbox"
+            lines.append(
+                f"- {action.item_external_id} in {source_scope} to "
+                f"{action.action_target}"
+            )
+            if action.item_subject:
+                lines.append(f"  Subject: {action.item_subject}")
+            lines.append(f"  Action: {action.action_id}")
+            lines.append(
+                "  Approve: "
+                f"python -m assistant.src.update_action {action.action_id} approved"
+            )
+
+    lines.append("")
+    lines.append("Full cleanup plan:")
+    lines.append("python -m assistant.src.ask_memory email-cleanup-plan")
     return "\n".join(lines)
 
 

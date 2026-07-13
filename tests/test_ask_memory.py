@@ -149,6 +149,10 @@ def test_answers_command_center_and_calendar_items(tmp_path):
     assert "# Clarity Command Center" in command_center
     assert "# Clarity Focus Plan" in command_center
     assert "# Calendar Items" in command_center
+    assert "# Email Cleanup" in command_center
+    assert "- Approved moves ready for cleanup review: 1" in command_center
+    assert "- Proposed moves needing approval: 1" in command_center
+    assert "python -m assistant.src.ask_memory email-cleanup-plan" in command_center
     assert "Family dinner" in command_center
     assert "# Calendar Items" in calendar_items
     assert "Source: family calendar" in calendar_items

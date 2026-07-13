@@ -127,6 +127,23 @@ def test_clarity_answers_focus_question(tmp_path):
     assert "3. Review approved email moves" in answer
 
 
+def test_clarity_answers_command_center_with_email_cleanup(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path)
+    _seed_memory(memory_path)
+
+    answer = answer_clarity_request(
+        "Give me my command center",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Clarity Command Center" in answer
+    assert "# Email Cleanup" in answer
+    assert "Approved moves ready for cleanup review: 1" in answer
+    assert "Proposed moves needing approval: 1" in answer
+
+
 def test_clarity_answers_email_move_plan(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
