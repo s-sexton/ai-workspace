@@ -162,6 +162,9 @@ The command center also includes a compact calendar agenda from local Clarity
 memory. It surfaces remembered event count, source calendar, start/end times,
 and location when those metadata fields were captured.
 
+Calendar questions can filter remembered events for simple dates such as
+`today`, `tomorrow`, or an explicit `YYYY-MM-DD` date.
+
 To inspect the bounded context intended for future LLM summarization:
 
 ``` powershell

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Sequence
 
@@ -46,6 +47,7 @@ def answer_memory_question(
     root: Path | str | None = None,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     limit: int = 10,
+    calendar_date: str | None = None,
 ) -> str:
     """Answer a supported question from local Clarity memory."""
 
@@ -84,7 +86,11 @@ def answer_memory_question(
         if question == "command-center":
             return _format_command_center(store, limit=limit)
         if question == "calendar-items":
-            return _format_calendar_items(store, limit=limit)
+            return _format_calendar_items(
+                store,
+                limit=limit,
+                calendar_date=calendar_date,
+            )
         if question == "last-cycle":
             return _answer_latest_run(
                 store,
@@ -337,17 +343,36 @@ def _format_command_center(store: DuckDbMemoryStore, *, limit: int) -> str:
     return "\n".join(lines)
 
 
-def _format_calendar_items(store: DuckDbMemoryStore, *, limit: int) -> str:
+def _format_calendar_items(
+    store: DuckDbMemoryStore,
+    *,
+    limit: int,
+    calendar_date: str | None = None,
+) -> str:
     records = [
         record
         for record in store.recent_memory(limit=limit * 3)
         if record.source_type == "calendar"
     ]
+    if calendar_date:
+        records = [
+            record
+            for record in records
+            if _calendar_details(record.reason or "").get("date") == calendar_date
+        ]
     records = sorted(records, key=_calendar_sort_key)[:limit]
     if not records:
+        if calendar_date:
+            return (
+                "# Calendar Items\n\n"
+                f"No calendar items found in Clarity memory for {calendar_date}."
+            )
         return "# Calendar Items\n\nNo calendar items found in Clarity memory."
 
-    lines = ["# Calendar Items", "", f"- Remembered calendar events: {len(records)}"]
+    lines = ["# Calendar Items", ""]
+    if calendar_date:
+        lines.append(f"- Date: {calendar_date}")
+    lines.append(f"- Remembered calendar events: {len(records)}")
     for record in records:
         details = _calendar_details(record.reason or "")
         lines.append(f"- {record.subject}")
@@ -378,7 +403,32 @@ def _calendar_details(reason: str) -> dict[str, str]:
         match = re.search(pattern, reason)
         if match:
             details[key] = match.group(1)
+    if "start" in details:
+        details["date"] = details["start"].split("T", maxsplit=1)[0]
     return details
+
+
+def calendar_date_for_request(
+    request: str,
+    *,
+    current_date: date | None = None,
+) -> str | None:
+    """Return an ISO date filter for simple calendar date words."""
+
+    clean_request = " ".join(request.lower().strip().split())
+    if not clean_request:
+        return None
+
+    today = current_date or date.today()
+    if "tomorrow" in clean_request:
+        return (today + timedelta(days=1)).isoformat()
+    if "today" in clean_request:
+        return today.isoformat()
+
+    match = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", clean_request)
+    if match:
+        return match.group(1)
+    return None
 
 
 def _format_recent_items(title: str, records) -> str:

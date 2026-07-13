@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 import re
+from datetime import date
 from pathlib import Path
 from typing import Sequence
 
-from assistant.src.ask_memory import answer_memory_question
+from assistant.src.ask_memory import answer_memory_question, calendar_date_for_request
 from assistant.src.email_preferences import (
     record_email_sender_preference,
     remove_email_sender_preference,
@@ -33,6 +34,7 @@ def answer_clarity_request(
     use_graph_bearer: bool = False,
     use_sample_graph: bool = False,
     brief_path: Path | str | None = None,
+    current_date: date | None = None,
 ) -> str:
     """Answer a small deterministic Clarity request."""
 
@@ -82,11 +84,18 @@ def answer_clarity_request(
     intent = _route_request(request)
     if intent is None:
         return _unsupported_response()
+    calendar_date = None
+    if intent == "calendar-items":
+        calendar_date = calendar_date_for_request(
+            request,
+            current_date=current_date,
+        )
     return answer_memory_question(
         intent,
         root=root,
         memory_path=memory_path,
         limit=limit,
+        calendar_date=calendar_date,
     )
 
 

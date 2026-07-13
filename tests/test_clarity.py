@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -323,9 +324,11 @@ def test_clarity_answers_calendar_question_from_memory(tmp_path):
         "What is on my family calendar today?",
         root=tmp_path,
         memory_path=memory_path,
+        current_date=date(2026, 7, 10),
     )
 
     assert "# Calendar Items" in answer
+    assert "- Date: 2026-07-10" in answer
     assert "Family dinner" in answer
     assert "Start: 2026-07-10T18:00:00-05:00" in answer
 
