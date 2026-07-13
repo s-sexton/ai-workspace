@@ -141,6 +141,22 @@ def test_clarity_answers_email_move_plan(tmp_path):
     assert "email-noise-1 to Clarity/Noise" in answer
 
 
+def test_clarity_answers_email_cleanup_plan(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path)
+    _seed_memory(memory_path)
+
+    answer = answer_clarity_request(
+        "show my email cleanup plan",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Email Cleanup Plan" in answer
+    assert "Review vendor terms" in answer
+    assert "Monthly newsletter" in answer
+
+
 def test_clarity_records_feedback_from_natural_language(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -505,7 +521,8 @@ def _write_config(root):
           "assistant": {
             "email": {
               "approvedMailboxes": [
-                {"address": "inbox@example.invalid", "accessMode": "read_write"}
+                {"address": "inbox@example.invalid", "accessMode": "read_write"},
+                {"address": "clarity@sendthisfile.ai", "accessMode": "read_write"}
               ],
               "defaultMailbox": "inbox@example.invalid",
               "folderNamespace": "Clarity",

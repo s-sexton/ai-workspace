@@ -357,6 +357,18 @@ python -m assistant.src.ask_memory email-move-plan
 The move plan is read-only. It lists the source mailbox, provider message ID,
 and destination folder for approved local proposals.
 
+A fuller review-before-execute cleanup plan can be generated with:
+
+``` powershell
+python -m assistant.src.email_cleanup_plan --mailbox sesexton@gmail.com
+python -m assistant.src.ask_memory email-cleanup-plan
+python -m assistant.src.clarity "show my email cleanup plan"
+```
+
+The cleanup plan is read-only. It separates approved moves that are ready to
+execute, proposed moves that still need approval, and approved moves blocked by
+current configuration.
+
 Approved email moves can be dry-run with:
 
 ``` powershell

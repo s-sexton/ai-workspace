@@ -347,6 +347,24 @@ def test_answers_email_move_plan(tmp_path):
     assert "Move message email-noise-1" not in answer
 
 
+def test_answers_email_cleanup_plan(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path)
+    _seed_memory(memory_path)
+
+    answer = answer_memory_question(
+        "email-cleanup-plan",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Email Cleanup Plan" in answer
+    assert "- Ready to execute: 1" in answer
+    assert "- Needs approval: 1" in answer
+    assert "Review vendor terms" in answer
+    assert "July product newsletter" in answer
+
+
 def test_missing_memory_returns_plain_message(tmp_path):
     answer = answer_memory_question(
         "recent-items",
@@ -555,3 +573,30 @@ def _seed_memory(memory_path):
         )
     finally:
         store.close()
+
+
+def _write_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "scott.sexton@sendthisfile.com", "accessMode": "read_write"}
+              ],
+              "defaultMailbox": "scott.sexton@sendthisfile.com",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )

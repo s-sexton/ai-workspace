@@ -185,6 +185,8 @@ def _route_request(request: str) -> str | None:
         return "pending-actions"
     if "email preference" in clean_request or "email preferences" in clean_request:
         return "email-preferences"
+    if "cleanup plan" in clean_request or "gmail cleanup" in clean_request:
+        return "email-cleanup-plan"
     if "approved" in clean_request and "move" in clean_request:
         return "email-move-plan"
     if "move plan" in clean_request or "email move" in clean_request:
@@ -290,7 +292,8 @@ def _unsupported_response() -> str:
         "- Mark ITEM_ID as review because this needs attention.\n"
         "- Always mark emails from sender@example.com as noise.\n"
         "- Always mark emails from example.com as review.\n"
-        "- Remove email preference PREFERENCE_ID."
+        "- Remove email preference PREFERENCE_ID.\n"
+        "- Show my email cleanup plan."
     )
 
 

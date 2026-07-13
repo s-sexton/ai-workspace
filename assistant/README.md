@@ -293,6 +293,18 @@ Approved email move proposals can be previewed without execution with:
 python -m assistant.src.ask_memory email-move-plan
 ```
 
+To review proposed and approved cleanup before executing any Gmail filing:
+
+``` powershell
+python -m assistant.src.email_cleanup_plan --mailbox sesexton@gmail.com
+python -m assistant.src.ask_memory email-cleanup-plan
+python -m assistant.src.clarity "show my email cleanup plan"
+```
+
+The cleanup plan is read-only. It separates approved moves that are ready to
+execute, proposed moves that still need approval, and approved moves that are
+currently blocked by configuration.
+
 To run the first local sample calendar review:
 
 ``` powershell

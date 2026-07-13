@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from assistant.src.email_cleanup_plan import build_email_cleanup_plan
 from assistant.src.llm_context import build_llm_context, build_llm_prompt
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.console import print_text
@@ -29,6 +30,7 @@ SUPPORTED_QUESTIONS = (
     "noise-items",
     "feedback",
     "email-preferences",
+    "email-cleanup-plan",
     "actions",
     "pending-actions",
     "approved-actions",
@@ -59,6 +61,12 @@ def answer_memory_question(
         )
     if question == "llm-prompt":
         return build_llm_prompt(
+            root=workspace_root,
+            memory_path=resolved_memory_path,
+            limit=limit,
+        )
+    if question == "email-cleanup-plan":
+        return build_email_cleanup_plan(
             root=workspace_root,
             memory_path=resolved_memory_path,
             limit=limit,

@@ -36,12 +36,13 @@ Status: in progress.
 - Learn from sanitized subject/preview content terms without storing raw bodies
 - Apply mailbox-specific sender/domain preferences
 - Review and remove mailbox-specific sender/domain preferences
+- Review proposed and approved cleanup before executing Gmail filing
 
 Next useful slices:
 
 - Make feedback easier to capture from the command center: started with
   natural-language `mark ITEM_ID as noise/review` commands
-- Add a review-before-execute cleanup workflow for approved Gmail filing
+- Tighten Gmail filing execution summaries after dry-run and execution
 
 ## Phase 3: Daily Command Center
 
