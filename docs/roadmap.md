@@ -39,10 +39,12 @@ Status: in progress.
 - Review proposed and approved cleanup before executing Gmail filing
 - Summarize Gmail filing dry-runs and executions by count, mailbox, and destination
 - Surface email cleanup status in the daily command center
+- Bulk-approve matching pending email move suggestions in local memory
 
 Next useful slices:
 
 - Add command-center filtering for "today" views
+- Add mailbox-scoped cleanup batches for reviewing large inbox cleanup chunks
 
 ## Phase 3: Daily Command Center
 

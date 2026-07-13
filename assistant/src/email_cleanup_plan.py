@@ -77,6 +77,21 @@ def build_email_cleanup_plan(
         lines.append("## Needs Approval")
         lines.extend(_pending_lines(pending_actions))
         lines.append("")
+        lines.append("Preview bulk approval with:")
+        lines.append("")
+        lines.append("``` powershell")
+        command = "python -m assistant.src.approve_email_moves"
+        if mailbox:
+            command += f" --mailbox {mailbox}"
+        lines.append(command)
+        lines.append("```")
+        lines.append("")
+        lines.append("Approve matching suggestions in local memory with:")
+        lines.append("")
+        lines.append("``` powershell")
+        lines.append(command + " --execute")
+        lines.append("```")
+        lines.append("")
 
     if blocked_plan:
         lines.append("## Blocked Approved Moves")

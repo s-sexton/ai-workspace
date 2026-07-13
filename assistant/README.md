@@ -338,6 +338,17 @@ The cleanup plan is read-only. It separates approved moves that are ready to
 execute, proposed moves that still need approval, and approved moves that are
 currently blocked by configuration.
 
+To bulk-approve matching pending email move suggestions in local memory:
+
+``` powershell
+python -m assistant.src.approve_email_moves --mailbox sesexton@gmail.com
+python -m assistant.src.approve_email_moves --mailbox sesexton@gmail.com --execute
+```
+
+The first command is a dry-run preview. The `--execute` form only changes local
+approval status from `required` to `approved`; it does not move, archive, trash,
+or delete email.
+
 To run the first local sample calendar review:
 
 ``` powershell

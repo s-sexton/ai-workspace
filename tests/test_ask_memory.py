@@ -166,6 +166,8 @@ def test_answers_command_center_and_calendar_items(tmp_path):
     assert 'noise "Why this is noise"' in command_center
     assert "## Approvals" in command_center
     assert "python -m assistant.src.update_action" in command_center
+    assert "python -m assistant.src.approve_email_moves" in command_center
+    assert "python -m assistant.src.approve_email_moves --execute" in command_center
     assert "## Approved Filing" in command_center
     assert "python -m assistant.src.execute_email_moves" in command_center
     assert "# Calendar Items" in command_center

@@ -375,6 +375,16 @@ def _format_command_center_actions(store: DuckDbMemoryStore, *, limit: int) -> s
         if review_items:
             lines.append("")
         lines.append("## Approvals")
+        pending_email_moves = [
+            action
+            for action in pending_actions
+            if action.action_type.startswith("propose_email_move_")
+        ]
+        if pending_email_moves:
+            lines.append("- Preview bulk email move approval:")
+            lines.append("  python -m assistant.src.approve_email_moves")
+            lines.append("- Approve matching email move suggestions:")
+            lines.append("  python -m assistant.src.approve_email_moves --execute")
         for action in pending_actions[:limit]:
             subject = f" - {action.item_subject}" if action.item_subject else ""
             lines.append(f"- {action.action_type}{subject}")

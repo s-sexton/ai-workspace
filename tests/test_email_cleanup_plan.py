@@ -45,6 +45,8 @@ def test_build_email_cleanup_plan_groups_ready_pending_and_blocked(tmp_path):
     assert "## Needs Approval" in plan
     assert f"Action: {pending_action}" in plan
     assert f"python -m assistant.src.update_action {pending_action} approved" in plan
+    assert "python -m assistant.src.approve_email_moves" in plan
+    assert "python -m assistant.src.approve_email_moves --execute" in plan
     assert "## Blocked Approved Moves" in plan
     assert f"Action: {blocked_action}" in plan
     assert "target folder is not in the current email folder policy" in plan
