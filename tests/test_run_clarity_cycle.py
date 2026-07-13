@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from assistant.src.run_clarity_cycle import main, run_clarity_cycle
+from common.calendar import StaticCalendarTransport
 from common.email import StaticEmailTransport
 from common.memory import DuckDbMemoryStore
 
@@ -65,6 +66,58 @@ def test_run_clarity_cycle_refreshes_email_and_returns_answers(tmp_path):
     assert "Read 2 message(s) from inbox@example.invalid" in latest_cycle.summary
     assert artifacts[0].path == str(cycle_report_path)
     assert any(action.action_type == "run_clarity_cycle" for action in actions)
+
+
+def test_run_clarity_cycle_can_refresh_calendar_too(tmp_path):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    cycle_report_path = tmp_path / "reports" / "cycle.md"
+
+    result = run_clarity_cycle(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        cycle_report_path=cycle_report_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "review-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Please review this",
+                    "sender": "sender@example.invalid",
+                },
+            )
+        ),
+        calendar_transport=StaticCalendarTransport(
+            (
+                {
+                    "event_id": "family-dinner",
+                    "calendar": "family",
+                    "title": "Family dinner",
+                    "starts_at": "2026-07-10T18:00:00-05:00",
+                    "ends_at": "2026-07-10T19:00:00-05:00",
+                },
+            )
+        ),
+        refresh_calendar=True,
+        calendar="family",
+        calendar_date="2026-07-10",
+    )
+
+    assert result.calendar == "family"
+    assert result.calendar_event_count == 1
+    assert result.calendar_review_date == "2026-07-10"
+    assert "Family dinner" in result.focus_answer
+    report = cycle_report_path.read_text(encoding="utf-8")
+    assert "Calendar: family" in report
+    assert "Calendar events: 1" in report
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        latest_cycle = store.latest_run(workflow="clarity-cycle")
+    finally:
+        store.close()
+
+    assert "Read 1 calendar event(s) from family for 2026-07-10" in latest_cycle.summary
 
 
 def test_main_prints_safe_cycle_summary(tmp_path, monkeypatch, capsys):
@@ -136,6 +189,59 @@ def test_main_can_use_graph_read_transport(tmp_path, monkeypatch, capsys):
     assert "Graph review item [review]" in output
 
 
+def test_main_can_refresh_google_calendar(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_build_google_calendar_read_transport_from_config(
+        *,
+        use_bearer_auth=False,
+        **_,
+    ):
+        calls.append(use_bearer_auth)
+        return StaticCalendarTransport(
+            (
+                {
+                    "event_id": "family-dinner",
+                    "calendar": "family-calendar@example.invalid",
+                    "title": "Family dinner",
+                    "starts_at": "2026-07-10T18:00:00-05:00",
+                },
+            )
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle."
+        "build_google_calendar_read_transport_from_config",
+        fake_build_google_calendar_read_transport_from_config,
+    )
+
+    main(
+        [
+            "--refresh-calendar",
+            "--calendar",
+            "google-family",
+            "--calendar-date",
+            "2026-07-10",
+            "--google-calendar",
+            "--google-bearer",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+            "--cycle-report",
+            str(tmp_path / "reports" / "cycle.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert calls == [True]
+    assert "Calendar: google-family" in output
+    assert "Calendar events: 1" in output
+    assert "Family dinner" in output
+
+
 def test_main_writes_failure_report_and_memory(tmp_path, monkeypatch, capsys):
     _write_config(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -187,6 +293,11 @@ def test_main_rejects_graph_bearer_without_graph():
         main(["--graph-bearer"])
 
 
+def test_main_rejects_calendar_provider_without_refresh_calendar():
+    with pytest.raises(SystemExit):
+        main(["--google-calendar"])
+
+
 def _write_config(root):
     config_dir = root / "config"
     config_dir.mkdir()
@@ -206,6 +317,24 @@ def _write_config(root):
                 "trash": "Deleted Items"
               },
               "maxMessages": 25
+            },
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "family",
+                  "source": "family",
+                  "provider": "sample",
+                  "accessMode": "read"
+                },
+                {
+                  "label": "google-family",
+                  "source": "family-calendar@example.invalid",
+                  "provider": "google",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "family",
+              "maxEvents": 25
             }
           }
         }

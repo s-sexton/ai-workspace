@@ -215,6 +215,16 @@ by default. Scheduling the command is an operator/environment concern; the
 command itself does not create an operating-system scheduled task. If a cycle
 fails, it writes a sanitized failure report and exits with status `1`.
 
+To include approved read-only calendar metadata in the same cycle:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph --refresh-calendar --calendar google-family --calendar-date 2026-07-10 --google-calendar
+```
+
+The combined cycle refreshes email metadata first, refreshes the requested
+calendar metadata, and then prints the command center from local memory. It does
+not create, update, delete, or respond to calendar events.
+
 To check local setup before scheduling:
 
 ``` powershell

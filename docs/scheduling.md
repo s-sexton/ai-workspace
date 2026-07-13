@@ -56,6 +56,16 @@ memory, writes the local brief, writes `reports/clarity-cycle.md`, and prints
 the command center plus review and pending-action sections. It does not send,
 move, archive, or delete email.
 
+To run a combined email and calendar refresh manually:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph --refresh-calendar --calendar google-family --calendar-date 2026-07-10 --google-calendar
+```
+
+The combined cycle reads approved mailbox metadata, then reads approved
+calendar metadata, then prints the command center from local memory. Calendar
+refresh is read-only and does not create, update, delete, or respond to events.
+
 If the cycle fails, the command exits with status `1`, writes a failure report
 to the configured cycle report path, and records a failed `clarity-cycle` run in
 local memory when memory is available. Error text is sanitized before it is
