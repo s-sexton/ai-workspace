@@ -66,6 +66,15 @@ The combined cycle reads approved mailbox metadata, then reads approved
 calendar metadata, then prints the command center from local memory. Calendar
 refresh is read-only and does not create, update, delete, or respond to events.
 
+To print a scheduled task that runs the same combined refresh:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --refresh-calendar --calendar google-family --calendar-date 2026-07-10 --google-calendar --at 07:30
+```
+
+This still only prints the PowerShell registration script. Review it before
+running it locally.
+
 If the cycle fails, the command exits with status `1`, writes a failure report
 to the configured cycle report path, and records a failed `clarity-cycle` run in
 local memory when memory is available. Error text is sanitized before it is

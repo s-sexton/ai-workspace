@@ -240,6 +240,12 @@ To print the PowerShell commands for a daily Windows scheduled task:
 python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30
 ```
 
+To print a scheduled task that includes approved read-only calendar refresh:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --refresh-calendar --calendar google-family --calendar-date 2026-07-10 --google-calendar --at 07:30
+```
+
 Review the printed script before running it. The generated task appends console
 output to `logs/clarity-cycle.log` by default. See `docs/scheduling.md` for the
 local scheduling workflow.

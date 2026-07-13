@@ -44,7 +44,7 @@ Next useful slices:
 
 - Make feedback easier to capture from the command center: started with
   natural-language `mark ITEM_ID as noise/review` commands
-- Extend schedule-printer support for optional calendar refresh flags
+- Add richer command-center action links for feedback and approved filing
 
 ## Phase 3: Daily Command Center
 
@@ -70,6 +70,7 @@ Current implementation:
 - Source-aware calendar questions for family, work, and personal calendars
 - Explicit read-only calendar refresh before answering calendar questions
 - Combined email and calendar refresh in scheduled-friendly Clarity cycles
+- Schedule-printer support for optional calendar refresh flags
 
 ## Phase 4: Calendar Awareness
 

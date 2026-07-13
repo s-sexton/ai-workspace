@@ -24,6 +24,12 @@ def build_windows_task_scheduler_script(
     use_graph: bool = False,
     use_graph_bearer: bool = False,
     use_sample_graph: bool = False,
+    refresh_calendar: bool = False,
+    calendar: str | None = None,
+    calendar_date: str | None = None,
+    use_graph_calendar: bool = False,
+    use_google_calendar: bool = False,
+    use_google_bearer: bool = False,
     memory_path: Path | str | None = None,
     brief_path: Path | str | None = None,
     cycle_report_path: Path | str | None = None,
@@ -31,10 +37,24 @@ def build_windows_task_scheduler_script(
 ) -> str:
     """Return PowerShell commands that register one local scheduled task."""
 
-    if use_graph_bearer and not use_graph:
-        raise ValueError("use_graph_bearer requires use_graph.")
+    if use_graph_bearer and not (use_graph or use_graph_calendar):
+        raise ValueError("use_graph_bearer requires use_graph or use_graph_calendar.")
+    if use_google_bearer and not use_google_calendar:
+        raise ValueError("use_google_bearer requires use_google_calendar.")
     if use_graph and use_sample_graph:
         raise ValueError("use_graph and use_sample_graph are mutually exclusive.")
+    if use_graph_calendar and use_google_calendar:
+        raise ValueError(
+            "use_graph_calendar and use_google_calendar are mutually exclusive."
+        )
+    if calendar and not refresh_calendar:
+        raise ValueError("calendar requires refresh_calendar.")
+    if calendar_date and not refresh_calendar:
+        raise ValueError("calendar_date requires refresh_calendar.")
+    if use_graph_calendar and not refresh_calendar:
+        raise ValueError("use_graph_calendar requires refresh_calendar.")
+    if use_google_calendar and not refresh_calendar:
+        raise ValueError("use_google_calendar requires refresh_calendar.")
     if not _is_valid_time(at):
         raise ValueError("at must be in HH:mm 24-hour format.")
 
@@ -44,6 +64,12 @@ def build_windows_task_scheduler_script(
         use_graph=use_graph,
         use_graph_bearer=use_graph_bearer,
         use_sample_graph=use_sample_graph,
+        refresh_calendar=refresh_calendar,
+        calendar=calendar,
+        calendar_date=calendar_date,
+        use_graph_calendar=use_graph_calendar,
+        use_google_calendar=use_google_calendar,
+        use_google_bearer=use_google_bearer,
         memory_path=memory_path,
         brief_path=brief_path,
         cycle_report_path=cycle_report_path,
@@ -84,7 +110,7 @@ def build_windows_task_scheduler_script(
         + _ps_double_quote(task_name)
         + " -Action $Action -Trigger $Trigger "
         + "-Description "
-        + _ps_double_quote("Run one local Clarity email review cycle.")
+        + _ps_double_quote("Run one local Clarity refresh cycle.")
         + " -Force",
     ]
     return "\n".join(lines) + "\n"
@@ -102,6 +128,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             use_graph=args.graph,
             use_graph_bearer=args.graph_bearer,
             use_sample_graph=args.sample_graph,
+            refresh_calendar=args.refresh_calendar,
+            calendar=args.calendar,
+            calendar_date=args.calendar_date,
+            use_graph_calendar=args.graph_calendar,
+            use_google_calendar=args.google_calendar,
+            use_google_bearer=args.google_bearer,
             memory_path=args.memory,
             brief_path=args.brief,
             cycle_report_path=args.cycle_report,
@@ -117,6 +149,12 @@ def _cycle_command(
     use_graph: bool,
     use_graph_bearer: bool,
     use_sample_graph: bool,
+    refresh_calendar: bool,
+    calendar: str | None,
+    calendar_date: str | None,
+    use_graph_calendar: bool,
+    use_google_calendar: bool,
+    use_google_bearer: bool,
     memory_path: Path | str | None,
     brief_path: Path | str | None,
     cycle_report_path: Path | str | None,
@@ -130,6 +168,18 @@ def _cycle_command(
         parts.append("--graph-bearer")
     if use_sample_graph:
         parts.append("--sample-graph")
+    if refresh_calendar:
+        parts.append("--refresh-calendar")
+    if calendar:
+        parts.extend(("--calendar", _ps_single_quote(calendar)))
+    if calendar_date:
+        parts.extend(("--calendar-date", _ps_single_quote(calendar_date)))
+    if use_graph_calendar:
+        parts.append("--graph-calendar")
+    if use_google_calendar:
+        parts.append("--google-calendar")
+    if use_google_bearer:
+        parts.append("--google-bearer")
     if memory_path is not None:
         parts.extend(("--memory", _ps_single_quote(str(memory_path))))
     if brief_path is not None:
@@ -170,6 +220,37 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
     )
+    parser.add_argument(
+        "--refresh-calendar",
+        action="store_true",
+        help="Also schedule approved read-only calendar metadata refresh.",
+    )
+    parser.add_argument(
+        "--calendar",
+        default=None,
+        help="Approved calendar label to refresh.",
+    )
+    parser.add_argument(
+        "--calendar-date",
+        default=None,
+        help="Calendar date to refresh in YYYY-MM-DD format.",
+    )
+    calendar_group = parser.add_mutually_exclusive_group()
+    calendar_group.add_argument(
+        "--graph-calendar",
+        action="store_true",
+        help="Schedule approved Microsoft Graph calendar metadata reads.",
+    )
+    calendar_group.add_argument(
+        "--google-calendar",
+        action="store_true",
+        help="Schedule approved Google Calendar metadata reads.",
+    )
+    parser.add_argument(
+        "--google-bearer",
+        action="store_true",
+        help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials.",
+    )
     parser.add_argument("--memory", default=None)
     parser.add_argument("--brief", default=None)
     parser.add_argument("--cycle-report", default="reports/clarity-cycle.md")
@@ -184,8 +265,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Do not add scheduled task output redirection.",
     )
     args = parser.parse_args(argv)
-    if args.graph_bearer and not args.graph:
-        parser.error("--graph-bearer requires --graph.")
+    if args.graph_bearer and not (args.graph or args.graph_calendar):
+        parser.error("--graph-bearer requires --graph or --graph-calendar.")
+    if args.google_bearer and not args.google_calendar:
+        parser.error("--google-bearer requires --google-calendar.")
+    if args.calendar and not args.refresh_calendar:
+        parser.error("--calendar requires --refresh-calendar.")
+    if args.calendar_date and not args.refresh_calendar:
+        parser.error("--calendar-date requires --refresh-calendar.")
+    if args.graph_calendar and not args.refresh_calendar:
+        parser.error("--graph-calendar requires --refresh-calendar.")
+    if args.google_calendar and not args.refresh_calendar:
+        parser.error("--google-calendar requires --refresh-calendar.")
     if not _is_valid_time(args.at):
         parser.error("--at must be in HH:mm 24-hour format.")
     if args.no_log:

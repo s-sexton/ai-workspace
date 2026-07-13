@@ -62,6 +62,27 @@ def test_build_windows_task_scheduler_script_can_disable_log_redirection(tmp_pat
     assert "--sample-graph" in script
 
 
+def test_build_windows_task_scheduler_script_can_include_calendar_refresh(tmp_path):
+    script = build_windows_task_scheduler_script(
+        root=tmp_path,
+        mailbox="clarity@sendthisfile.ai",
+        use_graph=True,
+        refresh_calendar=True,
+        calendar="google-family",
+        calendar_date="2026-07-10",
+        use_google_calendar=True,
+        use_google_bearer=True,
+    )
+
+    assert "--mailbox 'clarity@sendthisfile.ai'" in script
+    assert "--graph" in script
+    assert "--refresh-calendar" in script
+    assert "--calendar 'google-family'" in script
+    assert "--calendar-date '2026-07-10'" in script
+    assert "--google-calendar" in script
+    assert "--google-bearer" in script
+
+
 def test_build_windows_task_scheduler_script_rejects_invalid_flags(tmp_path):
     with pytest.raises(ValueError):
         build_windows_task_scheduler_script(root=tmp_path, use_graph_bearer=True)
@@ -75,6 +96,23 @@ def test_build_windows_task_scheduler_script_rejects_invalid_flags(tmp_path):
 
     with pytest.raises(ValueError):
         build_windows_task_scheduler_script(root=tmp_path, at="25:00")
+
+    with pytest.raises(ValueError):
+        build_windows_task_scheduler_script(root=tmp_path, use_google_bearer=True)
+
+    with pytest.raises(ValueError):
+        build_windows_task_scheduler_script(
+            root=tmp_path,
+            refresh_calendar=True,
+            use_graph_calendar=True,
+            use_google_calendar=True,
+        )
+
+    with pytest.raises(ValueError):
+        build_windows_task_scheduler_script(root=tmp_path, calendar="family")
+
+    with pytest.raises(ValueError):
+        build_windows_task_scheduler_script(root=tmp_path, use_google_calendar=True)
 
 
 def test_main_prints_schedule_script(tmp_path, monkeypatch, capsys):
@@ -94,6 +132,39 @@ def test_main_prints_schedule_script(tmp_path, monkeypatch, capsys):
     assert "*>> 'logs/clarity-cycle.log'" in output
 
 
+def test_main_prints_schedule_script_with_calendar_refresh(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "--mailbox",
+            "clarity@sendthisfile.ai",
+            "--graph",
+            "--refresh-calendar",
+            "--calendar",
+            "google-family",
+            "--calendar-date",
+            "2026-07-10",
+            "--google-calendar",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "--mailbox 'clarity@sendthisfile.ai'" in output
+    assert "--graph" in output
+    assert "--refresh-calendar" in output
+    assert "--calendar 'google-family'" in output
+    assert "--calendar-date '2026-07-10'" in output
+    assert "--google-calendar" in output
+
+
 def test_main_can_disable_schedule_log(tmp_path, monkeypatch, capsys):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
@@ -110,6 +181,16 @@ def test_main_can_disable_schedule_log(tmp_path, monkeypatch, capsys):
 def test_main_rejects_graph_bearer_without_graph():
     with pytest.raises(SystemExit):
         main(["--graph-bearer"])
+
+
+def test_main_rejects_calendar_provider_without_refresh_calendar():
+    with pytest.raises(SystemExit):
+        main(["--google-calendar"])
+
+
+def test_main_rejects_google_bearer_without_google_calendar():
+    with pytest.raises(SystemExit):
+        main(["--refresh-calendar", "--google-bearer"])
 
 
 def test_main_rejects_invalid_time():
