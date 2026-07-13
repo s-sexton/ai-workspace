@@ -18,6 +18,11 @@ from assistant.src.email_preferences import (
     remove_email_sender_preference,
 )
 from assistant.src.record_feedback import record_memory_feedback
+from assistant.src.run_calendar_review import (
+    build_google_calendar_read_transport_from_config,
+    build_graph_calendar_read_transport_from_config,
+    run_calendar_review,
+)
 from assistant.src.run_email_review import (
     build_graph_read_transport_from_config,
     run_email_review,
@@ -36,7 +41,11 @@ def answer_clarity_request(
     mailbox: str | None = None,
     use_graph: bool = False,
     use_graph_bearer: bool = False,
+    use_google: bool = False,
+    use_google_bearer: bool = False,
     use_sample_graph: bool = False,
+    refresh_calendar: bool = False,
+    calendar: str | None = None,
     brief_path: Path | str | None = None,
     current_date: date | None = None,
 ) -> str:
@@ -96,6 +105,19 @@ def answer_clarity_request(
             current_date=current_date,
         )
         calendar_source = calendar_source_for_request(request)
+        if refresh_calendar:
+            _refresh_calendar_memory(
+                root=root,
+                calendar=calendar or calendar_source,
+                review_date=calendar_date,
+                limit=limit,
+                memory_path=memory_path,
+                brief_path=brief_path,
+                use_graph=use_graph,
+                use_graph_bearer=use_graph_bearer,
+                use_google=use_google,
+                use_google_bearer=use_google_bearer,
+            )
     return answer_memory_question(
         intent,
         root=root,
@@ -118,7 +140,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             mailbox=args.mailbox,
             use_graph=args.graph,
             use_graph_bearer=args.graph_bearer,
+            use_google=args.google,
+            use_google_bearer=args.google_bearer,
             use_sample_graph=args.sample_graph,
+            refresh_calendar=args.refresh_calendar,
+            calendar=args.calendar,
             brief_path=args.brief,
         )
         return
@@ -132,7 +158,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             mailbox=args.mailbox,
             use_graph=args.graph,
             use_graph_bearer=args.graph_bearer,
+            use_google=args.google,
+            use_google_bearer=args.google_bearer,
             use_sample_graph=args.sample_graph,
+            refresh_calendar=args.refresh_calendar,
+            calendar=args.calendar,
             brief_path=args.brief,
         )
     )
@@ -339,9 +369,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Run the configured email review before answering.",
     )
     parser.add_argument(
+        "--refresh-calendar",
+        action="store_true",
+        help="Run the configured read-only calendar review before answering.",
+    )
+    parser.add_argument(
         "--mailbox",
         default=None,
         help="Approved mailbox to refresh before answering.",
+    )
+    parser.add_argument(
+        "--calendar",
+        default=None,
+        help="Approved calendar label to refresh before answering.",
     )
     source_group = parser.add_mutually_exclusive_group()
     source_group.add_argument(
@@ -352,18 +392,36 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     source_group.add_argument(
         "--graph",
         action="store_true",
-        help="Read approved mailbox metadata from Microsoft Graph during refresh.",
+        help="Read approved Microsoft Graph metadata during refresh.",
+    )
+    source_group.add_argument(
+        "--google",
+        action="store_true",
+        help="Read approved Google Calendar metadata during calendar refresh.",
     )
     parser.add_argument(
         "--graph-bearer",
         action="store_true",
         help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
     )
+    parser.add_argument(
+        "--google-bearer",
+        action="store_true",
+        help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials.",
+    )
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
-    if (args.sample_graph or args.graph) and not args.refresh_email:
-        parser.error("--sample-graph and --graph require --refresh-email.")
+    if args.google_bearer and not args.google:
+        parser.error("--google-bearer requires --google.")
+    if args.sample_graph and not args.refresh_email:
+        parser.error("--sample-graph requires --refresh-email.")
+    if args.graph and not (args.refresh_email or args.refresh_calendar):
+        parser.error("--graph requires --refresh-email or --refresh-calendar.")
+    if args.google and not args.refresh_calendar:
+        parser.error("--google requires --refresh-calendar.")
+    if args.calendar and not args.refresh_calendar:
+        parser.error("--calendar requires --refresh-calendar.")
     return args
 
 
@@ -375,7 +433,11 @@ def _run_prompt(
     mailbox: str | None,
     use_graph: bool,
     use_graph_bearer: bool,
+    use_google: bool,
+    use_google_bearer: bool,
     use_sample_graph: bool,
+    refresh_calendar: bool,
+    calendar: str | None,
     brief_path: Path | str | None,
 ) -> None:
     print_text("Clarity local prompt. Type 'exit' or 'quit' to leave.")
@@ -401,7 +463,11 @@ def _run_prompt(
                 mailbox=mailbox,
                 use_graph=use_graph,
                 use_graph_bearer=use_graph_bearer,
+                use_google=use_google,
+                use_google_bearer=use_google_bearer,
                 use_sample_graph=use_sample_graph,
+                refresh_calendar=refresh_calendar,
+                calendar=calendar,
                 brief_path=brief_path,
             )
         )
@@ -434,6 +500,43 @@ def _refresh_email_memory(
         brief_output_path=brief_path,
         transport=transport,
         use_sample_graph=use_sample_graph,
+    )
+
+
+def _refresh_calendar_memory(
+    *,
+    root: Path | str | None,
+    calendar: str | None,
+    review_date: str | None,
+    limit: int,
+    memory_path: Path | str,
+    brief_path: Path | str | None,
+    use_graph: bool,
+    use_graph_bearer: bool,
+    use_google: bool,
+    use_google_bearer: bool,
+) -> None:
+    transport = None
+    if use_graph:
+        transport = build_graph_calendar_read_transport_from_config(
+            root=root,
+            use_bearer_auth=use_graph_bearer,
+        )
+    if use_google:
+        transport = build_google_calendar_read_transport_from_config(
+            root=root,
+            use_bearer_auth=use_google_bearer,
+        )
+    run_calendar_review(
+        root=root,
+        calendar=calendar or "",
+        review_date=review_date,
+        limit=limit,
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=transport,
+        use_graph=use_graph,
+        use_google=use_google,
     )
 
 

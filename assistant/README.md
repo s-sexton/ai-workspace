@@ -348,6 +348,17 @@ python -m assistant.src.run_calendar_review --calendar google-family --date 2026
 This live Google mode is still read-only. It records local calendar event
 metadata and does not create, update, delete, or respond to calendar events.
 
+To refresh approved calendar metadata before answering a calendar question:
+
+``` powershell
+python -m assistant.src.clarity "What is on my family calendar today?" --refresh-calendar --calendar google-family --google
+python -m assistant.src.clarity "What is on my work calendar tomorrow?" --refresh-calendar --calendar work --graph
+```
+
+This performs the same read-only calendar review first, records local memory,
+and then answers from memory. It does not create, update, delete, or respond to
+calendar events.
+
 To dry-run approved email moves and record a local audit action:
 
 ``` powershell

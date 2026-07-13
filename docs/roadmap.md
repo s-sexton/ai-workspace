@@ -44,7 +44,7 @@ Next useful slices:
 
 - Make feedback easier to capture from the command center: started with
   natural-language `mark ITEM_ID as noise/review` commands
-- Add calendar refresh hooks before answering calendar questions
+- Add combined refresh workflows for daily command-center generation
 
 ## Phase 3: Daily Command Center
 
@@ -68,6 +68,7 @@ Current implementation:
 - Compact remembered calendar agenda with source, start/end, and location
 - Date-aware calendar questions for today, tomorrow, and explicit ISO dates
 - Source-aware calendar questions for family, work, and personal calendars
+- Explicit read-only calendar refresh before answering calendar questions
 
 ## Phase 4: Calendar Awareness
 
@@ -81,6 +82,7 @@ Calendar support begins as read-only metadata:
 - Surface calendar items in the command center as a compact remembered agenda
 - Filter remembered calendar items by simple requested date
 - Filter remembered calendar items by simple requested source
+- Refresh approved read-only calendar metadata before answering when requested
 - Avoid creating, updating, deleting, or responding to calendar events
 
 Live calendar providers require a separate design and approval before use.

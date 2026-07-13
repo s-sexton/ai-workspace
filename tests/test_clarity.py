@@ -23,6 +23,16 @@ class FakeEmailReviewResult:
     proposed_action_count: int
 
 
+@dataclass(frozen=True)
+class FakeCalendarReviewResult:
+    memory_path: Path
+    brief_path: Path
+    run_id: str
+    calendar: str
+    review_date: str
+    event_count: int
+
+
 def test_clarity_answers_emails_needing_attention(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -334,6 +344,42 @@ def test_clarity_answers_calendar_question_from_memory(tmp_path):
     assert "Start: 2026-07-10T18:00:00-05:00" in answer
 
 
+def test_clarity_can_refresh_calendar_before_answering(tmp_path, monkeypatch):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    calls = []
+
+    def fake_run_calendar_review(**kwargs):
+        calls.append(kwargs)
+        _seed_memory(memory_path)
+        return FakeCalendarReviewResult(
+            memory_path=memory_path,
+            brief_path=tmp_path / "reports" / "brief.md",
+            run_id="run-1",
+            calendar="family",
+            review_date="2026-07-10",
+            event_count=1,
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.clarity.run_calendar_review",
+        fake_run_calendar_review,
+    )
+
+    answer = answer_clarity_request(
+        "What is on my family calendar today?",
+        root=tmp_path,
+        memory_path=memory_path,
+        refresh_calendar=True,
+        current_date=date(2026, 7, 10),
+    )
+
+    assert "# Calendar Items" in answer
+    assert "Family dinner" in answer
+    assert calls[0]["calendar"] == "family"
+    assert calls[0]["review_date"] == "2026-07-10"
+    assert calls[0]["memory_path"] == memory_path
+
+
 def test_main_prints_clarity_answer(tmp_path, monkeypatch, capsys):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -443,7 +489,62 @@ def test_main_can_refresh_email_with_graph_transport(tmp_path, monkeypatch, caps
     assert "# Items Marked For Review" in output
 
 
-def test_main_rejects_graph_refresh_without_refresh_email():
+def test_main_can_refresh_calendar_with_google_transport(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    google_calls = []
+    review_calls = []
+
+    def fake_build_google_calendar_read_transport_from_config(
+        *,
+        use_bearer_auth=False,
+        **_,
+    ):
+        google_calls.append(use_bearer_auth)
+        return object()
+
+    def fake_run_calendar_review(**kwargs):
+        review_calls.append(kwargs)
+        _seed_memory(memory_path)
+        return FakeCalendarReviewResult(
+            memory_path=memory_path,
+            brief_path=tmp_path / "reports" / "brief.md",
+            run_id="run-1",
+            calendar="family",
+            review_date="2026-07-10",
+            event_count=1,
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.clarity.build_google_calendar_read_transport_from_config",
+        fake_build_google_calendar_read_transport_from_config,
+    )
+    monkeypatch.setattr(
+        "assistant.src.clarity.run_calendar_review",
+        fake_run_calendar_review,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "What is on my family calendar 2026-07-10?",
+            "--refresh-calendar",
+            "--calendar",
+            "family",
+            "--google",
+            "--google-bearer",
+            "--memory",
+            str(memory_path),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert google_calls == [True]
+    assert review_calls[0]["transport"] is not None
+    assert review_calls[0]["use_google"] is True
+    assert "Family dinner" in output
+
+
+def test_main_rejects_graph_refresh_without_refresh_mode():
     with pytest.raises(SystemExit):
         main(["What emails need immediate attention?", "--graph"])
 
@@ -451,6 +552,11 @@ def test_main_rejects_graph_refresh_without_refresh_email():
 def test_main_rejects_graph_bearer_without_graph():
     with pytest.raises(SystemExit):
         main(["What emails need immediate attention?", "--refresh-email", "--graph-bearer"])
+
+
+def test_main_rejects_google_without_refresh_calendar():
+    with pytest.raises(SystemExit):
+        main(["What is on my calendar?", "--google"])
 
 
 def _seed_memory(memory_path):
