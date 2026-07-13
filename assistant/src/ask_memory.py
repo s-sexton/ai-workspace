@@ -337,11 +337,65 @@ def _format_focus_plan(store: DuckDbMemoryStore, *, limit: int) -> str:
 def _format_command_center(store: DuckDbMemoryStore, *, limit: int) -> str:
     lines = ["# Clarity Command Center", ""]
     lines.append(_format_focus_plan(store, limit=limit))
+    lines.extend(("", _format_command_center_actions(store, limit=limit)))
     lines.extend(("", _format_calendar_items(store, limit=limit)))
     lines.extend(("", _format_command_center_cleanup(store, limit=limit)))
     lines.extend(("", _format_pending_actions(store, limit=limit)))
     lines.extend(("", _format_email_move_plan(store, limit=limit)))
     lines.extend(("", _format_open_tasks(store)))
+    return "\n".join(lines)
+
+
+def _format_command_center_actions(store: DuckDbMemoryStore, *, limit: int) -> str:
+    pending_actions = store.pending_actions(limit=limit)
+    review_items = store.recent_memory_by_label("review", limit=limit)
+    approved_email_moves = _approved_email_move_actions(store, limit=limit)
+
+    lines = ["# Command Center Actions", ""]
+    if not any((pending_actions, review_items, approved_email_moves)):
+        lines.append("No command-center actions found.")
+        return "\n".join(lines)
+
+    if review_items:
+        lines.append("## Teach From Review Items")
+        for record in review_items[:limit]:
+            lines.append(f"- {record.subject}")
+            lines.append(
+                "  Mark noise: "
+                f"python -m assistant.src.record_feedback {record.item_id} "
+                'noise "Why this is noise"'
+            )
+            lines.append(
+                "  Keep review: "
+                f"python -m assistant.src.record_feedback {record.item_id} "
+                'review "Why this needs attention"'
+            )
+
+    if pending_actions:
+        if review_items:
+            lines.append("")
+        lines.append("## Approvals")
+        for action in pending_actions[:limit]:
+            subject = f" - {action.item_subject}" if action.item_subject else ""
+            lines.append(f"- {action.action_type}{subject}")
+            lines.append(
+                "  Approve: "
+                f"python -m assistant.src.update_action {action.action_id} approved"
+            )
+            lines.append(
+                "  Reject: "
+                f"python -m assistant.src.update_action {action.action_id} rejected"
+            )
+
+    if approved_email_moves:
+        if review_items or pending_actions:
+            lines.append("")
+        lines.append("## Approved Filing")
+        lines.append("- Review dry-run:")
+        lines.append("  python -m assistant.src.execute_email_moves")
+        lines.append("- Full cleanup plan:")
+        lines.append("  python -m assistant.src.ask_memory email-cleanup-plan")
+
     return "\n".join(lines)
 
 

@@ -42,9 +42,7 @@ Status: in progress.
 
 Next useful slices:
 
-- Make feedback easier to capture from the command center: started with
-  natural-language `mark ITEM_ID as noise/review` commands
-- Add richer command-center action links for feedback and approved filing
+- Add command-center filtering for "today" views
 
 ## Phase 3: Daily Command Center
 
@@ -65,6 +63,7 @@ Current implementation:
 - `ask_memory command-center`
 - `clarity "What should I focus on?"`
 - `clarity "Give me my command center."`
+- Copy-ready local commands for feedback, approvals, and filing dry-runs
 - Compact remembered calendar agenda with source, start/end, and location
 - Date-aware calendar questions for today, tomorrow, and explicit ISO dates
 - Source-aware calendar questions for family, work, and personal calendars

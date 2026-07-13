@@ -160,6 +160,14 @@ def test_answers_command_center_and_calendar_items(tmp_path):
 
     assert "# Clarity Command Center" in command_center
     assert "# Clarity Focus Plan" in command_center
+    assert "# Command Center Actions" in command_center
+    assert "## Teach From Review Items" in command_center
+    assert "python -m assistant.src.record_feedback" in command_center
+    assert 'noise "Why this is noise"' in command_center
+    assert "## Approvals" in command_center
+    assert "python -m assistant.src.update_action" in command_center
+    assert "## Approved Filing" in command_center
+    assert "python -m assistant.src.execute_email_moves" in command_center
     assert "# Calendar Items" in command_center
     assert "# Email Cleanup" in command_center
     assert "- Approved moves ready for cleanup review: 1" in command_center

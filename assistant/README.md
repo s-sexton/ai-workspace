@@ -158,6 +158,10 @@ The command center includes a compact email cleanup section with approved moves
 ready for cleanup review, proposed moves still needing approval, and the command
 for the full cleanup plan.
 
+The command center also includes copy-ready local commands for teaching Clarity
+from review items, approving or rejecting pending actions, and reviewing
+approved filing dry-runs. These commands still require the human to run them.
+
 The command center also includes a compact calendar agenda from local Clarity
 memory. It surfaces remembered event count, source calendar, start/end times,
 and location when those metadata fields were captured.
