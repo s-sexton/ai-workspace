@@ -120,12 +120,12 @@ def answer_memory_question(
                 store.recent_memory(limit=limit),
             )
         if question == "review-items":
-            return _format_recent_items(
+            return _format_review_items(
                 "Items Marked For Review",
                 store.recent_memory_by_label("review", limit=limit),
             )
         if question == "noise-items":
-            return _format_recent_items(
+            return _format_review_items(
                 "Items Marked As Noise",
                 store.recent_memory_by_label("noise", limit=limit),
             )
@@ -555,6 +555,41 @@ def _format_recent_items(title: str, records) -> str:
         if record.reason:
             lines.append(f"  Reason: {record.reason}")
     return "\n".join(lines)
+
+
+def _format_review_items(title: str, records) -> str:
+    if not records:
+        return f"# {title}\n\nNo matching items found in Clarity memory."
+
+    lines = [f"# {title}", "", f"- Total: {len(records)}"]
+    for source_name, source_records in _group_records_by_source(records):
+        lines.extend(("", f"## {source_name}"))
+        for record in source_records:
+            label = f" [{record.label}]" if record.label else ""
+            lines.append(f"- {record.subject}{label}")
+            lines.append(f"  ID: {record.item_id}")
+            if record.reason:
+                lines.append(f"  Why: {record.reason}")
+    return "\n".join(lines)
+
+
+def _group_records_by_source(records) -> tuple[tuple[str, tuple], ...]:
+    source_names = []
+    for record in records:
+        source_name = f"{record.display_name} ({record.source_type})"
+        if source_name not in source_names:
+            source_names.append(source_name)
+    return tuple(
+        (
+            source_name,
+            tuple(
+                record
+                for record in records
+                if f"{record.display_name} ({record.source_type})" == source_name
+            ),
+        )
+        for source_name in source_names
+    )
 
 
 def _format_open_tasks(store: DuckDbMemoryStore) -> str:
