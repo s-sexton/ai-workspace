@@ -350,7 +350,8 @@ python -m assistant.src.approve_email_moves --mailbox sesexton@gmail.com --class
 The first command is a dry-run preview. The `--execute` form only changes local
 approval status from `required` to `approved`; it does not move, archive, trash,
 or delete email. Use `--batch-size` and `--batch` to work through large cleanup
-sets in smaller chunks.
+sets in smaller chunks. Batch previews include sender and domain summaries to
+make bulk decisions easier to review.
 
 To run the first local sample calendar review:
 

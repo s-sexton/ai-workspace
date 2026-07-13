@@ -142,6 +142,7 @@ class PendingActionRecord:
     item_id: str | None
     item_external_id: str | None
     item_subject: str | None
+    item_sender_or_owner: str | None
     item_type: str | None
     source_type: str | None
     source_scope_label: str | None
@@ -1005,8 +1006,9 @@ class DuckDbMemoryStore:
         rows = self._connection.execute(
             """
             SELECT a.action_id, a.run_id, a.item_id, i.external_id, i.subject,
-                   i.item_type, s.source_type, s.scope_label, a.action_type,
-                   a.approval_status, a.action_target, a.result, a.created_at
+                   i.sender_or_owner, i.item_type, s.source_type, s.scope_label,
+                   a.action_type, a.approval_status, a.action_target, a.result,
+                   a.created_at
             FROM assistant_actions a
             LEFT JOIN items_seen i ON i.item_id = a.item_id
             LEFT JOIN sources s ON s.source_id = i.source_id

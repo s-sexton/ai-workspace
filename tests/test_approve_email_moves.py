@@ -11,6 +11,7 @@ def test_approve_email_moves_dry_run_lists_matching_pending_moves(tmp_path):
         mailbox="sesexton@gmail.com",
         message_id="pending-1",
         action_type="propose_email_move_noise",
+        sender="newsletter@example.com",
     )
 
     result = approve_email_moves(root=tmp_path, memory_path=memory_path)
@@ -21,6 +22,10 @@ def test_approve_email_moves_dry_run_lists_matching_pending_moves(tmp_path):
     assert "No approvals were changed." in result
     assert "python -m assistant.src.approve_email_moves --execute" in result
     assert "pending-1 in sesexton@gmail.com to Clarity/Noise" in result
+    assert "## Batch Summary" in result
+    assert "- newsletter@example.com: 1" in result
+    assert "- example.com: 1" in result
+    assert "Sender: newsletter@example.com" in result
     assert f"Action: {action_id}" in result
 
     store = DuckDbMemoryStore(memory_path)
@@ -76,6 +81,7 @@ def test_approve_email_moves_execute_updates_matching_actions(tmp_path):
         mailbox="sesexton@gmail.com",
         message_id="pending-1",
         action_type="propose_email_move_noise",
+        sender="one@example.com",
     )
 
     result = approve_email_moves(
@@ -118,12 +124,14 @@ def test_approve_email_moves_can_preview_one_batch(tmp_path):
         mailbox="sesexton@gmail.com",
         message_id="pending-2",
         action_type="propose_email_move_noise",
+        sender="two@example.com",
     )
     _seed_email_move(
         memory_path,
         mailbox="sesexton@gmail.com",
         message_id="pending-3",
         action_type="propose_email_move_noise",
+        sender="three@other.example",
     )
 
     result = approve_email_moves(
@@ -142,6 +150,8 @@ def test_approve_email_moves_can_preview_one_batch(tmp_path):
     assert "pending-3" in result
     assert "pending-2" in result
     assert "pending-1" not in result
+    assert "- other.example: 1" in result
+    assert "- example.com: 1" in result
 
 
 def test_approve_email_moves_execute_only_selected_batch(tmp_path):
@@ -258,6 +268,7 @@ def _seed_email_move(
     action_type,
     target_folder="Clarity/Noise",
     approval_status="required",
+    sender="sender@example.invalid",
 ):
     memory_path.parent.mkdir(parents=True, exist_ok=True)
     store = DuckDbMemoryStore(memory_path)
@@ -274,6 +285,7 @@ def _seed_email_move(
             external_id=message_id,
             item_type="email_message",
             subject="Cleanup message",
+            sender_or_owner=sender,
             first_seen_run_id=run.run_id,
         )
         action = store.record_assistant_action(

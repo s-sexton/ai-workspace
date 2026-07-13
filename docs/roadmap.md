@@ -41,11 +41,12 @@ Status: in progress.
 - Surface email cleanup status in the daily command center
 - Bulk-approve matching pending email move suggestions in local memory
 - Review and approve mailbox cleanup suggestions in bounded batches
+- Summarize cleanup approval batches by sender and domain
 
 Next useful slices:
 
 - Add command-center filtering for "today" views
-- Add cleanup batch summaries by sender and domain
+- Add cleanup batch summaries by learned preference matches
 
 ## Phase 3: Daily Command Center
 

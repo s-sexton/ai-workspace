@@ -164,6 +164,10 @@ def _format_result(
         lines.append("```")
 
     lines.append("")
+    lines.append("## Batch Summary")
+    lines.extend(_summary_lines(actions))
+
+    lines.append("")
     lines.append("## Moves")
     for action in actions:
         lines.append(
@@ -172,6 +176,8 @@ def _format_result(
         )
         if action.item_subject:
             lines.append(f"  Subject: {action.item_subject}")
+        if action.item_sender_or_owner:
+            lines.append(f"  Sender: {action.item_sender_or_owner}")
         lines.append(f"  Action: {action.action_id}")
     return "\n".join(lines)
 
@@ -187,6 +193,34 @@ def _select_batch(
     start = (batch - 1) * batch_size
     end = start + batch_size
     return actions[start:end]
+
+
+def _summary_lines(actions: tuple[PendingActionRecord, ...]) -> list[str]:
+    senders = _counts(
+        action.item_sender_or_owner or "unknown sender" for action in actions
+    )
+    domains = _counts(
+        _sender_domain(action.item_sender_or_owner) for action in actions
+    )
+    lines = ["### Senders"]
+    lines.extend(f"- {sender}: {count}" for sender, count in senders)
+    lines.append("")
+    lines.append("### Domains")
+    lines.extend(f"- {domain}: {count}" for domain, count in domains)
+    return lines
+
+
+def _counts(values) -> list[tuple[str, int]]:
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _sender_domain(sender: str | None) -> str:
+    if not sender or "@" not in sender:
+        return "unknown domain"
+    return sender.rsplit("@", maxsplit=1)[1].lower()
 
 
 def _summary_text(actions: tuple[PendingActionRecord, ...], *, execute: bool) -> str:
