@@ -163,7 +163,9 @@ memory. It surfaces remembered event count, source calendar, start/end times,
 and location when those metadata fields were captured.
 
 Calendar questions can filter remembered events for simple dates such as
-`today`, `tomorrow`, or an explicit `YYYY-MM-DD` date.
+`today`, `tomorrow`, or an explicit `YYYY-MM-DD` date. They can also filter by
+simple calendar source phrases such as `family calendar`, `work calendar`, or
+`personal calendar`.
 
 To inspect the bounded context intended for future LLM summarization:
 

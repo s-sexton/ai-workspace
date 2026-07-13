@@ -48,6 +48,7 @@ def answer_memory_question(
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     limit: int = 10,
     calendar_date: str | None = None,
+    calendar_source: str | None = None,
 ) -> str:
     """Answer a supported question from local Clarity memory."""
 
@@ -90,6 +91,7 @@ def answer_memory_question(
                 store,
                 limit=limit,
                 calendar_date=calendar_date,
+                calendar_source=calendar_source,
             )
         if question == "last-cycle":
             return _answer_latest_run(
@@ -348,6 +350,7 @@ def _format_calendar_items(
     *,
     limit: int,
     calendar_date: str | None = None,
+    calendar_source: str | None = None,
 ) -> str:
     records = [
         record
@@ -360,18 +363,31 @@ def _format_calendar_items(
             for record in records
             if _calendar_details(record.reason or "").get("date") == calendar_date
         ]
+    if calendar_source:
+        clean_source = _normalize_calendar_source(calendar_source)
+        records = [
+            record
+            for record in records
+            if clean_source in _normalize_calendar_source(record.display_name)
+        ]
     records = sorted(records, key=_calendar_sort_key)[:limit]
     if not records:
-        if calendar_date:
+        filters = _calendar_filter_description(
+            calendar_date=calendar_date,
+            calendar_source=calendar_source,
+        )
+        if filters:
             return (
                 "# Calendar Items\n\n"
-                f"No calendar items found in Clarity memory for {calendar_date}."
+                f"No calendar items found in Clarity memory for {filters}."
             )
         return "# Calendar Items\n\nNo calendar items found in Clarity memory."
 
     lines = ["# Calendar Items", ""]
     if calendar_date:
         lines.append(f"- Date: {calendar_date}")
+    if calendar_source:
+        lines.append(f"- Source filter: {calendar_source}")
     lines.append(f"- Remembered calendar events: {len(records)}")
     for record in records:
         details = _calendar_details(record.reason or "")
@@ -429,6 +445,37 @@ def calendar_date_for_request(
     if match:
         return match.group(1)
     return None
+
+
+def calendar_source_for_request(request: str) -> str | None:
+    """Return a simple calendar source filter from a natural-language request."""
+
+    clean_request = " ".join(request.lower().strip().split())
+    if not clean_request:
+        return None
+    for source in ("family", "work", "personal"):
+        if f"{source} calendar" in clean_request:
+            return source
+    return None
+
+
+def _calendar_filter_description(
+    *,
+    calendar_date: str | None,
+    calendar_source: str | None,
+) -> str | None:
+    filters = []
+    if calendar_source:
+        filters.append(f"source {calendar_source}")
+    if calendar_date:
+        filters.append(calendar_date)
+    if not filters:
+        return None
+    return " and ".join(filters)
+
+
+def _normalize_calendar_source(value: str) -> str:
+    return " ".join(value.lower().strip().split())
 
 
 def _format_recent_items(title: str, records) -> str:

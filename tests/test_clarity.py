@@ -329,6 +329,7 @@ def test_clarity_answers_calendar_question_from_memory(tmp_path):
 
     assert "# Calendar Items" in answer
     assert "- Date: 2026-07-10" in answer
+    assert "- Source filter: family" in answer
     assert "Family dinner" in answer
     assert "Start: 2026-07-10T18:00:00-05:00" in answer
 

@@ -151,6 +151,12 @@ def test_answers_command_center_and_calendar_items(tmp_path):
         memory_path=memory_path,
         calendar_date="2026-07-10",
     )
+    family_calendar_items = answer_memory_question(
+        "calendar-items",
+        root=tmp_path,
+        memory_path=memory_path,
+        calendar_source="family",
+    )
 
     assert "# Clarity Command Center" in command_center
     assert "# Clarity Focus Plan" in command_center
@@ -166,6 +172,8 @@ def test_answers_command_center_and_calendar_items(tmp_path):
     assert "Start: 2026-07-10T18:00:00-05:00" in calendar_items
     assert "- Date: 2026-07-10" in today_calendar_items
     assert "Family dinner" in today_calendar_items
+    assert "- Source filter: family" in family_calendar_items
+    assert "Family dinner" in family_calendar_items
 
 
 def test_answers_llm_context(tmp_path):
