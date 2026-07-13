@@ -105,6 +105,109 @@ def test_approve_email_moves_execute_updates_matching_actions(tmp_path):
     assert recent_actions[0].action_type == "approve_email_moves"
 
 
+def test_approve_email_moves_can_preview_one_batch(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_email_move(
+        memory_path,
+        mailbox="sesexton@gmail.com",
+        message_id="pending-1",
+        action_type="propose_email_move_noise",
+    )
+    _seed_email_move(
+        memory_path,
+        mailbox="sesexton@gmail.com",
+        message_id="pending-2",
+        action_type="propose_email_move_noise",
+    )
+    _seed_email_move(
+        memory_path,
+        mailbox="sesexton@gmail.com",
+        message_id="pending-3",
+        action_type="propose_email_move_noise",
+    )
+
+    result = approve_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        mailbox="sesexton@gmail.com",
+        batch_size=2,
+        batch=1,
+    )
+
+    assert "- Matching pending moves: 3" in result
+    assert "- Batch: 1" in result
+    assert "- Batch size: 2" in result
+    assert "- Moves in this batch: 2" in result
+    assert "--batch-size 2 --batch 1" in result
+    assert "pending-3" in result
+    assert "pending-2" in result
+    assert "pending-1" not in result
+
+
+def test_approve_email_moves_execute_only_selected_batch(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    first_action = _seed_email_move(
+        memory_path,
+        mailbox="sesexton@gmail.com",
+        message_id="pending-1",
+        action_type="propose_email_move_noise",
+    )
+    _seed_email_move(
+        memory_path,
+        mailbox="sesexton@gmail.com",
+        message_id="pending-2",
+        action_type="propose_email_move_noise",
+    )
+    _seed_email_move(
+        memory_path,
+        mailbox="sesexton@gmail.com",
+        message_id="pending-3",
+        action_type="propose_email_move_noise",
+    )
+
+    result = approve_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        mailbox="sesexton@gmail.com",
+        batch_size=1,
+        batch=3,
+        execute=True,
+    )
+
+    assert "- Matching pending moves: 3" in result
+    assert "- Moves in this batch: 1" in result
+    assert f"Action: {first_action}" in result
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        pending = store.pending_actions()
+        approved = store.actions_by_approval_status("approved")
+    finally:
+        store.close()
+
+    assert len(pending) == 2
+    assert approved[0].action_id == first_action
+
+
+def test_approve_email_moves_rejects_invalid_batch_options(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_email_move(
+        memory_path,
+        mailbox="sesexton@gmail.com",
+        message_id="pending-1",
+        action_type="propose_email_move_noise",
+    )
+
+    assert (
+        approve_email_moves(root=tmp_path, memory_path=memory_path, batch_size=0)
+        == "batch_size must be positive."
+    )
+    assert (
+        approve_email_moves(root=tmp_path, memory_path=memory_path, batch=0)
+        == "batch must be positive."
+    )
+
+
 def test_approve_email_moves_reports_empty(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     memory_path.parent.mkdir(parents=True)
@@ -130,11 +233,21 @@ def test_main_prints_bulk_approval_plan(tmp_path, monkeypatch, capsys):
     )
     monkeypatch.chdir(tmp_path)
 
-    main(["--memory", str(memory_path), "--mailbox", "sesexton@gmail.com"])
+    main(
+        [
+            "--memory",
+            str(memory_path),
+            "--mailbox",
+            "sesexton@gmail.com",
+            "--batch-size",
+            "10",
+        ]
+    )
 
     output = capsys.readouterr().out
     assert "# Email Move Bulk Approval" in output
     assert "pending-1" in output
+    assert "- Batch size: 10" in output
 
 
 def _seed_email_move(

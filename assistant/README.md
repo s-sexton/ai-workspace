@@ -343,11 +343,14 @@ To bulk-approve matching pending email move suggestions in local memory:
 ``` powershell
 python -m assistant.src.approve_email_moves --mailbox sesexton@gmail.com
 python -m assistant.src.approve_email_moves --mailbox sesexton@gmail.com --execute
+python -m assistant.src.approve_email_moves --mailbox sesexton@gmail.com --classification noise --batch-size 25
+python -m assistant.src.approve_email_moves --mailbox sesexton@gmail.com --classification noise --batch-size 25 --execute
 ```
 
 The first command is a dry-run preview. The `--execute` form only changes local
 approval status from `required` to `approved`; it does not move, archive, trash,
-or delete email.
+or delete email. Use `--batch-size` and `--batch` to work through large cleanup
+sets in smaller chunks.
 
 To run the first local sample calendar review:
 

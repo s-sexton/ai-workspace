@@ -19,9 +19,18 @@ def approve_email_moves(
     mailbox: str | None = None,
     classification: str | None = None,
     limit: int = 100,
+    batch_size: int | None = None,
+    batch: int = 1,
     execute: bool = False,
 ) -> str:
     """Preview or approve pending email move suggestions in local memory."""
+
+    if limit < 1:
+        return "limit must be positive."
+    if batch_size is not None and batch_size < 1:
+        return "batch_size must be positive."
+    if batch < 1:
+        return "batch must be positive."
 
     workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
     resolved_memory_path = _resolve_memory_path(workspace_root, Path(memory_path))
@@ -36,6 +45,8 @@ def approve_email_moves(
             classification=classification,
             limit=limit,
         )
+        matching_count = len(actions)
+        actions = _select_batch(actions, batch_size=batch_size, batch=batch)
         if execute and actions:
             for action in actions:
                 store.update_assistant_action_approval(
@@ -61,6 +72,9 @@ def approve_email_moves(
         actions,
         mailbox=mailbox,
         classification=classification,
+        matching_count=matching_count,
+        batch_size=batch_size,
+        batch=batch,
         execute=execute,
     )
 
@@ -75,6 +89,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             mailbox=args.mailbox,
             classification=args.classification,
             limit=args.limit,
+            batch_size=args.batch_size,
+            batch=args.batch,
             execute=args.execute,
         )
     )
@@ -109,6 +125,9 @@ def _format_result(
     *,
     mailbox: str | None,
     classification: str | None,
+    matching_count: int,
+    batch_size: int | None,
+    batch: int,
     execute: bool,
 ) -> str:
     title = "# Email Move Bulk Approval"
@@ -118,7 +137,11 @@ def _format_result(
         lines.append(f"- Mailbox: {mailbox}")
     if classification:
         lines.append(f"- Classification: {classification}")
-    lines.append(f"- Matching pending moves: {len(actions)}")
+    lines.append(f"- Matching pending moves: {matching_count}")
+    if batch_size is not None:
+        lines.append(f"- Batch: {batch}")
+        lines.append(f"- Batch size: {batch_size}")
+        lines.append(f"- Moves in this batch: {len(actions)}")
 
     if not actions:
         lines.append("")
@@ -135,6 +158,8 @@ def _format_result(
             command += f" --mailbox {mailbox}"
         if classification:
             command += f" --classification {classification}"
+        if batch_size is not None:
+            command += f" --batch-size {batch_size} --batch {batch}"
         lines.append(command)
         lines.append("```")
 
@@ -149,6 +174,19 @@ def _format_result(
             lines.append(f"  Subject: {action.item_subject}")
         lines.append(f"  Action: {action.action_id}")
     return "\n".join(lines)
+
+
+def _select_batch(
+    actions: tuple[PendingActionRecord, ...],
+    *,
+    batch_size: int | None,
+    batch: int,
+) -> tuple[PendingActionRecord, ...]:
+    if batch_size is None:
+        return actions
+    start = (batch - 1) * batch_size
+    end = start + batch_size
+    return actions[start:end]
 
 
 def _summary_text(actions: tuple[PendingActionRecord, ...], *, execute: bool) -> str:
@@ -174,6 +212,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Optional email move classification filter.",
     )
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Only preview or approve this many matching suggestions.",
+    )
+    parser.add_argument(
+        "--batch",
+        type=int,
+        default=1,
+        help="1-based batch number to preview or approve when --batch-size is used.",
+    )
     parser.add_argument(
         "--execute",
         action="store_true",
