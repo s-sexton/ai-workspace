@@ -87,9 +87,17 @@ def execute_email_moves(
         run = store.start_run(workflow="execute-email-moves")
         if dry_run:
             result_summary = (
-                f"Prepared dry-run plan for {len(plan)} approved email move(s)."
+                _summary_sentence(
+                    action="Prepared dry-run plan",
+                    plan=plan,
+                    blocked_plan=blocked_plan,
+                )
             )
-            run_summary = f"Dry-run email move plan with {len(plan)} item(s)."
+            run_summary = _summary_sentence(
+                action="Dry-run email move plan",
+                plan=plan,
+                blocked_plan=blocked_plan,
+            )
             action_type = "dry_run_email_moves"
         else:
             _execute_plan(plan, move_transport=move_transport)
@@ -98,8 +106,16 @@ def execute_email_moves(
                     action_id=item.action_id,
                     approval_status="executed",
                 )
-            result_summary = f"Executed {len(plan)} approved email move(s)."
-            run_summary = f"Executed email move plan with {len(plan)} item(s)."
+            result_summary = _summary_sentence(
+                action="Executed",
+                plan=plan,
+                blocked_plan=blocked_plan,
+            )
+            run_summary = _summary_sentence(
+                action="Executed email move plan",
+                plan=plan,
+                blocked_plan=blocked_plan,
+            )
             action_type = "execute_email_moves"
         store.record_assistant_action(
             run_id=run.run_id,
@@ -115,7 +131,14 @@ def execute_email_moves(
     finally:
         store.close()
 
-    lines = ["# Email Move Dry Run" if dry_run else "# Email Move Execution", ""]
+    lines = [
+        "# Email Move Dry Run" if dry_run else "# Email Move Execution",
+        "",
+        "## Summary",
+        "",
+    ]
+    lines.extend(_summary_lines(plan, blocked_plan=blocked_plan, dry_run=dry_run))
+    lines.extend(("", "## Moves", ""))
     for item in plan:
         verb = "Would move" if dry_run else "Moved"
         lines.append(
@@ -291,7 +314,16 @@ def _blocked_item(
 
 
 def _format_blocked_plan(blocked_plan: tuple[BlockedEmailMovePlanItem, ...]) -> str:
-    lines = ["# Email Move Dry Run", "", "No executable approved email moves found."]
+    lines = [
+        "# Email Move Dry Run",
+        "",
+        "## Summary",
+        "",
+        "- Ready to move: 0",
+        f"- Blocked/skipped: {len(blocked_plan)}",
+        "",
+        "No executable approved email moves found.",
+    ]
     if blocked_plan:
         lines.extend(("", "## Blocked Moves", ""))
         lines.extend(_blocked_plan_lines(blocked_plan))
@@ -311,6 +343,56 @@ def _blocked_plan_lines(
             lines.append(f"  Subject: {item.subject}")
         lines.append(f"  Action: {item.action_id}")
     return lines
+
+
+def _summary_sentence(
+    *,
+    action: str,
+    plan: tuple[EmailMovePlanItem, ...],
+    blocked_plan: tuple[BlockedEmailMovePlanItem, ...],
+) -> str:
+    return (
+        f"{action} for {len(plan)} approved email move(s); "
+        f"{len(blocked_plan)} blocked/skipped."
+    )
+
+
+def _summary_lines(
+    plan: tuple[EmailMovePlanItem, ...],
+    *,
+    blocked_plan: tuple[BlockedEmailMovePlanItem, ...],
+    dry_run: bool,
+) -> list[str]:
+    ready_label = "Ready to move" if dry_run else "Moved"
+    lines = [
+        f"- {ready_label}: {len(plan)}",
+        f"- Blocked/skipped: {len(blocked_plan)}",
+    ]
+    for mailbox, items in _group_plan_by_mailbox(plan):
+        lines.append(f"- Mailbox {mailbox}: {len(items)} move(s)")
+    for target_folder, items in _group_plan_by_target(plan):
+        lines.append(f"- Destination {target_folder}: {len(items)} move(s)")
+    return lines
+
+
+def _group_plan_by_mailbox(
+    plan: tuple[EmailMovePlanItem, ...],
+) -> tuple[tuple[str, tuple[EmailMovePlanItem, ...]], ...]:
+    mailboxes = sorted({item.mailbox for item in plan})
+    return tuple(
+        (mailbox, tuple(item for item in plan if item.mailbox == mailbox))
+        for mailbox in mailboxes
+    )
+
+
+def _group_plan_by_target(
+    plan: tuple[EmailMovePlanItem, ...],
+) -> tuple[tuple[str, tuple[EmailMovePlanItem, ...]], ...]:
+    targets = sorted({item.target_folder for item in plan})
+    return tuple(
+        (target, tuple(item for item in plan if item.target_folder == target))
+        for target in targets
+    )
 
 
 def _resolve_memory_path(workspace_root: Path, memory_path: Path) -> Path:

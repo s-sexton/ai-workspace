@@ -343,7 +343,9 @@ python -m assistant.src.execute_email_moves
 
 Dry-run move planning re-checks current configuration. The source mailbox must
 be approved with `read_write` access, and the destination folder must still be in
-`assistant.email.folderPolicy`.
+`assistant.email.folderPolicy`. Dry-run and execution output summarize
+ready/moved counts, blocked/skipped counts, source mailbox totals, and
+destination folder totals.
 
 To execute approved moves through Microsoft Graph:
 

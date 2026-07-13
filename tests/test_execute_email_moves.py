@@ -59,6 +59,12 @@ def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
     result = execute_email_moves(root=tmp_path, memory_path=memory_path)
 
     assert "# Email Move Dry Run" in result
+    assert "## Summary" in result
+    assert "- Ready to move: 1" in result
+    assert "- Blocked/skipped: 0" in result
+    assert "- Mailbox scott.sexton@sendthisfile.com: 1 move(s)" in result
+    assert "- Destination Clarity/Review: 1 move(s)" in result
+    assert "## Moves" in result
     assert (
         "Would move message graph-message-1 in mailbox "
         "scott.sexton@sendthisfile.com to Clarity/Review"
@@ -75,8 +81,14 @@ def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
         store.close()
 
     assert latest_run is not None
-    assert latest_run.summary == "Dry-run email move plan with 1 item(s)."
+    assert (
+        latest_run.summary
+        == "Dry-run email move plan for 1 approved email move(s); 0 blocked/skipped."
+    )
     assert actions[0].action_type == "dry_run_email_moves"
+    assert actions[0].result == (
+        "Prepared dry-run plan for 1 approved email move(s); 0 blocked/skipped."
+    )
 
 
 def test_execute_email_moves_reports_no_plan(tmp_path):
@@ -101,6 +113,8 @@ def test_execute_email_moves_blocks_read_only_mailbox(tmp_path):
     result = execute_email_moves(root=tmp_path, memory_path=memory_path)
 
     assert "# Email Move Dry Run" in result
+    assert "- Ready to move: 0" in result
+    assert "- Blocked/skipped: 1" in result
     assert "No executable approved email moves found." in result
     assert "Blocked message graph-message-1" in result
     assert "scott.sexton@sendthisfile.com" in result
@@ -223,6 +237,11 @@ def test_execute_email_moves_can_execute_with_injected_transport(tmp_path):
     )
 
     assert "# Email Move Execution" in result
+    assert "## Summary" in result
+    assert "- Moved: 1" in result
+    assert "- Blocked/skipped: 0" in result
+    assert "- Mailbox scott.sexton@sendthisfile.com: 1 move(s)" in result
+    assert "- Destination Clarity/Review: 1 move(s)" in result
     assert (
         "Moved message graph-message-1 in mailbox "
         "scott.sexton@sendthisfile.com to Clarity/Review"
@@ -242,8 +261,14 @@ def test_execute_email_moves_can_execute_with_injected_transport(tmp_path):
         store.close()
 
     assert latest_run is not None
-    assert latest_run.summary == "Executed email move plan with 1 item(s)."
+    assert (
+        latest_run.summary
+        == "Executed email move plan for 1 approved email move(s); 0 blocked/skipped."
+    )
     assert actions[0].action_type == "execute_email_moves"
+    assert actions[0].result == (
+        "Executed for 1 approved email move(s); 0 blocked/skipped."
+    )
     assert executed_actions[0].action_id == action_id
 
 

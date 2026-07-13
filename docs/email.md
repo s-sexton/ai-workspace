@@ -375,6 +375,9 @@ Approved email moves can be dry-run with:
 python -m assistant.src.execute_email_moves
 ```
 
+Dry-run and execution output include a summary with ready/moved counts,
+blocked/skipped counts, source mailbox totals, and destination folder totals.
+
 Approved email moves can be executed through Microsoft Graph with:
 
 ``` powershell

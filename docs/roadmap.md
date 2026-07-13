@@ -37,12 +37,13 @@ Status: in progress.
 - Apply mailbox-specific sender/domain preferences
 - Review and remove mailbox-specific sender/domain preferences
 - Review proposed and approved cleanup before executing Gmail filing
+- Summarize Gmail filing dry-runs and executions by count, mailbox, and destination
 
 Next useful slices:
 
 - Make feedback easier to capture from the command center: started with
   natural-language `mark ITEM_ID as noise/review` commands
-- Tighten Gmail filing execution summaries after dry-run and execution
+- Improve the daily command center email cleanup section
 
 ## Phase 3: Daily Command Center
 
