@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 from typing import Sequence
 
@@ -341,17 +342,43 @@ def _format_calendar_items(store: DuckDbMemoryStore, *, limit: int) -> str:
         record
         for record in store.recent_memory(limit=limit * 3)
         if record.source_type == "calendar"
-    ][:limit]
+    ]
+    records = sorted(records, key=_calendar_sort_key)[:limit]
     if not records:
         return "# Calendar Items\n\nNo calendar items found in Clarity memory."
 
-    lines = ["# Calendar Items", ""]
+    lines = ["# Calendar Items", "", f"- Remembered calendar events: {len(records)}"]
     for record in records:
+        details = _calendar_details(record.reason or "")
         lines.append(f"- {record.subject}")
         lines.append(f"  Source: {record.display_name}")
-        if record.reason:
+        if details.get("start"):
+            lines.append(f"  Start: {details['start']}")
+        if details.get("end"):
+            lines.append(f"  End: {details['end']}")
+        if details.get("location"):
+            lines.append(f"  Location: {details['location']}")
+        if record.reason and not details:
             lines.append(f"  Detail: {record.reason}")
     return "\n".join(lines)
+
+
+def _calendar_sort_key(record) -> tuple[int, str, str]:
+    start = _calendar_details(record.reason or "").get("start")
+    return (0 if start else 1, start or "", record.subject)
+
+
+def _calendar_details(reason: str) -> dict[str, str]:
+    details: dict[str, str] = {}
+    for key, pattern in (
+        ("start", r"Calendar event starts at ([^.]+)\."),
+        ("end", r"Ends at ([^.]+)\."),
+        ("location", r"Location: ([^.]+)\."),
+    ):
+        match = re.search(pattern, reason)
+        if match:
+            details[key] = match.group(1)
+    return details
 
 
 def _format_recent_items(title: str, records) -> str:

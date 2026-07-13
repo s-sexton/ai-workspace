@@ -158,6 +158,10 @@ The command center includes a compact email cleanup section with approved moves
 ready for cleanup review, proposed moves still needing approval, and the command
 for the full cleanup plan.
 
+The command center also includes a compact calendar agenda from local Clarity
+memory. It surfaces remembered event count, source calendar, start/end times,
+and location when those metadata fields were captured.
+
 To inspect the bounded context intended for future LLM summarization:
 
 ``` powershell

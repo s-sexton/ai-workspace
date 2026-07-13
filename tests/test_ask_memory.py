@@ -155,8 +155,9 @@ def test_answers_command_center_and_calendar_items(tmp_path):
     assert "python -m assistant.src.ask_memory email-cleanup-plan" in command_center
     assert "Family dinner" in command_center
     assert "# Calendar Items" in calendar_items
+    assert "- Remembered calendar events: 1" in calendar_items
     assert "Source: family calendar" in calendar_items
-    assert "Calendar event starts at 2026-07-10T18:00:00-05:00." in calendar_items
+    assert "Start: 2026-07-10T18:00:00-05:00" in calendar_items
 
 
 def test_answers_llm_context(tmp_path):
