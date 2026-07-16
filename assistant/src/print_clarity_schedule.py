@@ -13,11 +13,20 @@ from common.configuration import find_workspace_root
 DEFAULT_TASK_NAME = "Clarity Email Cycle"
 DEFAULT_TASK_TIME = "07:30"
 DEFAULT_TASK_LOG_PATH = "logs/clarity-cycle.log"
+WORKFLOW_CYCLE = "cycle"
+WORKFLOW_DAILY_BRIEF_SEND = "daily-brief-send"
+WORKFLOW_DAILY_BRIEF_REPLY_POLL = "daily-brief-reply-poll"
+WORKFLOWS = (
+    WORKFLOW_CYCLE,
+    WORKFLOW_DAILY_BRIEF_SEND,
+    WORKFLOW_DAILY_BRIEF_REPLY_POLL,
+)
 
 
 def build_windows_task_scheduler_script(
     *,
     root: Path | str | None = None,
+    workflow: str = WORKFLOW_CYCLE,
     task_name: str = DEFAULT_TASK_NAME,
     at: str = DEFAULT_TASK_TIME,
     mailbox: str | None = None,
@@ -32,11 +41,17 @@ def build_windows_task_scheduler_script(
     use_google_bearer: bool = False,
     memory_path: Path | str | None = None,
     brief_path: Path | str | None = None,
+    daily_brief_date: str | None = None,
+    daily_brief_limit: int | None = None,
+    manifest_path: Path | str | None = None,
     cycle_report_path: Path | str | None = None,
     log_path: Path | str | None = DEFAULT_TASK_LOG_PATH,
+    execute: bool = False,
 ) -> str:
     """Return PowerShell commands that register one local scheduled task."""
 
+    if workflow not in WORKFLOWS:
+        raise ValueError(f"workflow must be one of: {', '.join(WORKFLOWS)}.")
     if use_graph_bearer and not (use_graph or use_graph_calendar):
         raise ValueError("use_graph_bearer requires use_graph or use_graph_calendar.")
     if use_google_bearer and not use_google_calendar:
@@ -57,9 +72,25 @@ def build_windows_task_scheduler_script(
         raise ValueError("use_google_calendar requires refresh_calendar.")
     if not _is_valid_time(at):
         raise ValueError("at must be in HH:mm 24-hour format.")
+    if workflow != WORKFLOW_CYCLE and (
+        use_sample_graph
+        or refresh_calendar
+        or calendar
+        or calendar_date
+        or use_graph_calendar
+        or use_google_calendar
+        or use_google_bearer
+        or cycle_report_path
+    ):
+        raise ValueError("cycle-only options require workflow='cycle'.")
+    if workflow == WORKFLOW_DAILY_BRIEF_SEND and execute != use_graph:
+        raise ValueError("daily-brief-send requires use_graph and execute together.")
+    if workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL and not use_graph:
+        raise ValueError("daily-brief-reply-poll requires use_graph.")
 
     workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
-    cycle_command = _cycle_command(
+    workflow_command = _workflow_command(
+        workflow=workflow,
         mailbox=mailbox,
         use_graph=use_graph,
         use_graph_bearer=use_graph_bearer,
@@ -72,7 +103,11 @@ def build_windows_task_scheduler_script(
         use_google_bearer=use_google_bearer,
         memory_path=memory_path,
         brief_path=brief_path,
+        daily_brief_date=daily_brief_date,
+        daily_brief_limit=daily_brief_limit,
+        manifest_path=manifest_path,
         cycle_report_path=cycle_report_path,
+        execute=execute,
     )
     scheduled_command = (
         "Set-Location -LiteralPath "
@@ -87,12 +122,12 @@ def build_windows_task_scheduler_script(
             + "; "
             + "New-Item -ItemType Directory -Force -Path "
             + "(Split-Path -Parent $ClarityLog) | Out-Null; "
-            + cycle_command
+            + workflow_command
             + " *>> "
             + _ps_single_quote(log_path_text)
         )
     else:
-        scheduled_command += cycle_command
+        scheduled_command += workflow_command
     scheduled_argument = (
         "-NoProfile -ExecutionPolicy Bypass -Command "
         + _ps_double_quote(scheduled_command)
@@ -110,7 +145,7 @@ def build_windows_task_scheduler_script(
         + _ps_double_quote(task_name)
         + " -Action $Action -Trigger $Trigger "
         + "-Description "
-        + _ps_double_quote("Run one local Clarity refresh cycle.")
+        + _ps_double_quote(_workflow_description(workflow))
         + " -Force",
     ]
     return "\n".join(lines) + "\n"
@@ -122,6 +157,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     print(
         build_windows_task_scheduler_script(
+            workflow=args.workflow,
             task_name=args.task_name,
             at=args.at,
             mailbox=args.mailbox,
@@ -136,10 +172,71 @@ def main(argv: Sequence[str] | None = None) -> None:
             use_google_bearer=args.google_bearer,
             memory_path=args.memory,
             brief_path=args.brief,
+            daily_brief_date=args.date,
+            daily_brief_limit=args.limit,
+            manifest_path=args.manifest,
             cycle_report_path=args.cycle_report,
             log_path=args.log,
+            execute=args.execute,
         ),
         end="",
+    )
+
+
+def _workflow_command(
+    *,
+    workflow: str,
+    mailbox: str | None,
+    use_graph: bool,
+    use_graph_bearer: bool,
+    use_sample_graph: bool,
+    refresh_calendar: bool,
+    calendar: str | None,
+    calendar_date: str | None,
+    use_graph_calendar: bool,
+    use_google_calendar: bool,
+    use_google_bearer: bool,
+    memory_path: Path | str | None,
+    brief_path: Path | str | None,
+    daily_brief_date: str | None,
+    daily_brief_limit: int | None,
+    manifest_path: Path | str | None,
+    cycle_report_path: Path | str | None,
+    execute: bool,
+) -> str:
+    if workflow == WORKFLOW_CYCLE:
+        return _cycle_command(
+            mailbox=mailbox,
+            use_graph=use_graph,
+            use_graph_bearer=use_graph_bearer,
+            use_sample_graph=use_sample_graph,
+            refresh_calendar=refresh_calendar,
+            calendar=calendar,
+            calendar_date=calendar_date,
+            use_graph_calendar=use_graph_calendar,
+            use_google_calendar=use_google_calendar,
+            use_google_bearer=use_google_bearer,
+            memory_path=memory_path,
+            brief_path=brief_path,
+            cycle_report_path=cycle_report_path,
+        )
+    if workflow == WORKFLOW_DAILY_BRIEF_SEND:
+        return _daily_brief_send_command(
+            use_graph=use_graph,
+            use_graph_bearer=use_graph_bearer,
+            memory_path=memory_path,
+            brief_path=brief_path,
+            daily_brief_date=daily_brief_date,
+            daily_brief_limit=daily_brief_limit,
+            execute=execute,
+        )
+    return _daily_brief_reply_poll_command(
+        mailbox=mailbox,
+        use_graph_bearer=use_graph_bearer,
+        memory_path=memory_path,
+        manifest_path=manifest_path,
+        daily_brief_limit=daily_brief_limit,
+        execute=execute,
     )
 
 
@@ -189,9 +286,76 @@ def _cycle_command(
     return " ".join(parts)
 
 
+def _daily_brief_send_command(
+    *,
+    use_graph: bool,
+    use_graph_bearer: bool,
+    memory_path: Path | str | None,
+    brief_path: Path | str | None,
+    daily_brief_date: str | None,
+    daily_brief_limit: int | None,
+    execute: bool,
+) -> str:
+    parts = ["python", "-m", "assistant.src.send_daily_brief"]
+    if memory_path is not None:
+        parts.extend(("--memory", _ps_single_quote(str(memory_path))))
+    if brief_path is not None:
+        parts.extend(("--output", _ps_single_quote(str(brief_path))))
+    if daily_brief_date is not None:
+        parts.extend(("--date", _ps_single_quote(daily_brief_date)))
+    if daily_brief_limit is not None:
+        parts.extend(("--limit", str(daily_brief_limit)))
+    if use_graph:
+        parts.append("--graph")
+    if use_graph_bearer:
+        parts.append("--graph-bearer")
+    if execute:
+        parts.append("--execute")
+    return " ".join(parts)
+
+
+def _daily_brief_reply_poll_command(
+    *,
+    mailbox: str | None,
+    use_graph_bearer: bool,
+    memory_path: Path | str | None,
+    manifest_path: Path | str | None,
+    daily_brief_limit: int | None,
+    execute: bool,
+) -> str:
+    parts = ["python", "-m", "assistant.src.poll_daily_brief_replies", "--graph"]
+    if use_graph_bearer:
+        parts.append("--graph-bearer")
+    if mailbox:
+        parts.extend(("--mailbox", _ps_single_quote(mailbox)))
+    if memory_path is not None:
+        parts.extend(("--memory", _ps_single_quote(str(memory_path))))
+    if manifest_path is not None:
+        parts.extend(("--manifest", _ps_single_quote(str(manifest_path))))
+    if daily_brief_limit is not None:
+        parts.extend(("--limit", str(daily_brief_limit)))
+    if execute:
+        parts.append("--execute")
+    return " ".join(parts)
+
+
+def _workflow_description(workflow: str) -> str:
+    if workflow == WORKFLOW_DAILY_BRIEF_SEND:
+        return "Generate and optionally send Clarity's daily brief email."
+    if workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL:
+        return "Poll Clarity's mailbox for authenticated daily brief replies."
+    return "Run one local Clarity refresh cycle."
+
+
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Print PowerShell commands for scheduling Clarity locally."
+    )
+    parser.add_argument(
+        "--workflow",
+        choices=WORKFLOWS,
+        default=WORKFLOW_CYCLE,
+        help="Clarity workflow to schedule.",
     )
     parser.add_argument("--task-name", default=DEFAULT_TASK_NAME)
     parser.add_argument(
@@ -253,7 +417,28 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--memory", default=None)
     parser.add_argument("--brief", default=None)
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="Daily brief date in YYYY-MM-DD format. Defaults to command runtime date.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Daily brief item limit or reply poll limit.",
+    )
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help="Daily brief manifest path for reply polling.",
+    )
     parser.add_argument("--cycle-report", default="reports/clarity-cycle.md")
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Include the workflow's explicit execution flag where supported.",
+    )
     parser.add_argument(
         "--log",
         default=str(DEFAULT_TASK_LOG_PATH),
@@ -279,6 +464,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         parser.error("--google-calendar requires --refresh-calendar.")
     if not _is_valid_time(args.at):
         parser.error("--at must be in HH:mm 24-hour format.")
+    if args.workflow != WORKFLOW_CYCLE and (
+        args.sample_graph
+        or args.refresh_calendar
+        or args.calendar
+        or args.calendar_date
+        or args.graph_calendar
+        or args.google_calendar
+        or args.google_bearer
+    ):
+        parser.error("cycle-only options require --workflow cycle.")
+    if args.workflow == WORKFLOW_DAILY_BRIEF_SEND and args.execute != args.graph:
+        parser.error("--workflow daily-brief-send requires --graph and --execute together.")
+    if args.workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL and not args.graph:
+        parser.error("--workflow daily-brief-reply-poll requires --graph.")
+    if args.workflow == WORKFLOW_CYCLE:
+        args.date = None
+        args.limit = None
+        args.manifest = None
+    else:
+        args.cycle_report = None
     if args.no_log:
         args.log = None
     return args

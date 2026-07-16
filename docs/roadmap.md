@@ -81,6 +81,8 @@ Current implementation:
 - Deterministic local daily brief reply command processor
 - Graph-backed daily brief reply poller with allowed-sender/auth checks and
   duplicate skipping
+- Windows schedule-printer support for daily brief send and reply poll
+  workflows
 
 ## Phase 4: Calendar Awareness
 

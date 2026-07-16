@@ -144,6 +144,15 @@ Schedule the send command only after the Graph `Mail.Send` permission and
 mailbox scoping have been reviewed. The command requires both `--graph` and
 `--execute` before it sends.
 
+To print a Windows scheduled task for that email send workflow:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --workflow daily-brief-send --task-name "Clarity Daily Brief" --graph --execute --at 07:30
+```
+
+The schedule printer refuses daily brief send schedules where `--graph` and
+`--execute` are not supplied together.
+
 To process reply text locally against the latest daily brief manifest:
 
 ``` powershell
@@ -170,6 +179,16 @@ and authentication metadata, requires the subject to match the configured daily
 brief subject prefix, skips replies already processed in local memory, and then
 invokes the deterministic reply processor. It still does not move or delete
 mail.
+
+To print a Windows scheduled task for the reply poll workflow:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --workflow daily-brief-reply-poll --task-name "Clarity Reply Poll" --mailbox clarity@sendthisfile.ai --graph --at 08:00
+```
+
+Add `--execute` to the printed reply poll schedule only after dry-run output is
+reviewed. Execution applies supported local-memory reply commands; it still
+does not move or delete email.
 
 To choose a different cycle report path:
 
