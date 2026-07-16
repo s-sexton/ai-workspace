@@ -66,6 +66,8 @@ Current components:
     assistant actions.
 -   `assistant.src.generate_brief`: generates a local Markdown brief from
     Clarity memory.
+-   `assistant.src.generate_daily_brief`: generates Clarity's email-ready daily
+    brief with Outlook attention, calendar, Jira, and reply guidance sections.
 -   `assistant.src.run_email_review`: runs the first local read-only email
     metadata review workflow with fake mailbox data.
 -   `common.memory`: records local Clarity memory for runs, Jira issues seen,
@@ -471,6 +473,61 @@ To generate a local brief from memory:
 ``` powershell
 python -m assistant.src.generate_brief
 ```
+
+To generate the email-ready daily brief locally:
+
+``` powershell
+python -m assistant.src.generate_daily_brief --date 2026-07-16
+```
+
+This writes `reports/clarity-daily-brief.md` by default. It does not send
+email. The brief includes Outlook inbox attention items, a "Day In A Glance"
+calendar section for the requested date, open Jira tickets remembered from the
+latest Jira refresh, pending approval counts, and reply guidance for the future
+email command loop.
+
+To preview the daily brief email envelope without sending:
+
+``` powershell
+python -m assistant.src.send_daily_brief --date 2026-07-16
+```
+
+To send the generated daily brief through Microsoft Graph:
+
+``` powershell
+python -m assistant.src.send_daily_brief --date 2026-07-16 --graph --execute
+```
+
+The send command uses `assistant.dailyBrief` configuration for sender,
+recipients, and subject prefix. It generates the local daily brief first, then
+requires both `--graph` and `--execute` before calling Graph `sendMail`.
+
+To process deterministic directions from a daily brief reply locally:
+
+``` powershell
+python -m assistant.src.process_daily_brief_reply --reply "Move item 1 to Noise"
+python -m assistant.src.process_daily_brief_reply --reply "Move item 1 to Noise" --execute
+```
+
+The reply processor uses the daily brief JSON manifest to resolve numbered
+items back to Clarity memory. In dry-run mode it only prints the plan. With
+`--execute`, supported commands can record local pending move actions, record
+local sender preferences, or approve pending cleanup suggestions. It does not
+move mail, send mail, write Jira, or modify calendars.
+
+To poll the Clarity mailbox for authenticated daily brief replies:
+
+``` powershell
+python -m assistant.src.poll_daily_brief_replies --graph
+python -m assistant.src.poll_daily_brief_replies --graph --execute
+```
+
+The poller reads `assistant.dailyBrief.sender` by default, requires that mailbox
+to be approved with `allowedSenders`, checks SPF/DKIM/DMARC metadata, skips
+messages whose subject is not tied to the configured daily brief subject,
+skips previously processed replies, and feeds supported reply text into the
+local reply processor. It does not mark messages read, move reply messages,
+send mail, write Jira, or modify calendars.
 
 To run the first local email metadata review:
 

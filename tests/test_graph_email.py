@@ -15,11 +15,13 @@ from common.graph_email import (
     GraphEmailReadTransport,
     GraphEmailMoveTransport,
     GraphEmailRuleTransport,
+    GraphEmailSendTransport,
     UrllibGraphResponse,
     build_graph_email_folder_transport,
     build_graph_email_read_transport,
     build_graph_email_move_transport,
     build_graph_email_rule_transport,
+    build_graph_email_send_transport,
 )
 
 
@@ -293,6 +295,58 @@ def test_build_graph_email_rule_transport_can_acquire_client_credentials_token()
     assert isinstance(transport, GraphEmailRuleTransport)
     assert len(token_transport.calls) == 1
     assert "client-secret" not in repr(transport)
+
+
+def test_build_graph_email_send_transport_can_acquire_client_credentials_token():
+    graph_transport = FakeGraphTransport({})
+    token_transport = FakeGraphTokenTransport(
+        FakeGraphResponse(200, {"access_token": "acquired-token"})
+    )
+
+    transport = build_graph_email_send_transport(
+        GraphCredentials(
+            tenant_id="tenant-id",
+            client_id="client-id",
+            client_secret="client-secret",
+        ),
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+    )
+
+    assert isinstance(transport, GraphEmailSendTransport)
+    assert len(token_transport.calls) == 1
+    assert "client-secret" not in repr(transport)
+
+
+def test_graph_email_send_transport_sends_plain_text_mail():
+    send_url = "https://graph.example/v1.0/users/clarity%40example.invalid/sendMail"
+    transport = FakeGraphTransport({send_url: FakeGraphResponse(202, {})})
+    client = GraphEmailSendTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://graph.example/v1.0",
+    )
+
+    client.send_mail(
+        sender="clarity@example.invalid",
+        recipients=("scott@example.invalid",),
+        subject="Clarity Day in a Glance - 2026-07-16",
+        body_text="# Clarity Daily Brief\n",
+    )
+
+    assert len(transport.post_calls) == 1
+    url, headers, body = transport.post_calls[0]
+    assert url == send_url
+    assert headers["Authorization"] == "Bearer access-token"
+    assert body["message"]["subject"] == "Clarity Day in a Glance - 2026-07-16"
+    assert body["message"]["body"] == {
+        "contentType": "Text",
+        "content": "# Clarity Daily Brief\n",
+    }
+    assert body["message"]["toRecipients"] == [
+        {"emailAddress": {"address": "scott@example.invalid"}}
+    ]
+    assert body["saveToSentItems"] is True
 
 
 def test_graph_email_folder_transport_creates_missing_folder_path():

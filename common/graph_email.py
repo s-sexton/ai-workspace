@@ -308,6 +308,92 @@ def build_graph_email_rule_transport(
     )
 
 
+def build_graph_email_send_transport(
+    credentials: GraphCredentials,
+    *,
+    graph_transport: GraphTransport | None = None,
+    token_transport: GraphTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> GraphEmailSendTransport:
+    """Build a Graph email send transport from local credentials."""
+
+    if use_bearer_auth:
+        access_token = _required_text(credentials.access_token, "access_token")
+    else:
+        provider = GraphClientCredentialsTokenProvider(
+            credentials=credentials,
+            transport=token_transport or UrllibGraphTokenTransport(),
+        )
+        access_token = provider.access_token()
+
+    return GraphEmailSendTransport(
+        access_token=access_token,
+        transport=graph_transport or UrllibGraphTransport(),
+    )
+
+
+@dataclass(frozen=True)
+class GraphEmailSendTransport:
+    """Send email using Microsoft Graph."""
+
+    access_token: str = field(repr=False)
+    transport: GraphTransport = field(repr=False)
+    base_url: str = GRAPH_BASE_URL
+
+    def send_mail(
+        self,
+        *,
+        sender: str,
+        recipients: tuple[str, ...],
+        subject: str,
+        body_text: str,
+    ) -> None:
+        """Send one plain-text email from an approved sender mailbox."""
+
+        clean_sender = _required_text(sender, "sender")
+        clean_recipients = tuple(
+            _required_text(recipient, "recipient") for recipient in recipients
+        )
+        if not clean_recipients:
+            raise EmailClientError("Microsoft Graph send requires a recipient.")
+        response = self.transport.post(
+            self._send_mail_url(clean_sender),
+            headers=self._json_headers(),
+            body={
+                "message": {
+                    "subject": _required_text(subject, "subject"),
+                    "body": {
+                        "contentType": "Text",
+                        "content": _required_body_text(body_text),
+                    },
+                    "toRecipients": [
+                        {"emailAddress": {"address": recipient}}
+                        for recipient in clean_recipients
+                    ],
+                },
+                "saveToSentItems": True,
+            },
+        )
+        if response.status_code != 202:
+            raise GraphClientError(
+                f"Microsoft Graph sendMail failed with status {response.status_code}"
+            )
+
+    def _json_headers(self) -> dict[str, str]:
+        token = _required_text(self.access_token, "access_token")
+        return {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+        }
+
+    def _send_mail_url(self, sender: str) -> str:
+        encoded_sender = quote(sender, safe="")
+        return f"{self._base_url()}/users/{encoded_sender}/sendMail"
+
+    def _base_url(self) -> str:
+        return self.base_url.rstrip("/")
+
+
 @dataclass(frozen=True)
 class GraphFolderEnsureResult:
     """Result for ensuring one mailbox folder path exists."""
@@ -776,3 +862,9 @@ def _required_text(value: str, key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise EmailClientError(f"Microsoft Graph email value is required: {key}")
     return value.strip()
+
+
+def _required_body_text(value: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise EmailClientError("Microsoft Graph email value is required: body_text")
+    return value

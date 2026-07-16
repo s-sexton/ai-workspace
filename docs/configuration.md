@@ -107,6 +107,7 @@ Use these public objects from `common.configuration`:
 -   `GraphCredentials`
 -   `GoogleCredentials`
 -   `EmailSettings`
+-   `DailyBriefSettings`
 -   `ConfigurationError`
 
 `WorkspaceConfig.jira_settings` returns validated Jira report settings from
@@ -114,6 +115,9 @@ Use these public objects from `common.configuration`:
 
 `WorkspaceConfig.email_settings` returns approved mailbox settings from
 `config/config.json`.
+
+`WorkspaceConfig.daily_brief_settings` returns the configured daily brief sender,
+recipients, and subject prefix.
 
 `WorkspaceConfig.require_jira_credentials()` returns Jira credentials when all
 required values are present. It raises `ConfigurationError` with missing key
@@ -157,6 +161,10 @@ Clarity Jira, email, calendar, and Graph read paths:
 -   `assistant.calendar.defaultCalendar`: non-empty label listed in
     `approvedCalendars`
 -   `assistant.calendar.maxEvents`: positive integer
+-   `assistant.dailyBrief.sender`: non-empty sender mailbox for the future daily
+    brief email
+-   `assistant.dailyBrief.recipients`: non-empty list of recipient addresses
+-   `assistant.dailyBrief.subjectPrefix`: non-empty subject prefix
 
 Email `accessMode` must be either `read` or `read_write`. Current email
 workflows only read fake metadata; `read_write` is reserved for future approved

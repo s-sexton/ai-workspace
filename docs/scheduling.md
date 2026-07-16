@@ -119,6 +119,58 @@ To ask for the broader daily command center:
 python -m assistant.src.clarity "Give me my command center."
 ```
 
+To generate the email-ready daily brief locally without sending email:
+
+``` powershell
+python -m assistant.src.generate_daily_brief --date 2026-07-16
+```
+
+That command writes `reports/clarity-daily-brief.md` by default. It is intended
+to become the scheduled email body after the outbound mail transport is added.
+
+To preview the email envelope without sending:
+
+``` powershell
+python -m assistant.src.send_daily_brief --date 2026-07-16
+```
+
+To send the generated daily brief through Microsoft Graph:
+
+``` powershell
+python -m assistant.src.send_daily_brief --date 2026-07-16 --graph --execute
+```
+
+Schedule the send command only after the Graph `Mail.Send` permission and
+mailbox scoping have been reviewed. The command requires both `--graph` and
+`--execute` before it sends.
+
+To process reply text locally against the latest daily brief manifest:
+
+``` powershell
+python -m assistant.src.process_daily_brief_reply --reply "Move item 1 to Noise"
+```
+
+Add `--execute` only when the parsed local-memory changes should be applied.
+This still does not move mail or call external systems.
+
+The Codex Scheduled reply-check task should call:
+
+``` powershell
+python -m assistant.src.poll_daily_brief_replies --graph
+```
+
+After the first dry-run checks look right, the scheduled command can use:
+
+``` powershell
+python -m assistant.src.poll_daily_brief_replies --graph --execute
+```
+
+The poller reads the configured Clarity sender mailbox, checks allowed senders
+and authentication metadata, requires the subject to match the configured daily
+brief subject prefix, skips replies already processed in local memory, and then
+invokes the deterministic reply processor. It still does not move or delete
+mail.
+
 To choose a different cycle report path:
 
 ``` powershell

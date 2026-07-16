@@ -286,6 +286,58 @@ def test_calendar_settings_are_validated_and_typed(tmp_path):
     assert calendar_settings.max_events == 50
 
 
+def test_daily_brief_settings_are_validated_and_typed(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "dailyBrief": {
+              "sender": "clarity@example.invalid",
+              "recipients": ["scott@example.invalid"],
+              "subjectPrefix": "Clarity Day in a Glance"
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+    settings = config.daily_brief_settings
+
+    assert settings.sender == "clarity@example.invalid"
+    assert settings.recipients == ("scott@example.invalid",)
+    assert settings.subject_prefix == "Clarity Day in a Glance"
+
+
+def test_daily_brief_recipients_must_be_non_empty(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "dailyBrief": {
+              "sender": "clarity@example.invalid",
+              "recipients": [],
+              "subjectPrefix": "Clarity Day in a Glance"
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.daily_brief_settings
+
+    assert "recipients" in str(exc_info.value)
+
+
 def test_calendar_default_calendar_must_be_approved(tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()

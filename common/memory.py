@@ -180,6 +180,23 @@ class RecentMemoryRecord:
 
 
 @dataclass(frozen=True)
+class SourceMemoryRecord:
+    """A source-scoped memory item for briefing and command surfaces."""
+
+    item_id: str
+    external_id: str
+    source_type: str
+    display_name: str
+    scope_label: str
+    item_type: str
+    subject: str
+    sender_or_owner: str | None
+    updated_at: str | None
+    label: str | None
+    reason: str | None
+
+
+@dataclass(frozen=True)
 class FeedbackSummaryRecord:
     """A compact feedback view used for learning review."""
 
@@ -1240,6 +1257,52 @@ class DuckDbMemoryStore:
             [limit],
         ).fetchall()
         return tuple(RecentMemoryRecord(*row) for row in rows)
+
+    def recent_memory_by_source_type(
+        self,
+        source_type: str,
+        *,
+        label: str | None = None,
+        limit: int = 25,
+    ) -> tuple[SourceMemoryRecord, ...]:
+        """Return recent item memory for one source type."""
+
+        _reject_secret_text(source_type, label)
+        if limit < 1:
+            raise MemoryStoreError("limit must be positive.")
+        clean_source_type = _required_text(source_type, "source_type")
+        if label is None:
+            rows = self._connection.execute(
+                """
+                SELECT i.item_id, i.external_id, s.source_type, s.display_name,
+                       s.scope_label, i.item_type, i.subject, i.sender_or_owner,
+                       i.updated_at, c.label, c.reason
+                FROM items_seen i
+                JOIN sources s ON s.source_id = i.source_id
+                LEFT JOIN classifications c ON c.item_id = i.item_id
+                WHERE s.source_type = ?
+                ORDER BY COALESCE(i.updated_at, '') DESC, i.item_id DESC
+                LIMIT ?
+                """,
+                [clean_source_type, limit],
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                """
+                SELECT i.item_id, i.external_id, s.source_type, s.display_name,
+                       s.scope_label, i.item_type, i.subject, i.sender_or_owner,
+                       i.updated_at, c.label, c.reason
+                FROM items_seen i
+                JOIN sources s ON s.source_id = i.source_id
+                JOIN classifications c ON c.item_id = i.item_id
+                WHERE s.source_type = ?
+                  AND c.label = ?
+                ORDER BY COALESCE(i.updated_at, '') DESC, i.item_id DESC
+                LIMIT ?
+                """,
+                [clean_source_type, _required_text(label, "label"), limit],
+            ).fetchall()
+        return tuple(SourceMemoryRecord(*row) for row in rows)
 
 
 def _new_id() -> str:

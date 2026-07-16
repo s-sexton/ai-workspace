@@ -185,6 +185,15 @@ class CalendarSettings:
 
 
 @dataclass(frozen=True)
+class DailyBriefSettings:
+    """Daily brief email settings loaded from committed configuration."""
+
+    sender: str
+    recipients: tuple[str, ...]
+    subject_prefix: str
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     """Loaded workspace configuration and local environment values."""
 
@@ -297,6 +306,18 @@ class WorkspaceConfig:
             approved_calendars=MappingProxyType(approved_calendars),
             default_calendar=default_calendar,
             max_events=_require_positive_int(settings, "maxEvents"),
+        )
+
+    @property
+    def daily_brief_settings(self) -> DailyBriefSettings:
+        """Return validated daily brief email settings."""
+
+        settings = _get_mapping(self.settings, ("assistant", "dailyBrief"))
+        recipients = _require_string_tuple(settings, "recipients")
+        return DailyBriefSettings(
+            sender=_require_non_empty_string(settings, "sender"),
+            recipients=recipients,
+            subject_prefix=_require_non_empty_string(settings, "subjectPrefix"),
         )
 
     def require_jira_credentials(

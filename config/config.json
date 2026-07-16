@@ -88,6 +88,13 @@
       ],
       "defaultCalendar": "sexton-family",
       "maxEvents": 25
+    },
+    "dailyBrief": {
+      "sender": "clarity@sendthisfile.ai",
+      "recipients": [
+        "scott.sexton@sendthisfile.com"
+      ],
+      "subjectPrefix": "Clarity Day in a Glance"
     }
   }
 }

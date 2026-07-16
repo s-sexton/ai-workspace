@@ -258,6 +258,7 @@ Current scope:
 - Approved Gmail inbox metadata review
 - Approved calendar metadata review
 - Local memory and Markdown briefs
+- Email-ready daily brief generation
 - Daily command-center and focus-plan answers
 - Proposed email folder moves with local approval records
 - Approved Gmail archive/trash execution through explicit commands

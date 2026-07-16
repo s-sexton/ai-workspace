@@ -74,6 +74,13 @@ Current implementation:
 - Explicit read-only calendar refresh before answering calendar questions
 - Combined email and calendar refresh in scheduled-friendly Clarity cycles
 - Schedule-printer support for optional calendar refresh flags
+- Email-ready daily brief generation with Outlook attention, calendar, Jira,
+  pending approval counts, and reply guidance
+- Explicit-only Microsoft Graph daily brief send command with dry-run preview
+- Daily brief JSON manifest for stable reply item resolution
+- Deterministic local daily brief reply command processor
+- Graph-backed daily brief reply poller with allowed-sender/auth checks and
+  duplicate skipping
 
 ## Phase 4: Calendar Awareness
 
@@ -143,9 +150,27 @@ Likely first candidates:
 
 - Scheduled read-only refresh
 - Scheduled local brief generation
+- Scheduled email-ready daily brief generation
 - Approved email filing inside configured Clarity folders
 - Local audit history
 
 Actions that send messages, write Jira, change calendars, alter permissions, or
 make commitments require explicit human approval unless a future narrow policy
 is designed and approved.
+
+## Phase 8: Daily Email And Reply Loop
+
+Status: started with local brief generation.
+
+Clarity should eventually send a scheduled "Day in a Glance" email and process
+authenticated replies from approved senders. This work should proceed in small
+slices:
+
+- Generate the daily brief locally without sending
+- Add a bounded Graph `sendMail` transport for `clarity@sendthisfile.ai`
+- Send only to configured recipients on explicit command
+- Read replies from the Clarity mailbox
+- Require allowed sender and SPF/DKIM/DMARC checks before interpreting replies
+- Parse deterministic reply commands into local actions
+- Keep destructive or external writes behind approval unless a narrow standing
+  policy is explicitly approved

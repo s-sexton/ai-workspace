@@ -86,3 +86,43 @@ Execution remains deterministic:
 2. Memory records.
 3. Human approves.
 4. Deterministic code executes.
+
+## Daily Email Reply Boundary
+
+The daily email loop should begin with local brief generation only. Sending and
+reply processing require separate, tested slices.
+
+Daily brief sending must use configured sender and recipient allow-lists and
+must require an explicit execution flag before calling Microsoft Graph
+`sendMail`.
+
+When reply processing is added, Clarity must ignore any reply that does not meet
+all of these checks:
+
+-   The message is in the approved Clarity mailbox scope
+-   The sender is on the configured allow-list
+-   DMARC passes
+-   SPF or DKIM passes
+-   The reply references a Clarity-generated thread, token, or known item
+
+Reply text should be interpreted into structured local commands before any
+action occurs. Low-risk local memory updates may be eligible for standing
+policy later. Destructive actions, external writes, email sends, Jira writes,
+calendar writes, permission changes, purchases, or commitments must stay behind
+human approval unless a future narrow policy is explicitly approved and
+documented.
+
+The first local reply processor is deterministic and manifest-backed. It can
+resolve numbered daily brief items to Clarity memory and, only with
+`--execute`, record local pending email move actions, record local sender
+preferences, or approve local cleanup suggestions. It does not read live
+replies, authenticate senders, move mail, send mail, write Jira, or modify
+calendars.
+
+The reply poller is the first live-read boundary for this loop. It reads only
+the configured Clarity mailbox, requires configured allowed senders, requires
+DMARC plus SPF or DKIM pass metadata, requires the message subject to match the
+configured daily brief subject prefix, and skips reply message IDs already
+recorded as processed. It passes only message preview text to the deterministic
+reply processor. It does not mark messages read, move reply messages, send
+mail, write Jira, or modify calendars.
