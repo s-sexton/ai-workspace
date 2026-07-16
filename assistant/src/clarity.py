@@ -17,6 +17,7 @@ from assistant.src.email_preferences import (
     record_email_sender_preference,
     remove_email_sender_preference,
 )
+from assistant.src.llm_summary import LlmSummaryProvider, generate_llm_summary
 from assistant.src.record_feedback import record_memory_feedback
 from assistant.src.run_calendar_review import (
     build_google_calendar_read_transport_from_config,
@@ -28,7 +29,9 @@ from assistant.src.run_email_review import (
     run_email_review,
 )
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
+from common.configuration import find_workspace_root, load_workspace_config
 from common.console import print_text
+from common.openai_llm import build_openai_summary_provider
 
 
 def answer_clarity_request(
@@ -48,8 +51,10 @@ def answer_clarity_request(
     calendar: str | None = None,
     brief_path: Path | str | None = None,
     current_date: date | None = None,
+    use_llm: bool = False,
+    llm_provider: LlmSummaryProvider | None = None,
 ) -> str:
-    """Answer a small deterministic Clarity request."""
+    """Answer a Clarity request from local memory and approved refreshes."""
 
     if refresh_email:
         _refresh_email_memory(
@@ -93,6 +98,18 @@ def answer_clarity_request(
             root=root,
             memory_path=memory_path,
         )
+
+    if use_llm:
+        workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+        provider = llm_provider or _build_openai_llm_provider(root=workspace_root)
+        result = generate_llm_summary(
+            summarizer=provider,
+            root=workspace_root,
+            memory_path=memory_path,
+            limit=limit,
+            user_request=request,
+        )
+        return result.summary
 
     intent = _route_request(request)
     if intent is None:
@@ -146,6 +163,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             refresh_calendar=args.refresh_calendar,
             calendar=args.calendar,
             brief_path=args.brief,
+            use_llm=args.llm,
         )
         return
 
@@ -164,8 +182,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             refresh_calendar=args.refresh_calendar,
             calendar=args.calendar,
             brief_path=args.brief,
+            use_llm=args.llm,
         )
     )
+
+
+def _build_openai_llm_provider(*, root: Path | str | None = None) -> LlmSummaryProvider:
+    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    config = load_workspace_config(workspace_root)
+    return build_openai_summary_provider(config.require_openai_credentials())
 
 
 def _route_request(request: str) -> str | None:
@@ -409,6 +434,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials.",
     )
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="Use a live OpenAI LLM to answer from bounded local Clarity context.",
+    )
     args = parser.parse_args(argv)
     if args.graph_bearer and not args.graph:
         parser.error("--graph-bearer requires --graph.")
@@ -439,6 +469,7 @@ def _run_prompt(
     refresh_calendar: bool,
     calendar: str | None,
     brief_path: Path | str | None,
+    use_llm: bool,
 ) -> None:
     print_text("Clarity local prompt. Type 'exit' or 'quit' to leave.")
     while True:
@@ -469,6 +500,7 @@ def _run_prompt(
                 refresh_calendar=refresh_calendar,
                 calendar=calendar,
                 brief_path=brief_path,
+                use_llm=use_llm,
             )
         )
 

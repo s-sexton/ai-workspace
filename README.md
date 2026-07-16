@@ -262,8 +262,9 @@ Current scope:
 - Proposed email folder moves with local approval records
 - Approved Gmail archive/trash execution through explicit commands
 - Scheduler-friendly local cycle commands
+- Bounded, validated LLM summaries on explicit command
 - No Jira writes
-- No LLM
+- No LLM tool/action authority
 - No autonomous writes
 
 ---

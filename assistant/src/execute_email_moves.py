@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Protocol, Sequence
 
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import EmailSettings, find_workspace_root, load_workspace_config
@@ -50,12 +50,29 @@ class BlockedEmailMovePlanItem:
     subject: str | None = None
 
 
+@dataclass(frozen=True)
+class GmailSpamCleanupResult:
+    """Messages moved from Gmail Spam to Trash for one mailbox."""
+
+    mailbox: str
+    message_ids: tuple[str, ...]
+
+
+class GmailSpamCleanupTransport(Protocol):
+    """Provider operation for configured Gmail Spam cleanup."""
+
+    def trash_spam_messages(self, mailbox: str) -> tuple[str, ...]:
+        """Move current Spam messages to Trash and return message IDs."""
+
+
 def execute_email_moves(
     *,
     root: Path | str | None = None,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     dry_run: bool = True,
     move_transport: EmailMoveTransport | None = None,
+    gmail_spam_cleanup_transport: GmailSpamCleanupTransport | None = None,
+    include_gmail_spam_cleanup: bool = False,
     limit: int = 25,
 ) -> str:
     """Dry-run approved email move actions from local Clarity memory."""
@@ -65,38 +82,62 @@ def execute_email_moves(
 
     workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
     resolved_memory_path = _resolve_memory_path(workspace_root, Path(memory_path))
-    if not resolved_memory_path.is_file():
-        return f"No Clarity memory found at {resolved_memory_path}."
-
-    store = DuckDbMemoryStore(resolved_memory_path)
-    try:
-        approved_plan = _approved_email_move_plan(store, limit=limit)
-        if not approved_plan:
-            return "No approved email moves found."
+    email_settings: EmailSettings | None = None
+    gmail_spam_mailboxes: tuple[str, ...] = ()
+    if include_gmail_spam_cleanup:
         email_settings = load_workspace_config(
             workspace_root,
             include_process_env=False,
         ).email_settings
+        gmail_spam_mailboxes = _configured_gmail_spam_cleanup_mailboxes(
+            email_settings,
+            include_cleanup=include_gmail_spam_cleanup,
+        )
+    if gmail_spam_mailboxes and not dry_run and gmail_spam_cleanup_transport is None:
+        return "Live Gmail Spam cleanup requires a Gmail cleanup transport."
+
+    if not resolved_memory_path.is_file() and not gmail_spam_mailboxes:
+        return f"No Clarity memory found at {resolved_memory_path}."
+
+    store = DuckDbMemoryStore(resolved_memory_path)
+    try:
+        if not resolved_memory_path.is_file():
+            store.initialize_schema()
+        approved_plan = _approved_email_move_plan(store, limit=limit)
+        if not approved_plan and not gmail_spam_mailboxes:
+            return "No approved email moves found."
+        if email_settings is None:
+            email_settings = load_workspace_config(
+                workspace_root,
+                include_process_env=False,
+            ).email_settings
         plan, blocked_plan = _validate_email_move_plan(
             approved_plan,
             email_settings=email_settings,
         )
-        if not plan:
+        if not plan and not gmail_spam_mailboxes:
             return _format_blocked_plan(blocked_plan)
 
         run = store.start_run(workflow="execute-email-moves")
+        gmail_spam_cleanup_results = _execute_or_preview_gmail_spam_cleanup(
+            gmail_spam_mailboxes,
+            dry_run=dry_run,
+            cleanup_transport=gmail_spam_cleanup_transport,
+        )
         if dry_run:
             result_summary = (
                 _summary_sentence(
                     action="Prepared dry-run plan",
                     plan=plan,
                     blocked_plan=blocked_plan,
+                    gmail_spam_cleanup_results=gmail_spam_cleanup_results,
                 )
             )
             run_summary = _summary_sentence(
                 action="Dry-run email move plan",
                 plan=plan,
                 blocked_plan=blocked_plan,
+                gmail_spam_cleanup_results=gmail_spam_cleanup_results,
             )
             action_type = "dry_run_email_moves"
         else:
@@ -110,11 +151,13 @@ def execute_email_moves(
                 action="Executed",
                 plan=plan,
                 blocked_plan=blocked_plan,
+                gmail_spam_cleanup_results=gmail_spam_cleanup_results,
             )
             run_summary = _summary_sentence(
                 action="Executed email move plan",
                 plan=plan,
                 blocked_plan=blocked_plan,
+                gmail_spam_cleanup_results=gmail_spam_cleanup_results,
             )
             action_type = "execute_email_moves"
         store.record_assistant_action(
@@ -137,7 +180,14 @@ def execute_email_moves(
         "## Summary",
         "",
     ]
-    lines.extend(_summary_lines(plan, blocked_plan=blocked_plan, dry_run=dry_run))
+    lines.extend(
+        _summary_lines(
+            plan,
+            blocked_plan=blocked_plan,
+            dry_run=dry_run,
+            gmail_spam_cleanup_results=gmail_spam_cleanup_results,
+        )
+    )
     lines.extend(("", "## Moves", ""))
     for item in plan:
         verb = "Would move" if dry_run else "Moved"
@@ -151,6 +201,14 @@ def execute_email_moves(
     if blocked_plan:
         lines.extend(("", "## Blocked Moves", ""))
         lines.extend(_blocked_plan_lines(blocked_plan))
+    if gmail_spam_cleanup_results:
+        lines.extend(("", "## Gmail Spam Cleanup", ""))
+        verb = "Would trash" if dry_run else "Trashed"
+        for result in gmail_spam_cleanup_results:
+            lines.append(
+                f"- {verb} {len(result.message_ids)} Spam message(s) "
+                f"from {result.mailbox}"
+            )
     return "\n".join(lines)
 
 
@@ -170,6 +228,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             memory_path=args.memory,
             dry_run=not args.execute,
             move_transport=move_transport,
+            gmail_spam_cleanup_transport=move_transport
+            if args.gmail and args.execute
+            else None,
+            include_gmail_spam_cleanup=args.gmail and args.execute,
             limit=args.limit,
         )
     )
@@ -252,6 +314,43 @@ def _execute_plan(
             message_id=item.message_id,
             target_folder=item.target_folder,
         )
+
+
+def _configured_gmail_spam_cleanup_mailboxes(
+    email_settings: EmailSettings,
+    *,
+    include_cleanup: bool,
+) -> tuple[str, ...]:
+    if not include_cleanup:
+        return ()
+    policy = email_settings.gmail_cleanup_policy
+    if not policy.trash_spam:
+        return ()
+    return policy.mailboxes
+
+
+def _execute_or_preview_gmail_spam_cleanup(
+    mailboxes: tuple[str, ...],
+    *,
+    dry_run: bool,
+    cleanup_transport: GmailSpamCleanupTransport | None,
+) -> tuple[GmailSpamCleanupResult, ...]:
+    if not mailboxes:
+        return ()
+    if dry_run:
+        return tuple(
+            GmailSpamCleanupResult(mailbox=mailbox, message_ids=())
+            for mailbox in mailboxes
+        )
+    if cleanup_transport is None:
+        raise RuntimeError("cleanup_transport is required for Gmail Spam cleanup.")
+    return tuple(
+        GmailSpamCleanupResult(
+            mailbox=mailbox,
+            message_ids=cleanup_transport.trash_spam_messages(mailbox),
+        )
+        for mailbox in mailboxes
+    )
 
 
 def _validate_email_move_plan(
@@ -350,11 +449,18 @@ def _summary_sentence(
     action: str,
     plan: tuple[EmailMovePlanItem, ...],
     blocked_plan: tuple[BlockedEmailMovePlanItem, ...],
+    gmail_spam_cleanup_results: tuple[GmailSpamCleanupResult, ...],
 ) -> str:
-    return (
+    gmail_spam_count = sum(
+        len(result.message_ids) for result in gmail_spam_cleanup_results
+    )
+    summary = (
         f"{action} for {len(plan)} approved email move(s); "
         f"{len(blocked_plan)} blocked/skipped."
     )
+    if gmail_spam_cleanup_results:
+        summary += f" {gmail_spam_count} Gmail Spam message(s) trashed."
+    return summary
 
 
 def _summary_lines(
@@ -362,12 +468,25 @@ def _summary_lines(
     *,
     blocked_plan: tuple[BlockedEmailMovePlanItem, ...],
     dry_run: bool,
+    gmail_spam_cleanup_results: tuple[GmailSpamCleanupResult, ...],
 ) -> list[str]:
     ready_label = "Ready to move" if dry_run else "Moved"
+    gmail_spam_label = "Gmail Spam mailboxes" if dry_run else "Gmail Spam trashed"
+    gmail_spam_count = sum(
+        len(result.message_ids) for result in gmail_spam_cleanup_results
+    )
     lines = [
         f"- {ready_label}: {len(plan)}",
         f"- Blocked/skipped: {len(blocked_plan)}",
     ]
+    if gmail_spam_cleanup_results:
+        if dry_run:
+            lines.append(
+                f"- {gmail_spam_label}: "
+                + ", ".join(result.mailbox for result in gmail_spam_cleanup_results)
+            )
+        else:
+            lines.append(f"- {gmail_spam_label}: {gmail_spam_count}")
     for mailbox, items in _group_plan_by_mailbox(plan):
         lines.append(f"- Mailbox {mailbox}: {len(items)} move(s)")
     for target_folder, items in _group_plan_by_target(plan):

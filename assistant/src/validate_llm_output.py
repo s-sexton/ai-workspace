@@ -1,4 +1,4 @@
-"""Validate a local future LLM summary output file."""
+"""Validate a local LLM summary output file."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate a local future LLM summary output file."
+        description="Validate a local LLM summary output file."
     )
     parser.add_argument("path", help="Path to local summary text or Markdown.")
     return parser.parse_args(argv)

@@ -6,13 +6,19 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from assistant.src.llm_context import build_llm_prompt
 from assistant.src.llm_summary import generate_llm_summary
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
-from common.configuration import find_workspace_root
+from common.configuration import find_workspace_root, load_workspace_config
 from common.memory import DuckDbMemoryStore
+from common.openai_llm import (
+    OpenAITransport,
+    build_openai_summary_provider,
+)
 
 
 DEFAULT_LLM_BRIEF_PATH = Path("reports") / "clarity-llm-brief.md"
+DEFAULT_CODEX_HANDOFF_PATH = Path("reports") / "clarity-codex-handoff.md"
 
 
 class DeterministicSummaryProvider:
@@ -84,14 +90,137 @@ def generate_fake_llm_brief(
     return report
 
 
+def generate_openai_llm_brief(
+    *,
+    root: Path | str | None = None,
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
+    output_path: Path | str = DEFAULT_LLM_BRIEF_PATH,
+    limit: int = 10,
+    write: bool = True,
+    transport: OpenAITransport | None = None,
+) -> str:
+    """Generate a validated live OpenAI LLM brief and optionally write it."""
+
+    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    config = load_workspace_config(workspace_root)
+    provider = build_openai_summary_provider(
+        config.require_openai_credentials(),
+        transport=transport,
+    )
+    result = generate_llm_summary(
+        summarizer=provider,
+        root=workspace_root,
+        memory_path=memory_path,
+        limit=limit,
+    )
+    report = "\n".join(
+        (
+            "# Clarity LLM Brief",
+            "",
+            "This brief was generated from bounded local Clarity context.",
+            "",
+            result.summary,
+        )
+    ).rstrip() + "\n"
+    if write:
+        resolved_output_path = _resolve_path(workspace_root, Path(output_path))
+        resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved_output_path.write_text(report, encoding="utf-8")
+        _record_llm_brief_memory(
+            memory_path=_resolve_path(workspace_root, Path(memory_path)),
+            output_path=resolved_output_path,
+            workflow="llm-brief",
+            artifact_type="markdown_llm_brief",
+            action_type="generate_llm_brief",
+            summary="Generated validated OpenAI LLM brief.",
+        )
+    return report
+
+
+def generate_codex_handoff(
+    *,
+    root: Path | str | None = None,
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
+    output_path: Path | str = DEFAULT_CODEX_HANDOFF_PATH,
+    limit: int = 10,
+    user_request: str | None = None,
+    write: bool = True,
+) -> str:
+    """Generate a Codex-ready handoff without calling an LLM provider."""
+
+    workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+    prompt = build_llm_prompt(
+        root=workspace_root,
+        memory_path=memory_path,
+        limit=limit,
+        user_request=user_request,
+    )
+    report = "\n".join(
+        (
+            "# Clarity Codex Handoff",
+            "",
+            "Use this with ChatGPT/Codex as the summarization surface. No API call was made.",
+            "",
+            "Instructions for Codex:",
+            "",
+            "- Summarize the bounded Clarity context below.",
+            "- Recommend what needs attention and what needs approval.",
+            "- Do not claim that any action was performed.",
+            "- Do not ask for secrets or credentials.",
+            "- Do not approve, send, move, delete, create, or modify anything.",
+            "",
+            "Copy-ready request:",
+            "",
+            "```text",
+            "Summarize this Clarity handoff and help me decide what to focus on.",
+            "```",
+            "",
+            "Bounded Clarity prompt:",
+            "",
+            "```text",
+            prompt,
+            "```",
+        )
+    ).rstrip() + "\n"
+    if write:
+        resolved_output_path = _resolve_path(workspace_root, Path(output_path))
+        resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
+        resolved_output_path.write_text(report, encoding="utf-8")
+        _record_llm_brief_memory(
+            memory_path=_resolve_path(workspace_root, Path(memory_path)),
+            output_path=resolved_output_path,
+            workflow="codex-handoff",
+            artifact_type="markdown_codex_handoff",
+            action_type="generate_codex_handoff",
+            summary="Generated Codex-ready Clarity handoff.",
+        )
+    return report
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
-    report = generate_fake_llm_brief(
-        memory_path=args.memory,
-        output_path=args.output,
-        limit=args.limit,
-        write=not args.no_write,
-    )
+    if args.codex_handoff:
+        report = generate_codex_handoff(
+            memory_path=args.memory,
+            output_path=args.output,
+            limit=args.limit,
+            user_request=args.request,
+            write=not args.no_write,
+        )
+    elif args.openai:
+        report = generate_openai_llm_brief(
+            memory_path=args.memory,
+            output_path=args.output,
+            limit=args.limit,
+            write=not args.no_write,
+        )
+    else:
+        report = generate_fake_llm_brief(
+            memory_path=args.memory,
+            output_path=args.output,
+            limit=args.limit,
+            write=not args.no_write,
+        )
     print(report, end="")
     if not args.no_write:
         print(f"\nWrote {args.output}")
@@ -121,27 +250,35 @@ def _resolve_path(workspace_root: Path, path: Path) -> Path:
     return workspace_root / path
 
 
-def _record_llm_brief_memory(*, memory_path: Path, output_path: Path) -> None:
+def _record_llm_brief_memory(
+    *,
+    memory_path: Path,
+    output_path: Path,
+    workflow: str = "fake-llm-brief",
+    artifact_type: str = "markdown_fake_llm_brief",
+    action_type: str = "generate_fake_llm_brief",
+    summary: str = "Generated local deterministic fake LLM brief.",
+) -> None:
     store = DuckDbMemoryStore(memory_path)
     try:
         store.initialize_schema()
-        run = store.start_run(workflow="fake-llm-brief")
+        run = store.start_run(workflow=workflow)
         store.record_generated_artifact(
             run_id=run.run_id,
-            artifact_type="markdown_fake_llm_brief",
+            artifact_type=artifact_type,
             path=output_path,
-            summary="Local deterministic fake LLM brief.",
+            summary=summary,
         )
         store.record_assistant_action(
             run_id=run.run_id,
-            action_type="generate_fake_llm_brief",
+            action_type=action_type,
             approval_status="not_required",
             result=f"Wrote {output_path}",
         )
         store.finish_run(
             run.run_id,
             status="completed",
-            summary="Generated local deterministic fake LLM brief.",
+            summary=summary,
         )
     finally:
         store.close()
@@ -155,11 +292,31 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--output", default=str(DEFAULT_LLM_BRIEF_PATH))
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument(
+        "--request",
+        default=None,
+        help="Optional human request to include in the generated prompt.",
+    )
+    parser.add_argument(
         "--no-write",
         action="store_true",
         help="Print the fake LLM brief without writing a report.",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--openai",
+        action="store_true",
+        help="Use the live OpenAI Responses API instead of the deterministic provider.",
+    )
+    parser.add_argument(
+        "--codex-handoff",
+        action="store_true",
+        help="Write a Codex-ready handoff prompt without calling an API provider.",
+    )
+    args = parser.parse_args(argv)
+    if args.openai and args.codex_handoff:
+        parser.error("--openai and --codex-handoff are mutually exclusive.")
+    if args.codex_handoff and args.output == str(DEFAULT_LLM_BRIEF_PATH):
+        args.output = str(DEFAULT_CODEX_HANDOFF_PATH)
+    return args
 
 
 if __name__ == "__main__":

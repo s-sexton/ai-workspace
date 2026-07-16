@@ -141,7 +141,7 @@ python -m assistant.src.clarity "What needs my attention?"
 python -m assistant.src.clarity "What needs approval?"
 python -m assistant.src.clarity "What did you do?"
 python -m assistant.src.clarity "When did Clarity last run?"
-python -m assistant.src.clarity "When was the latest fake LLM brief?"
+python -m assistant.src.clarity "When was the latest LLM brief?"
 python -m assistant.src.clarity "Show my email move plan"
 ```
 
@@ -151,8 +151,16 @@ To open a small local prompt:
 python -m assistant.src.clarity
 ```
 
-This is a deterministic command surface over local memory. It does not use an
-LLM router yet.
+By default this is a deterministic command surface over local memory.
+
+To answer a broader question with the live LLM summarizer, add `--llm`:
+
+``` powershell
+python -m assistant.src.clarity "Help me prioritize my morning" --llm
+```
+
+The LLM path uses bounded local Clarity context and validates the answer before
+printing it. It does not approve, move, send, delete, or modify anything.
 
 The command center includes a compact email cleanup section with approved moves
 ready for cleanup review, proposed moves still needing approval, and the command
@@ -171,7 +179,7 @@ Calendar questions can filter remembered events for simple dates such as
 simple calendar source phrases such as `family calendar`, `work calendar`, or
 `personal calendar`.
 
-To inspect the bounded context intended for future LLM summarization:
+To inspect the bounded context used for LLM summarization:
 
 ``` powershell
 python -m assistant.src.ask_memory llm-context
@@ -179,10 +187,10 @@ python -m assistant.src.ask_memory llm-prompt
 ```
 
 These do not call an LLM. `llm-context` prints the local metadata-only context
-Clarity would be allowed to summarize. `llm-prompt` wraps that context with the
-future summarization instructions.
+Clarity is allowed to summarize. `llm-prompt` wraps that context with
+summarization-only instructions.
 
-To validate a local future LLM summary output file:
+To validate a local LLM summary output file:
 
 ``` powershell
 python -m assistant.src.validate_llm_output path\to\summary.md
@@ -197,6 +205,28 @@ python -m assistant.src.generate_llm_brief
 This writes `reports/clarity-llm-brief.md` by default. It does not call an LLM;
 it uses a fake local provider to test the prompt and output validation path.
 When it writes the report, it records a local `fake-llm-brief` memory run.
+
+To generate a validated live OpenAI LLM brief from the same bounded local
+context, configure `OPENAI_API_KEY` and `OPENAI_MODEL` in `config/.env`, then
+run:
+
+``` powershell
+python -m assistant.src.generate_llm_brief --openai
+```
+
+The live path uses the OpenAI Responses API, validates the returned summary
+before display or storage, and records a local `llm-brief` memory run. It does
+not approve, move, send, delete, or modify anything.
+
+If you want to use ChatGPT/Codex Pro instead of API credits, generate a
+Codex-ready handoff:
+
+``` powershell
+python -m assistant.src.generate_llm_brief --codex-handoff --request "Help me prioritize my morning"
+```
+
+This writes `reports/clarity-codex-handoff.md` by default. It does not call an
+API provider. Open the report in Codex or ask Codex to summarize it in chat.
 
 To refresh approved email metadata before answering:
 
@@ -228,6 +258,18 @@ python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --gr
 The combined cycle refreshes email metadata first, refreshes the requested
 calendar metadata, and then prints the command center from local memory. It does
 not create, update, delete, or respond to calendar events.
+
+To also generate a validated live LLM brief after a cycle:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph --llm-brief
+```
+
+To generate a Codex-ready handoff after a cycle instead of using API credits:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph --codex-handoff
+```
 
 To check local setup before scheduling:
 
@@ -419,7 +461,10 @@ python -m assistant.src.execute_email_moves --gmail --execute
 ```
 
 Execution still requires an approved local action, an email source item, a
-`read_write` mailbox, and a configured destination folder.
+`read_write` mailbox, and a configured destination folder. If
+`assistant.email.gmailCleanupPolicy.trashSpam` is enabled, the same explicit
+Gmail execution command also moves current Spam messages from the configured
+Gmail mailbox to Trash. It does not permanently delete Gmail messages.
 
 To generate a local brief from memory:
 
@@ -462,7 +507,20 @@ python -m assistant.src.run_email_review --mailbox clarity@sendthisfile.ai --gra
 ```
 
 This live Graph mode is still read-only. It records local proposed actions but
-does not move, archive, delete, or send email.
+does not move, archive, delete, or send email. Live Graph email review reads
+messages from the mailbox Inbox, so Outlook rules that have already moved
+messages to another folder are respected before Clarity proposes cleanup.
+
+To write a read-only audit of Outlook Inbox rules for an approved mailbox:
+
+``` powershell
+python -m assistant.src.audit_outlook_rules --mailbox scott.sexton@sendthisfile.com
+```
+
+This writes a local Markdown report under `reports/` with rule names, order,
+enabled/error/read-only status, server-side execution confidence, conditions,
+exceptions, and actions. It does not create, update, reorder, disable, or delete
+Outlook rules.
 
 To read approved Gmail inbox metadata instead, enable the Gmail API, authorize
 Google with `https://www.googleapis.com/auth/gmail.modify`, then run:

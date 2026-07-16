@@ -101,12 +101,7 @@ def answer_memory_question(
                 empty_message="No Clarity cycle runs found in Clarity memory.",
             )
         if question == "latest-llm-brief":
-            return _answer_latest_run(
-                store,
-                workflow="fake-llm-brief",
-                title="Latest Fake LLM Brief",
-                empty_message="No fake LLM brief runs found in Clarity memory.",
-            )
+            return _answer_latest_llm_run(store)
         if question == "latest-jira-run":
             return _answer_latest_run(
                 store,
@@ -174,6 +169,45 @@ def _answer_latest_run(
     if run is None:
         return empty_message
 
+    lines = [
+        f"# {title}",
+        "",
+        f"- Run ID: {run.run_id}",
+        f"- Workflow: {run.workflow}",
+        f"- Status: {run.status}",
+        f"- Started: {run.started_at}",
+    ]
+    if run.completed_at is not None:
+        lines.append(f"- Completed: {run.completed_at}")
+    if run.summary:
+        lines.append(f"- Summary: {run.summary}")
+    artifacts = store.list_generated_artifacts(run_id=run.run_id)
+    for artifact in artifacts:
+        lines.append(f"- Artifact: {artifact.path} ({artifact.artifact_type})")
+        if artifact.summary:
+            lines.append(f"  Artifact summary: {artifact.summary}")
+    return "\n".join(lines)
+
+
+def _answer_latest_llm_run(store: DuckDbMemoryStore) -> str:
+    live_run = store.latest_run(workflow="llm-brief")
+    fake_run = store.latest_run(workflow="fake-llm-brief")
+    if live_run is not None:
+        return _format_run_answer(
+            store,
+            run=live_run,
+            title="Latest LLM Brief",
+        )
+    if fake_run is not None:
+        return _format_run_answer(
+            store,
+            run=fake_run,
+            title="Latest Fake LLM Brief",
+        )
+    return "No LLM brief runs found in Clarity memory."
+
+
+def _format_run_answer(store: DuckDbMemoryStore, *, run, title: str) -> str:
     lines = [
         f"# {title}",
         "",
@@ -755,20 +789,39 @@ def _approved_email_move_actions(store: DuckDbMemoryStore, *, limit: int):
 
 
 def _format_action_queue(title: str, actions) -> str:
-    lines = [f"# {title}", ""]
+    blocks = []
     for action in actions:
-        subject = f" - {action.item_subject}" if action.item_subject else ""
-        lines.append(f"- {action.action_type}{subject} [{action.approval_status}]")
-        lines.append(f"  Action: {action.action_id}")
-        if action.item_external_id:
-            lines.append(f"  Item: {action.item_external_id}")
+        if action.action_type.startswith("propose_email_move_"):
+            label = _email_move_action_label(action.action_type)
+            target = action.action_target or "configured folder"
+            subject = action.item_subject or "(no subject)"
+            block = [
+                f"- Move to {target}: {subject} [{action.approval_status}]",
+                f"  Action: {action.action_id}",
+            ]
+            if action.source_scope_label:
+                block.append(f"  Mailbox: {action.source_scope_label}")
+            block.append(f"  Classification: {label}")
+            blocks.append(block)
+            continue
+
+        subject = f": {action.item_subject}" if action.item_subject else ""
+        block = [
+            f"- {action.action_type}{subject} [{action.approval_status}]",
+            f"  Action: {action.action_id}",
+        ]
         if action.source_scope_label:
-            lines.append(f"  Source: {action.source_scope_label}")
+            block.append(f"  Source: {action.source_scope_label}")
         if action.action_target:
-            lines.append(f"  Target: {action.action_target}")
-        if action.result:
-            lines.append(f"  Proposal: {action.result}")
-    return "\n".join(lines)
+            block.append(f"  Target: {action.action_target}")
+        blocks.append(block)
+
+    rendered_blocks = ["\n".join(block) for block in blocks]
+    return "\n\n".join((f"# {title}", *rendered_blocks))
+
+
+def _email_move_action_label(action_type: str) -> str:
+    return action_type.removeprefix("propose_email_move_").replace("_", " ")
 
 
 def _resolve_memory_path(workspace_root: Path, memory_path: Path) -> Path:

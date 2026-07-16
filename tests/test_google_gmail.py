@@ -174,6 +174,57 @@ def test_google_gmail_move_transport_trashes_deleted_items():
     assert transport.post_calls[0][2] == {}
 
 
+def test_google_gmail_move_transport_trashes_spam_messages():
+    base_url = "https://gmail.example/gmail/v1"
+    first_list_url = (
+        "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/messages?"
+        "maxResults=100&labelIds=SPAM&includeSpamTrash=true"
+    )
+    second_list_url = (
+        "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/messages?"
+        "maxResults=100&labelIds=SPAM&includeSpamTrash=true&pageToken=next-page"
+    )
+    first_trash_url = (
+        "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/"
+        "messages/spam-1/trash"
+    )
+    second_trash_url = (
+        "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/"
+        "messages/spam-2/trash"
+    )
+    transport = FakeGoogleTransport(
+        {
+            first_list_url: FakeGoogleResponse(
+                200,
+                {"messages": [{"id": "spam-1"}], "nextPageToken": "next-page"},
+            ),
+            second_list_url: FakeGoogleResponse(
+                200,
+                {"messages": [{"id": "spam-2"}]},
+            ),
+            first_trash_url: FakeGoogleResponse(200, {"id": "spam-1"}),
+            second_trash_url: FakeGoogleResponse(200, {"id": "spam-2"}),
+        }
+    )
+    client = GoogleGmailMoveTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+    )
+
+    trashed = client.trash_spam_messages("sesexton@gmail.com")
+
+    assert trashed == ("spam-1", "spam-2")
+    assert [call[0] for call in transport.get_calls] == [
+        first_list_url,
+        second_list_url,
+    ]
+    assert [call[0] for call in transport.post_calls] == [
+        first_trash_url,
+        second_trash_url,
+    ]
+
+
 def test_google_gmail_move_transport_creates_label_and_archives():
     labels_url = "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/labels"
     modify_url = (

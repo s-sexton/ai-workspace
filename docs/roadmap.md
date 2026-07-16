@@ -94,7 +94,7 @@ Live calendar providers require a separate design and approval before use.
 
 ## Phase 5: LLM Summarization
 
-Status: bounded local contract implemented, live provider not enabled.
+Status: live provider wiring started behind explicit commands.
 
 The LLM may summarize only bounded local context. It may not approve, execute,
 send, move, delete, or modify anything.
@@ -104,9 +104,18 @@ Current implementation:
 - `ask_memory llm-context`
 - `ask_memory llm-prompt`
 - fake deterministic LLM brief generation
+- live OpenAI LLM brief generation through the Responses API
+- optional LLM brief generation after a Clarity cycle
+- Codex-ready handoff generation for ChatGPT/Codex Pro summarization without API
+  credits
 - local output validation
 
-Next step is provider wiring through the existing `llm_summary` contract.
+Next useful slices:
+
+- Add LLM-backed answers for selected local questions without granting tool
+  execution authority
+- Add eval fixtures for brief quality and safety boundaries
+- Add per-run prompt/report artifact links in the command center
 
 ## Phase 6: Delegated Workflows
 

@@ -99,6 +99,21 @@ class GoogleCredentials:
 
 
 @dataclass(frozen=True)
+class OpenAICredentials:
+    """Local OpenAI API settings loaded from environment values."""
+
+    api_key: str | None = field(default=None, repr=False)
+    model: str | None = None
+    base_url: str | None = None
+
+    @property
+    def is_complete(self) -> bool:
+        """Return whether OpenAI API credentials are present."""
+
+        return all((self.api_key, self.model))
+
+
+@dataclass(frozen=True)
 class JiraSettings:
     """Shared Jira report settings loaded from committed configuration."""
 
@@ -106,6 +121,14 @@ class JiraSettings:
     max_results: int
     sort_order: str
     report_fields: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GmailCleanupPolicy:
+    """Gmail-specific cleanup policy loaded from committed configuration."""
+
+    trash_spam: bool = False
+    mailboxes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -117,6 +140,7 @@ class EmailSettings:
     mailbox_allowed_senders: Mapping[str, tuple[str, ...]]
     folder_namespace: str
     folder_policy: Mapping[str, str]
+    gmail_cleanup_policy: GmailCleanupPolicy
     default_mailbox: str
     max_messages: int
 
@@ -203,6 +227,16 @@ class WorkspaceConfig:
         )
 
     @property
+    def openai_credentials(self) -> OpenAICredentials:
+        """Return OpenAI API credentials from local environment values."""
+
+        return OpenAICredentials(
+            api_key=self.env.get("OPENAI_API_KEY"),
+            model=self.env.get("OPENAI_MODEL"),
+            base_url=self.env.get("OPENAI_BASE_URL"),
+        )
+
+    @property
     def jira_settings(self) -> JiraSettings:
         """Return validated Jira report settings."""
 
@@ -237,6 +271,11 @@ class WorkspaceConfig:
             folder_namespace=folder_namespace,
             folder_policy=MappingProxyType(
                 _require_folder_policy(settings, "folderPolicy", folder_namespace)
+            ),
+            gmail_cleanup_policy=_require_gmail_cleanup_policy(
+                settings,
+                "gmailCleanupPolicy",
+                mailbox_access,
             ),
             default_mailbox=default_mailbox,
             max_messages=_require_positive_int(settings, "maxMessages"),
@@ -343,6 +382,22 @@ class WorkspaceConfig:
         if missing:
             raise ConfigurationError(
                 "Missing required Google environment values: " + ", ".join(missing)
+            )
+
+        return credentials
+
+    def require_openai_credentials(self) -> OpenAICredentials:
+        """Return OpenAI credentials or raise when required values are missing."""
+
+        credentials = self.openai_credentials
+        required = (
+            ("OPENAI_API_KEY", credentials.api_key),
+            ("OPENAI_MODEL", credentials.model),
+        )
+        missing = [name for name, value in required if not value]
+        if missing:
+            raise ConfigurationError(
+                "Missing required OpenAI environment values: " + ", ".join(missing)
             )
 
         return credentials
@@ -652,3 +707,51 @@ def _require_folder_policy(
             )
 
     return folder_policy
+
+
+def _require_gmail_cleanup_policy(
+    settings: Mapping[str, Any],
+    key: str,
+    mailbox_access: Mapping[str, str],
+) -> GmailCleanupPolicy:
+    value = settings.get(key, {})
+    if value is None:
+        value = {}
+    if not isinstance(value, Mapping):
+        raise ConfigurationError(f"Configuration value must be an object: {key}")
+
+    trash_spam = value.get("trashSpam", False)
+    if not isinstance(trash_spam, bool):
+        raise ConfigurationError(
+            f"Configuration value must be a boolean: {key}.trashSpam"
+        )
+
+    raw_mailboxes = value.get("mailboxes", [])
+    if raw_mailboxes is None:
+        raw_mailboxes = []
+    if not isinstance(raw_mailboxes, list):
+        raise ConfigurationError(
+            f"Configuration value must be a list of strings: {key}.mailboxes"
+        )
+    if any(not isinstance(mailbox, str) or not mailbox.strip() for mailbox in raw_mailboxes):
+        raise ConfigurationError(
+            f"Configuration value must be a list of strings: {key}.mailboxes"
+        )
+
+    mailboxes = tuple(mailbox.strip() for mailbox in raw_mailboxes)
+    if trash_spam and not mailboxes:
+        raise ConfigurationError(
+            "Gmail cleanup policy requires at least one mailbox when trashSpam is true."
+        )
+    for mailbox in mailboxes:
+        access_mode = mailbox_access.get(mailbox)
+        if access_mode is None:
+            raise ConfigurationError(
+                f"Gmail cleanup mailbox must be approved: {mailbox}"
+            )
+        if access_mode != "read_write":
+            raise ConfigurationError(
+                f"Gmail cleanup mailbox must be read_write: {mailbox}"
+            )
+
+    return GmailCleanupPolicy(trash_spam=trash_spam, mailboxes=mailboxes)

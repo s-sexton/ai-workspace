@@ -15,7 +15,7 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
         encoding="utf-8",
     )
     (config_dir / ".env").write_text(
-        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\nGRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=graph-secret\nGRAPH_ACCESS_TOKEN=graph-access\nGOOGLE_CLIENT_ID=google-client\nGOOGLE_CLIENT_SECRET=google-secret\nGOOGLE_REFRESH_TOKEN=google-refresh\nGOOGLE_ACCESS_TOKEN=google-access\n",
+        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\nGRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=graph-secret\nGRAPH_ACCESS_TOKEN=graph-access\nGOOGLE_CLIENT_ID=google-client\nGOOGLE_CLIENT_SECRET=google-secret\nGOOGLE_REFRESH_TOKEN=google-refresh\nGOOGLE_ACCESS_TOKEN=google-access\nOPENAI_API_KEY=openai-secret\nOPENAI_MODEL=gpt-test\nOPENAI_BASE_URL=https://openai.example/v1\n",
         encoding="utf-8",
     )
 
@@ -41,6 +41,24 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
     assert config.google_credentials.access_token == "google-access"
     assert config.google_credentials.is_refresh_token_complete
     assert config.google_credentials.is_bearer_auth_complete
+    assert config.openai_credentials.api_key == "openai-secret"
+    assert config.openai_credentials.model == "gpt-test"
+    assert config.openai_credentials.base_url == "https://openai.example/v1"
+    assert config.openai_credentials.is_complete
+
+
+def test_require_openai_credentials_reports_missing_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text("OPENAI_API_KEY=secret\n", encoding="utf-8")
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.require_openai_credentials()
+
+    assert "OPENAI_MODEL" in str(exc_info.value)
 
 
 def test_jira_settings_are_validated_and_typed(tmp_path):
@@ -97,6 +115,10 @@ def test_email_settings_are_validated_and_typed(tmp_path):
                 "noise": "Clarity/Noise",
                 "trash": "Deleted Items"
               },
+              "gmailCleanupPolicy": {
+                "trashSpam": true,
+                "mailboxes": ["inbox@example.invalid"]
+              },
               "maxMessages": 50
             }
           }
@@ -125,8 +147,81 @@ def test_email_settings_are_validated_and_typed(tmp_path):
     assert email_settings.folder_for_label("noise") == "Clarity/Noise"
     assert email_settings.folder_for_label("trash") == "Deleted Items"
     assert email_settings.folder_for_label("unknown") is None
+    assert email_settings.gmail_cleanup_policy.trash_spam is True
+    assert email_settings.gmail_cleanup_policy.mailboxes == ("inbox@example.invalid",)
     assert email_settings.default_mailbox == "inbox@example.invalid"
     assert email_settings.max_messages == 50
+
+
+def test_email_gmail_cleanup_policy_defaults_to_disabled(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "read_write"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+    email_settings = config.email_settings
+
+    assert email_settings.gmail_cleanup_policy.trash_spam is False
+    assert email_settings.gmail_cleanup_policy.mailboxes == ()
+
+
+def test_email_gmail_cleanup_policy_requires_read_write_mailbox(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "inbox@example.invalid", "accessMode": "read"}
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "gmailCleanupPolicy": {
+                "trashSpam": true,
+                "mailboxes": ["inbox@example.invalid"]
+              },
+              "maxMessages": 50
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "read_write" in str(exc_info.value)
 
 
 def test_calendar_settings_are_validated_and_typed(tmp_path):

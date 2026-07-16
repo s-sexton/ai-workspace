@@ -189,11 +189,58 @@ class GoogleGmailMoveTransport:
             },
         )
 
+    def trash_spam_messages(self, mailbox: str) -> tuple[str, ...]:
+        """Move all current Gmail Spam messages to Trash."""
+
+        clean_mailbox = _required_text(mailbox, "mailbox")
+        trashed_message_ids: list[str] = []
+        page_token: str | None = None
+        while True:
+            payload = self._get_json(
+                self._message_list_url(
+                    clean_mailbox,
+                    label_id="SPAM",
+                    include_spam_trash=True,
+                    page_token=page_token,
+                )
+            )
+            raw_messages = payload.get("messages", [])
+            if not isinstance(raw_messages, list):
+                raise GoogleGmailClientError("Gmail messages response missing messages.")
+            for raw_message in raw_messages:
+                if not isinstance(raw_message, Mapping):
+                    raise GoogleGmailClientError(
+                        "Gmail messages response item must be an object."
+                    )
+                message_id = raw_message.get("id")
+                if not isinstance(message_id, str) or not message_id.strip():
+                    raise GoogleGmailClientError("Gmail message missing id.")
+                clean_message_id = message_id.strip()
+                self._trash_message(clean_mailbox, clean_message_id)
+                trashed_message_ids.append(clean_message_id)
+
+            next_page_token = payload.get("nextPageToken")
+            if next_page_token is None:
+                break
+            if not isinstance(next_page_token, str) or not next_page_token.strip():
+                raise GoogleGmailClientError("Gmail nextPageToken must be a string.")
+            page_token = next_page_token.strip()
+
+        return tuple(trashed_message_ids)
+
     def _label_id(self, mailbox: str, label_name: str) -> str:
         existing = self._find_label_id(mailbox, label_name)
         if existing is not None:
             return existing
         return self._create_label(mailbox, label_name)
+
+    def _get_json(self, url: str) -> Mapping[str, Any]:
+        response = self.transport.get(url, headers=self._json_headers())
+        if response.status_code != 200:
+            raise GoogleGmailClientError(
+                f"Gmail read failed with status {response.status_code}"
+            )
+        return response.json()
 
     def _find_label_id(self, mailbox: str, label_name: str) -> str | None:
         response = self.transport.get(self._labels_url(mailbox), headers=self._json_headers())
@@ -289,6 +336,25 @@ class GoogleGmailMoveTransport:
             f"{self._base_url()}/users/{encoded_mailbox}/messages/"
             f"{encoded_message_id}/modify"
         )
+
+    def _message_list_url(
+        self,
+        mailbox: str,
+        *,
+        label_id: str,
+        include_spam_trash: bool,
+        page_token: str | None = None,
+    ) -> str:
+        encoded_mailbox = quote(mailbox, safe="")
+        query_values = {
+            "maxResults": "100",
+            "labelIds": label_id,
+            "includeSpamTrash": "true" if include_spam_trash else "false",
+        }
+        if page_token is not None:
+            query_values["pageToken"] = page_token
+        query = urlencode(query_values)
+        return f"{self._base_url()}/users/{encoded_mailbox}/messages?{query}"
 
     def _base_url(self) -> str:
         return self.base_url.rstrip("/")

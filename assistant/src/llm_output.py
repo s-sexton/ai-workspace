@@ -1,4 +1,4 @@
-"""Validate future LLM summary output before display or storage."""
+"""Validate LLM summary output before display or storage."""
 
 from __future__ import annotations
 
@@ -17,14 +17,14 @@ _FORBIDDEN_PATTERNS = (
 
 @dataclass(frozen=True)
 class LlmOutputValidation:
-    """Validation result for future LLM summary text."""
+    """Validation result for LLM summary text."""
 
     ok: bool
     problems: tuple[str, ...] = ()
 
 
 def validate_llm_summary_output(text: str) -> LlmOutputValidation:
-    """Return whether future LLM summary text respects Clarity's boundaries."""
+    """Return whether LLM summary text respects Clarity's boundaries."""
 
     if not isinstance(text, str) or not text.strip():
         return LlmOutputValidation(ok=False, problems=("summary is empty",))
@@ -38,7 +38,7 @@ def validate_llm_summary_output(text: str) -> LlmOutputValidation:
 
 
 def require_safe_llm_summary_output(text: str) -> str:
-    """Return text or raise when future LLM summary text is unsafe."""
+    """Return text or raise when LLM summary text is unsafe."""
 
     validation = validate_llm_summary_output(text)
     if not validation.ok:

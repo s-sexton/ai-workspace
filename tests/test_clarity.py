@@ -33,6 +33,16 @@ class FakeCalendarReviewResult:
     event_count: int
 
 
+class StaticLlmProvider:
+    def __init__(self, summary):
+        self.summary = summary
+        self.prompts = []
+
+    def summarize(self, prompt):
+        self.prompts.append(prompt)
+        return self.summary
+
+
 def test_clarity_answers_emails_needing_attention(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
@@ -58,7 +68,7 @@ def test_clarity_answers_pending_approval_question(tmp_path):
     )
 
     assert "# Pending Actions" in answer
-    assert "propose_email_move_review - Review vendor terms [required]" in answer
+    assert "Move to Clarity/Review: Review vendor terms [required]" in answer
     assert "Action:" in answer
 
 
@@ -136,6 +146,39 @@ def test_clarity_answers_focus_question(tmp_path):
     assert "1. Review pending approvals" in answer
     assert "Review vendor terms" in answer
     assert "3. Review approved email moves" in answer
+
+
+def test_clarity_can_answer_with_llm_from_bounded_context(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+    provider = StaticLlmProvider(
+        """
+        1. What matters now
+        - Review vendor terms needs attention.
+
+        2. Why it matters
+        - It may require a human decision.
+
+        3. What needs approval
+        - A review move is pending approval.
+
+        4. Safe next commands
+        - Review pending actions locally.
+        """
+    )
+
+    answer = answer_clarity_request(
+        "Help me prioritize my morning",
+        root=tmp_path,
+        memory_path=memory_path,
+        use_llm=True,
+        llm_provider=provider,
+    )
+
+    assert "Review vendor terms needs attention" in answer
+    assert "# Clarity LLM Prompt" in provider.prompts[0]
+    assert "Human request:" in provider.prompts[0]
+    assert "Help me prioritize my morning" in provider.prompts[0]
 
 
 def test_clarity_answers_command_center_with_email_cleanup(tmp_path):
@@ -389,6 +432,39 @@ def test_main_prints_clarity_answer(tmp_path, monkeypatch, capsys):
 
     output = capsys.readouterr().out
     assert "# Items Marked For Review" in output
+
+
+def test_main_can_answer_with_llm(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+    monkeypatch.chdir(tmp_path)
+
+    def fake_build_openai_llm_provider(**_):
+        return StaticLlmProvider(
+            """
+            1. What matters now
+            - Review vendor terms needs attention.
+
+            2. Why it matters
+            - It may require a human decision.
+
+            3. What needs approval
+            - A review move is pending approval.
+
+            4. Safe next commands
+            - Review pending actions locally.
+            """
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.clarity._build_openai_llm_provider",
+        fake_build_openai_llm_provider,
+    )
+
+    main(["Help me prioritize my morning", "--llm", "--memory", str(memory_path)])
+
+    output = capsys.readouterr().out
+    assert "Review vendor terms needs attention" in output
 
 
 def test_main_runs_local_prompt(tmp_path, monkeypatch, capsys):

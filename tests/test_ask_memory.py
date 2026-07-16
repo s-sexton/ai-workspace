@@ -322,9 +322,65 @@ def test_answers_recent_actions(tmp_path):
     assert "Result: Wrote reports/jira-report.md" in answer
 
 
+def test_latest_llm_brief_prefers_live_run(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _seed_memory(memory_path)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        run = store.start_run(workflow="llm-brief")
+        store.record_generated_artifact(
+            run_id=run.run_id,
+            artifact_type="markdown_llm_brief",
+            path="reports/clarity-llm-brief.md",
+            summary="Validated live LLM brief.",
+        )
+        store.finish_run(
+            run.run_id,
+            status="completed",
+            summary="Generated validated OpenAI LLM brief.",
+        )
+    finally:
+        store.close()
+
+    answer = answer_memory_question(
+        "latest-llm-brief",
+        root=tmp_path,
+        memory_path=memory_path,
+    )
+
+    assert "# Latest LLM Brief" in answer
+    assert "- Workflow: llm-brief" in answer
+    assert "Generated validated OpenAI LLM brief." in answer
+
+
 def test_answers_pending_actions(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _seed_memory(memory_path)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        latest_run = store.latest_run(workflow="jira-report")
+        email_source = store.record_source(
+            source_type="email",
+            display_name="scott.sexton@sendthisfile.com",
+            scope_label="scott.sexton@sendthisfile.com",
+        )
+        second_item = store.record_item_seen(
+            source_id=email_source.source_id,
+            external_id="email-review-2",
+            item_type="email_message",
+            subject="Suspicious Activities Report",
+            first_seen_run_id=latest_run.run_id,
+        )
+        store.record_assistant_action(
+            run_id=latest_run.run_id,
+            item_id=second_item.item_id,
+            action_type="propose_email_move_review",
+            approval_status="required",
+            action_target="Clarity/Review",
+            result="Proposed moving message metadata for email-review-2.",
+        )
+    finally:
+        store.close()
 
     answer = answer_memory_question(
         "pending-actions",
@@ -333,11 +389,17 @@ def test_answers_pending_actions(tmp_path):
     )
 
     assert "# Pending Actions" in answer
-    assert "propose_email_move_noise - July product newsletter [required]" in answer
+    assert "Move to Clarity/Noise: July product newsletter [required]" in answer
     assert "Action:" in answer
-    assert "Item: email-noise-1" in answer
-    assert "Target: Clarity/Noise" in answer
-    assert "Proposal: Proposed moving message metadata" in answer
+    assert "Mailbox: scott.sexton@sendthisfile.com" in answer
+    assert "Classification: noise" in answer
+    assert "Move to Clarity/Review: Suspicious Activities Report [required]" in answer
+    assert (
+        "Classification: review\n\n"
+        "- Move to Clarity/Noise: July product newsletter [required]"
+    ) in answer
+    assert "Item: email-noise-1" not in answer
+    assert "Proposal: Proposed moving message metadata" not in answer
 
 
 def test_answers_approved_actions(tmp_path):
@@ -351,12 +413,12 @@ def test_answers_approved_actions(tmp_path):
     )
 
     assert "# Approved Actions" in answer
-    assert "propose_email_move_review - Review vendor terms [approved]" in answer
+    assert "Move to Clarity/Review: Review vendor terms [approved]" in answer
     assert "Action:" in answer
-    assert "Item: email-review-1" in answer
-    assert "Source: scott.sexton@sendthisfile.com" in answer
-    assert "Target: Clarity/Review" in answer
-    assert "Proposal: Proposed moving message metadata" in answer
+    assert "Mailbox: scott.sexton@sendthisfile.com" in answer
+    assert "Classification: review" in answer
+    assert "Item: email-review-1" not in answer
+    assert "Proposal: Proposed moving message metadata" not in answer
 
 
 def test_answers_email_move_plan(tmp_path):

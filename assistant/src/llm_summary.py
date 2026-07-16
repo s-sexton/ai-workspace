@@ -12,7 +12,7 @@ from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 
 
 class LlmSummaryProvider(Protocol):
-    """A future provider that can summarize a Clarity prompt."""
+    """A provider that can summarize a Clarity prompt."""
 
     def summarize(self, prompt: str) -> str:
         """Return summary text for a prompt."""
@@ -32,13 +32,15 @@ def generate_llm_summary(
     root: Path | str | None = None,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     limit: int = 10,
+    user_request: str | None = None,
 ) -> LlmSummaryResult:
-    """Generate and validate a future LLM summary using an injected provider."""
+    """Generate and validate an LLM summary using an injected provider."""
 
     prompt = build_llm_prompt(
         root=root,
         memory_path=memory_path,
         limit=limit,
+        user_request=user_request,
     )
     summary = summarizer.summarize(prompt)
     return LlmSummaryResult(

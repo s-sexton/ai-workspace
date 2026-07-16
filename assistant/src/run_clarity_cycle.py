@@ -6,9 +6,15 @@ import argparse
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence, TypeVar
 
 from assistant.src.ask_memory import answer_memory_question
+from assistant.src.generate_llm_brief import (
+    DEFAULT_CODEX_HANDOFF_PATH,
+    DEFAULT_LLM_BRIEF_PATH,
+    generate_codex_handoff,
+    generate_openai_llm_brief,
+)
 from assistant.src.run_calendar_review import (
     build_google_calendar_read_transport_from_config,
     build_graph_calendar_read_transport_from_config,
@@ -26,6 +32,16 @@ from common.memory import DuckDbMemoryStore
 
 
 DEFAULT_CYCLE_REPORT_PATH = Path("reports") / "clarity-cycle.md"
+_T = TypeVar("_T")
+
+
+class ClarityCyclePhaseError(RuntimeError):
+    """Failure from a named Clarity cycle phase."""
+
+    def __init__(self, phase: str, cause: Exception):
+        self.phase = phase
+        self.cause = cause
+        super().__init__(f"{phase} failed: {type(cause).__name__}: {cause}")
 
 
 @dataclass(frozen=True)
@@ -44,6 +60,8 @@ class ClarityCycleResult:
     calendar_event_count: int
     calendar_review_date: str | None
     cycle_report_path: Path
+    llm_brief_path: Path | None
+    codex_handoff_path: Path | None
     focus_answer: str
     review_answer: str
     pending_answer: str
@@ -65,30 +83,40 @@ def run_clarity_cycle(
     calendar_date: str | None = None,
     use_graph_calendar: bool = False,
     use_google_calendar: bool = False,
+    generate_llm_brief: bool = False,
+    llm_brief_path: Path | str = DEFAULT_LLM_BRIEF_PATH,
+    generate_codex_handoff_report: bool = False,
+    codex_handoff_path: Path | str = DEFAULT_CODEX_HANDOFF_PATH,
 ) -> ClarityCycleResult:
     """Refresh approved memory and return the key local Clarity answers."""
 
-    review_result = run_email_review(
-        root=root,
-        mailbox=mailbox or "",
-        limit=limit,
-        memory_path=memory_path,
-        brief_output_path=brief_path,
-        transport=transport,
-        use_sample_graph=use_sample_graph,
+    review_result = _run_cycle_phase(
+        "Refresh email metadata",
+        lambda: run_email_review(
+            root=root,
+            mailbox=mailbox or "",
+            limit=limit,
+            memory_path=memory_path,
+            brief_output_path=brief_path,
+            transport=transport,
+            use_sample_graph=use_sample_graph,
+        ),
     )
     calendar_result = None
     if refresh_calendar:
-        calendar_result = run_calendar_review(
-            root=root,
-            calendar=calendar or "",
-            review_date=calendar_date,
-            limit=limit,
-            memory_path=review_result.memory_path,
-            brief_output_path=brief_path,
-            transport=calendar_transport,
-            use_graph=use_graph_calendar,
-            use_google=use_google_calendar,
+        calendar_result = _run_cycle_phase(
+            "Refresh calendar metadata",
+            lambda: run_calendar_review(
+                root=root,
+                calendar=calendar or "",
+                review_date=calendar_date,
+                limit=limit,
+                memory_path=review_result.memory_path,
+                brief_output_path=brief_path,
+                transport=calendar_transport,
+                use_graph=use_graph_calendar,
+                use_google=use_google_calendar,
+            ),
         )
     review_answer = answer_memory_question(
         "review-items",
@@ -138,6 +166,35 @@ def run_clarity_cycle(
         calendar_event_count=calendar_result.event_count if calendar_result else 0,
         calendar_review_date=calendar_result.review_date if calendar_result else None,
     )
+    resolved_llm_brief_path = None
+    if generate_llm_brief:
+        _run_cycle_phase(
+            "Generate LLM brief",
+            lambda: generate_openai_llm_brief(
+                root=root,
+                memory_path=review_result.memory_path,
+                output_path=llm_brief_path,
+                limit=limit,
+            ),
+        )
+        workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+        resolved_llm_brief_path = _resolve_path(workspace_root, Path(llm_brief_path))
+    resolved_codex_handoff_path = None
+    if generate_codex_handoff_report:
+        _run_cycle_phase(
+            "Generate Codex handoff",
+            lambda: generate_codex_handoff(
+                root=root,
+                memory_path=review_result.memory_path,
+                output_path=codex_handoff_path,
+                limit=limit,
+            ),
+        )
+        workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
+        resolved_codex_handoff_path = _resolve_path(
+            workspace_root,
+            Path(codex_handoff_path),
+        )
     return ClarityCycleResult(
         memory_path=review_result.memory_path,
         brief_path=review_result.brief_path,
@@ -151,6 +208,8 @@ def run_clarity_cycle(
         calendar_event_count=calendar_result.event_count if calendar_result else 0,
         calendar_review_date=calendar_result.review_date if calendar_result else None,
         cycle_report_path=resolved_cycle_report_path,
+        llm_brief_path=resolved_llm_brief_path,
+        codex_handoff_path=resolved_codex_handoff_path,
         focus_answer=focus_answer,
         review_answer=review_answer,
         pending_answer=pending_answer,
@@ -162,12 +221,16 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = _parse_args(argv)
     try:
-        transport = (
-            build_graph_read_transport_from_config(use_bearer_auth=args.graph_bearer)
-            if args.graph
-            else None
+        transport = _run_cycle_phase(
+            "Build Graph email transport",
+            lambda: build_graph_read_transport_from_config(
+                use_bearer_auth=args.graph_bearer
+            ),
+        ) if args.graph else None
+        calendar_transport = _run_cycle_phase(
+            "Build calendar transport",
+            lambda: _build_calendar_transport(args),
         )
-        calendar_transport = _build_calendar_transport(args)
         result = run_clarity_cycle(
             mailbox=args.mailbox,
             limit=args.limit,
@@ -182,6 +245,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             calendar_date=args.calendar_date,
             use_graph_calendar=args.graph_calendar,
             use_google_calendar=args.google_calendar,
+            generate_llm_brief=args.llm_brief,
+            llm_brief_path=args.llm_brief_output,
+            generate_codex_handoff_report=args.codex_handoff,
+            codex_handoff_path=args.codex_handoff_output,
         )
     except Exception as exc:
         safe_error = _safe_error_message(exc)
@@ -214,6 +281,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(f"Calendar events: {result.calendar_event_count}")
     print(f"Brief: {result.brief_path}")
     print(f"Cycle report: {result.cycle_report_path}")
+    if result.llm_brief_path:
+        print(f"LLM brief: {result.llm_brief_path}")
+    if result.codex_handoff_path:
+        print(f"Codex handoff: {result.codex_handoff_path}")
     print()
     print(result.focus_answer)
     print()
@@ -294,6 +365,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=str(DEFAULT_CYCLE_REPORT_PATH),
         help="Local cycle report output path.",
     )
+    parser.add_argument(
+        "--llm-brief",
+        action="store_true",
+        help="Generate a validated live OpenAI LLM brief after the cycle.",
+    )
+    parser.add_argument(
+        "--llm-brief-output",
+        default=str(DEFAULT_LLM_BRIEF_PATH),
+        help="Local LLM brief output path.",
+    )
+    parser.add_argument(
+        "--codex-handoff",
+        action="store_true",
+        help="Generate a Codex-ready handoff prompt after the cycle.",
+    )
+    parser.add_argument(
+        "--codex-handoff-output",
+        default=str(DEFAULT_CODEX_HANDOFF_PATH),
+        help="Local Codex handoff output path.",
+    )
     args = parser.parse_args(argv)
     if args.graph_bearer and not (args.graph or args.graph_calendar):
         parser.error("--graph-bearer requires --graph or --graph-calendar.")
@@ -320,6 +411,15 @@ def _build_calendar_transport(args: argparse.Namespace) -> CalendarTransport | N
             use_bearer_auth=args.google_bearer
         )
     return None
+
+
+def _run_cycle_phase(phase: str, action: Callable[[], _T]) -> _T:
+    try:
+        return action()
+    except ClarityCyclePhaseError:
+        raise
+    except Exception as exc:
+        raise ClarityCyclePhaseError(phase, exc) from exc
 
 
 def _write_cycle_report(

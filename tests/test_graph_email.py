@@ -14,10 +14,12 @@ from common.graph_email import (
     GraphEmailFolderTransport,
     GraphEmailReadTransport,
     GraphEmailMoveTransport,
+    GraphEmailRuleTransport,
     UrllibGraphResponse,
     build_graph_email_folder_transport,
     build_graph_email_read_transport,
     build_graph_email_move_transport,
+    build_graph_email_rule_transport,
 )
 
 
@@ -253,6 +255,44 @@ def test_build_graph_email_folder_transport_can_acquire_client_credentials_token
     assert isinstance(transport, GraphEmailFolderTransport)
     assert len(token_transport.calls) == 1
     assert "super-secret" not in repr(transport)
+
+
+def test_build_graph_email_rule_transport_can_use_direct_access_token():
+    graph_transport = FakeGraphTransport({})
+    token_transport = FakeGraphTokenTransport(
+        FakeGraphResponse(200, {"access_token": "should-not-be-used"})
+    )
+
+    transport = build_graph_email_rule_transport(
+        GraphCredentials(access_token="direct-token"),
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+        use_bearer_auth=True,
+    )
+
+    assert isinstance(transport, GraphEmailRuleTransport)
+    assert token_transport.calls == []
+
+
+def test_build_graph_email_rule_transport_can_acquire_client_credentials_token():
+    graph_transport = FakeGraphTransport({})
+    token_transport = FakeGraphTokenTransport(
+        FakeGraphResponse(200, {"access_token": "acquired-token"})
+    )
+
+    transport = build_graph_email_rule_transport(
+        GraphCredentials(
+            tenant_id="tenant-id",
+            client_id="client-id",
+            client_secret="client-secret",
+        ),
+        graph_transport=graph_transport,
+        token_transport=token_transport,
+    )
+
+    assert isinstance(transport, GraphEmailRuleTransport)
+    assert len(token_transport.calls) == 1
+    assert "client-secret" not in repr(transport)
 
 
 def test_graph_email_folder_transport_creates_missing_folder_path():
@@ -554,10 +594,76 @@ def test_graph_email_move_raises_for_non_successful_move_status():
     assert "access-token" not in repr(client)
 
 
+def test_graph_email_rule_transport_lists_inbox_rules():
+    base_url = "https://graph.example/v1.0"
+    rules_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
+        "mailFolders/inbox/messageRules"
+    )
+    transport = FakeGraphTransport(
+        {
+            rules_url: FakeGraphResponse(
+                200,
+                {
+                    "value": [
+                        {
+                            "id": "rule-1",
+                            "displayName": "Suspicious activity",
+                            "sequence": 1,
+                            "isEnabled": True,
+                            "hasError": False,
+                            "isReadOnly": False,
+                            "conditions": {
+                                "subjectContains": ["Suspicious Activities Report"]
+                            },
+                            "actions": {
+                                "moveToFolder": "folder-id",
+                                "stopProcessingRules": True,
+                            },
+                        }
+                    ]
+                },
+            )
+        }
+    )
+    client = GraphEmailRuleTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+    )
+
+    rules = client.list_inbox_rules("scott.sexton@sendthisfile.com")
+
+    assert len(rules) == 1
+    assert rules[0]["displayName"] == "Suspicious activity"
+    assert rules[0]["conditions"] == {
+        "subjectContains": ["Suspicious Activities Report"]
+    }
+    assert len(transport.get_calls) == 1
+    assert transport.get_calls[0][0] == rules_url
+    assert transport.get_calls[0][1]["Authorization"] == "Bearer access-token"
+
+
+def test_graph_email_rule_transport_rejects_missing_value_list():
+    rules_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
+        "mailFolders/inbox/messageRules"
+    )
+    client = GraphEmailRuleTransport(
+        access_token="access-token",
+        transport=FakeGraphTransport({rules_url: FakeGraphResponse(200, {})}),
+        base_url="https://graph.example/v1.0",
+    )
+
+    with pytest.raises(GraphClientError):
+        client.list_inbox_rules("scott.sexton@sendthisfile.com")
+
+
 def test_graph_email_read_transport_lists_messages_and_fetches_headers():
     base_url = "https://graph.example/v1.0"
     list_url = (
-        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/messages?"
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders/inbox/messages?"
         "%24top=2&%24orderby=receivedDateTime+desc&%24select="
         "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories"
     )
@@ -617,6 +723,7 @@ def test_graph_email_read_transport_lists_messages_and_fetches_headers():
         "mx.example; spf=pass; dkim=pass; dmarc=pass",
     )
     assert len(transport.get_calls) == 2
+    assert "/mailFolders/inbox/messages?" in transport.get_calls[0][0]
     assert transport.get_calls[0][1]["Authorization"] == "Bearer access-token"
 
 
@@ -633,7 +740,8 @@ def test_graph_email_read_transport_requires_positive_limit():
 
 def test_graph_email_read_transport_rejects_missing_value_list():
     list_url = (
-        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/messages?"
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders/inbox/messages?"
         "%24top=1&%24orderby=receivedDateTime+desc&%24select="
         "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories"
     )

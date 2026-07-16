@@ -132,9 +132,10 @@ Scope:
 - Normalize and classify email metadata
 - Generate local Markdown briefs
 - Generate command-center and focus-plan answers
+- Generate bounded, validated LLM summaries on explicit command
 - Propose email folder moves from configured policy
 - Execute approved email moves only through explicit provider commands
-- No LLM
+- LLMs may summarize and recommend review questions only
 - No autonomous writes
 
 ---

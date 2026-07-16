@@ -33,10 +33,10 @@ def test_generates_memory_brief(tmp_path):
     assert "# Email Move Plan" in brief
     assert "# Recent Actions" in brief
     assert "Review billing export [review]" in brief
-    assert "propose_email_move_review - Review billing export" in brief
-    assert "Target: Clarity/Review" in brief
-    assert "propose_email_move_noise - Monthly newsletter [approved]" in brief
-    assert "Target: Clarity/Noise" in brief
+    assert "Move to Clarity/Review: Review billing export [required]" in brief
+    assert "Move to Clarity/Noise: Monthly newsletter [approved]" in brief
+    assert "Classification: review" in brief
+    assert "Classification: noise" in brief
     assert (
         "In mailbox scott.sexton@sendthisfile.com, move message "
         "email-noise-1 to Clarity/Noise"

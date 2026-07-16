@@ -30,7 +30,7 @@ The LLM may summarize and recommend questions to ask the human. It must not
 approve, execute, send, move, delete, create calendar events, respond to
 calendar invitations, or modify anything.
 
-Future LLM summary output must pass local validation before display or storage.
+LLM summary output must pass local validation before display or storage.
 The validator rejects output that claims actions were performed, suggests direct
 execution, asks for credentials, or contains credential-shaped text.
 
@@ -50,10 +50,35 @@ That command uses a deterministic local provider and writes a local fake brief.
 It does not call an LLM or make network requests. When the report is written,
 it records a local `fake-llm-brief` run and generated artifact for auditability.
 
-Future provider integration should enter through the provider-neutral summary
-contract in `assistant.src.llm_summary`. That contract accepts an injected
-summarizer, builds the bounded prompt, validates returned text, and performs no
-actions. It has no default provider and makes no network calls by itself.
+Live provider integration enters through the provider-neutral summary contract
+in `assistant.src.llm_summary`. That contract accepts an injected summarizer,
+builds the bounded prompt, validates returned text, and performs no actions.
+The explicit OpenAI path is:
+
+``` powershell
+python -m assistant.src.generate_llm_brief --openai
+```
+
+It requires local `OPENAI_API_KEY` and `OPENAI_MODEL` values, uses the OpenAI
+Responses API, validates output before display or storage, and records a local
+`llm-brief` run. The scheduled-friendly cycle can also opt in with
+`--llm-brief`. Neither path grants the LLM tool use or execution authority.
+
+When API credits are not available, Clarity can generate a Codex-ready handoff:
+
+``` powershell
+python -m assistant.src.generate_llm_brief --codex-handoff
+```
+
+or after a refresh cycle:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph --codex-handoff
+```
+
+These commands write bounded local context for Codex/ChatGPT to summarize. They
+do not call an API provider and do not approve, send, move, delete, or modify
+anything.
 
 Execution remains deterministic:
 

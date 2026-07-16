@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from assistant.src.run_clarity_cycle import main, run_clarity_cycle
@@ -118,6 +120,92 @@ def test_run_clarity_cycle_can_refresh_calendar_too(tmp_path):
         store.close()
 
     assert "Read 1 calendar event(s) from family for 2026-07-10" in latest_cycle.summary
+
+
+def test_run_clarity_cycle_can_generate_llm_brief(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    cycle_report_path = tmp_path / "reports" / "cycle.md"
+    llm_brief_path = tmp_path / "reports" / "llm.md"
+    calls = []
+
+    def fake_generate_openai_llm_brief(**kwargs):
+        calls.append(kwargs)
+        output_path = Path(kwargs["output_path"])
+        output_path.write_text("# Clarity LLM Brief\n", encoding="utf-8")
+        return "# Clarity LLM Brief\n"
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.generate_openai_llm_brief",
+        fake_generate_openai_llm_brief,
+    )
+
+    result = run_clarity_cycle(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        cycle_report_path=cycle_report_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "review-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Please review this",
+                    "sender": "sender@example.invalid",
+                },
+            )
+        ),
+        generate_llm_brief=True,
+        llm_brief_path=llm_brief_path,
+    )
+
+    assert result.llm_brief_path == llm_brief_path
+    assert llm_brief_path.is_file()
+    assert calls[0]["memory_path"] == memory_path
+    assert calls[0]["output_path"] == llm_brief_path
+
+
+def test_run_clarity_cycle_can_generate_codex_handoff(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    cycle_report_path = tmp_path / "reports" / "cycle.md"
+    handoff_path = tmp_path / "reports" / "handoff.md"
+    calls = []
+
+    def fake_generate_codex_handoff(**kwargs):
+        calls.append(kwargs)
+        output_path = Path(kwargs["output_path"])
+        output_path.write_text("# Clarity Codex Handoff\n", encoding="utf-8")
+        return "# Clarity Codex Handoff\n"
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.generate_codex_handoff",
+        fake_generate_codex_handoff,
+    )
+
+    result = run_clarity_cycle(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        cycle_report_path=cycle_report_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "review-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Please review this",
+                    "sender": "sender@example.invalid",
+                },
+            )
+        ),
+        generate_codex_handoff_report=True,
+        codex_handoff_path=handoff_path,
+    )
+
+    assert result.codex_handoff_path == handoff_path
+    assert handoff_path.is_file()
+    assert calls[0]["memory_path"] == memory_path
+    assert calls[0]["output_path"] == handoff_path
 
 
 def test_main_prints_safe_cycle_summary(tmp_path, monkeypatch, capsys):
@@ -242,6 +330,78 @@ def test_main_can_refresh_google_calendar(tmp_path, monkeypatch, capsys):
     assert "Family dinner" in output
 
 
+def test_main_can_generate_llm_brief(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_generate_openai_llm_brief(**kwargs):
+        calls.append(kwargs)
+        output_path = Path(kwargs["output_path"])
+        output_path.write_text("# Clarity LLM Brief\n", encoding="utf-8")
+        return "# Clarity LLM Brief\n"
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.generate_openai_llm_brief",
+        fake_generate_openai_llm_brief,
+    )
+
+    main(
+        [
+            "--llm-brief",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+            "--cycle-report",
+            str(tmp_path / "reports" / "cycle.md"),
+            "--llm-brief-output",
+            str(tmp_path / "reports" / "llm.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "LLM brief:" in output
+    assert calls
+    assert (tmp_path / "reports" / "llm.md").is_file()
+
+
+def test_main_can_generate_codex_handoff(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_generate_codex_handoff(**kwargs):
+        calls.append(kwargs)
+        output_path = Path(kwargs["output_path"])
+        output_path.write_text("# Clarity Codex Handoff\n", encoding="utf-8")
+        return "# Clarity Codex Handoff\n"
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.generate_codex_handoff",
+        fake_generate_codex_handoff,
+    )
+
+    main(
+        [
+            "--codex-handoff",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--brief",
+            str(tmp_path / "reports" / "brief.md"),
+            "--cycle-report",
+            str(tmp_path / "reports" / "cycle.md"),
+            "--codex-handoff-output",
+            str(tmp_path / "reports" / "handoff.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "Codex handoff:" in output
+    assert calls
+    assert (tmp_path / "reports" / "handoff.md").is_file()
+
+
 def test_main_writes_failure_report_and_memory(tmp_path, monkeypatch, capsys):
     _write_config(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -268,11 +428,13 @@ def test_main_writes_failure_report_and_memory(tmp_path, monkeypatch, capsys):
     assert exc_info.value.code == 1
     output = capsys.readouterr().out
     assert "# Clarity Cycle Failed" in output
+    assert "Build Graph email transport failed" in output
     assert "GRAPH_CLIENT_SECRET=<redacted>" in output
     assert "super-secret" not in output
 
     report = (tmp_path / "reports" / "cycle.md").read_text(encoding="utf-8")
     assert "# Clarity Cycle Failed" in report
+    assert "Build Graph email transport failed" in report
     assert "GRAPH_CLIENT_SECRET=<redacted>" in report
     assert "super-secret" not in report
 
@@ -286,6 +448,45 @@ def test_main_writes_failure_report_and_memory(tmp_path, monkeypatch, capsys):
     assert latest_cycle.status == "failed"
     assert "super-secret" not in latest_cycle.summary
     assert artifacts[0].path == str(tmp_path / "reports" / "cycle.md")
+
+
+def test_main_labels_calendar_refresh_failures(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run_calendar_review(**_):
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.run_calendar_review",
+        fake_run_calendar_review,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--refresh-calendar",
+                "--calendar",
+                "family",
+                "--calendar-date",
+                "2026-07-10",
+                "--memory",
+                str(tmp_path / "logs" / "memory.duckdb"),
+                "--cycle-report",
+                str(tmp_path / "reports" / "cycle.md"),
+            ]
+        )
+
+    assert exc_info.value.code == 1
+    output = capsys.readouterr().out
+    assert "# Clarity Cycle Failed" in output
+    assert "Refresh calendar metadata failed" in output
+    assert "TimeoutError: The read operation timed out" in output
+
+    report = (tmp_path / "reports" / "cycle.md").read_text(encoding="utf-8")
+    assert "# Clarity Cycle Failed" in report
+    assert "Refresh calendar metadata failed" in report
+    assert "TimeoutError: The read operation timed out" in report
 
 
 def test_main_rejects_graph_bearer_without_graph():

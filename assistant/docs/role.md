@@ -78,10 +78,10 @@ The current milestone is Clarity's local command surface and organizing loop:
 -   Answer deterministic local questions from Clarity memory
 -   Read approved Jira, email, and sample calendar metadata
 -   Generate local command-center and focus briefs
+-   Generate bounded, validated LLM summaries on explicit command
 -   Propose approved email folder moves from configured policy
 -   Execute approved email moves only through explicit Graph commands
--   Keep LLM use bounded to summarization contracts until provider wiring is
-    approved
+-   Keep LLM use bounded to summarization and review recommendations
 -   Avoid autonomous writes
 
 The wider Clarity scope guides future design, but implementation should still

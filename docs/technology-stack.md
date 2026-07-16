@@ -16,7 +16,7 @@ Python is used for:
 -   Business logic
 -   Data processing
 -   Report generation
--   Future LLM integration
+-   Bounded LLM summarization
 -   Testing
 
 ------------------------------------------------------------------------

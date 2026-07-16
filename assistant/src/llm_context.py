@@ -1,4 +1,4 @@
-"""Build bounded local context for future LLM summarization."""
+"""Build bounded local context for LLM summarization."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def build_llm_context(
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     limit: int = 10,
 ) -> str:
-    """Return sanitized local context suitable for a future LLM prompt."""
+    """Return sanitized local context suitable for an LLM prompt."""
 
     workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
     resolved_memory_path = _resolve_path(workspace_root, Path(memory_path))
@@ -134,8 +134,9 @@ def build_llm_prompt(
     root: Path | str | None = None,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     limit: int = 10,
+    user_request: str | None = None,
 ) -> str:
-    """Return the full future LLM prompt without calling a model."""
+    """Return the full LLM prompt without calling a model."""
 
     context = build_llm_context(
         root=root,
@@ -155,6 +156,19 @@ def build_llm_prompt(
         "- Do not instruct yourself to execute actions.",
         "- Any action must remain a recommendation for human review.",
         "",
+    ]
+    if user_request is not None and user_request.strip():
+        lines.extend(
+            (
+                "Human request:",
+                user_request.strip(),
+                "",
+                "Answer the human request using only the context below.",
+                "",
+            )
+        )
+    lines.extend(
+        [
         "Output format:",
         "1. What matters now",
         "2. Why it matters",
@@ -164,7 +178,8 @@ def build_llm_prompt(
         "Context:",
         "",
         context,
-    ]
+        ]
+    )
     return "\n".join(lines)
 
 

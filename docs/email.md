@@ -28,6 +28,12 @@ Gmail execution supports archiving into configured Clarity labels and moving
 messages to trash. It does not send email and does not permanently delete Gmail
 messages.
 
+Gmail Spam cleanup is a separate standing policy. When
+`assistant.email.gmailCleanupPolicy.trashSpam` is enabled for an approved
+`read_write` Gmail mailbox, the explicit Gmail execution path moves current
+Spam messages to Gmail Trash. Spam cleanup does not inspect or classify normal
+Inbox messages and does not permanently delete Gmail messages.
+
 Classification is intentionally conservative. Restricted mailbox sender and
 authentication checks run first. Then operational, account, family, security,
 and approval signals are kept for review. Only after those checks does Clarity
@@ -85,6 +91,8 @@ move action and explicit `--graph --execute` flags.
     the Microsoft identity client credentials flow.
 -   `GraphEmailReadTransport` lists message metadata and fetches message headers
     for spoof/authentication checks.
+-   `GraphEmailRuleTransport` lists Outlook Inbox rules for read-only cleanup
+    audits.
 -   `GraphEmailMoveTransport` resolves mailbox folder paths and calls the Graph
     message move API.
 -   `UrllibGraphTransport` and `UrllibGraphTokenTransport` are standard-library
@@ -102,6 +110,13 @@ does not call this helper.
 local Graph credentials and builds the Graph read transport for explicit live
 review paths. The public command-line review path still defaults to fake local
 data unless `--graph` is passed.
+
+`assistant.src.audit_outlook_rules` writes a local Markdown audit of approved
+mailbox Inbox rules. It is intentionally read-only and does not create, update,
+reorder, disable, or delete Outlook rules. The report includes a conservative
+execution confidence label so disabled, errored, read-only, or opaque rules are
+flagged for manual Outlook review instead of being treated as dependable
+server-side handling.
 
 `common.google_gmail` contains the Gmail-specific runtime adapters:
 
@@ -157,6 +172,10 @@ Approved mailbox scope is configured in `config/config.json`:
         "review": "Clarity/Review",
         "noise": "Clarity/Noise",
         "trash": "Deleted Items"
+      },
+      "gmailCleanupPolicy": {
+        "trashSpam": true,
+        "mailboxes": ["sesexton@gmail.com"]
       },
       "maxMessages": 25
     }
@@ -389,6 +408,10 @@ Approved Gmail cleanup actions can be executed with:
 ``` powershell
 python -m assistant.src.execute_email_moves --gmail --execute
 ```
+
+When the configured Gmail Spam cleanup policy is enabled, the same command also
+moves current Spam messages from the configured Gmail mailbox to Trash. This is
+an explicit provider execution command, not part of read-only review.
 
 The dry run records a local audit action but does not call Graph or move
 mailbox items. The command-line `--execute` path still fails closed unless

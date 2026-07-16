@@ -51,6 +51,19 @@ class FakeGraphTokenTransport:
         return FakeGraphResponse(200, {"access_token": "acquired-token"})
 
 
+class FakeGmailCleanupTransport:
+    def __init__(self):
+        self.moved_messages = []
+        self.spam_cleanup_calls: list[str] = []
+
+    def move_message(self, *, mailbox: str, message_id: str, target_folder: str) -> None:
+        self.moved_messages.append((mailbox, message_id, target_folder))
+
+    def trash_spam_messages(self, mailbox: str) -> tuple[str, ...]:
+        self.spam_cleanup_calls.append(mailbox)
+        return ("spam-1", "spam-2")
+
+
 def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
@@ -297,6 +310,38 @@ def test_execute_email_moves_does_not_repeat_executed_actions(tmp_path):
     assert result == "No approved email moves found."
 
 
+def test_execute_email_moves_can_execute_configured_gmail_spam_cleanup(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    memory_path.parent.mkdir(parents=True)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+    finally:
+        store.close()
+    _write_config(
+        tmp_path,
+        "sesexton@gmail.com",
+        "read_write",
+        gmail_spam_cleanup=True,
+    )
+    transport = FakeGmailCleanupTransport()
+
+    result = execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        dry_run=False,
+        move_transport=transport,
+        gmail_spam_cleanup_transport=transport,
+        include_gmail_spam_cleanup=True,
+    )
+
+    assert "# Email Move Execution" in result
+    assert "- Moved: 0" in result
+    assert "- Gmail Spam trashed: 2" in result
+    assert "Trashed 2 Spam message(s) from sesexton@gmail.com" in result
+    assert transport.spam_cleanup_calls == ["sesexton@gmail.com"]
+
+
 def test_main_prints_dry_run(tmp_path, monkeypatch, capsys):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
@@ -442,9 +487,18 @@ def _seed_approved_email_move(
         store.close()
 
 
-def _write_config(root, mailbox, access_mode):
+def _write_config(root, mailbox, access_mode, *, gmail_spam_cleanup=False):
     config_dir = root / "config"
     config_dir.mkdir()
+    gmail_cleanup_policy = (
+        f'''
+              "gmailCleanupPolicy": {{
+                "trashSpam": true,
+                "mailboxes": ["{mailbox}"]
+              }},'''
+        if gmail_spam_cleanup
+        else ""
+    )
     (config_dir / "config.json").write_text(
         f"""
         {{
@@ -460,6 +514,7 @@ def _write_config(root, mailbox, access_mode):
                 "noise": "Clarity/Noise",
                 "trash": "Deleted Items"
               }},
+              {gmail_cleanup_policy}
               "maxMessages": 25
             }}
           }}

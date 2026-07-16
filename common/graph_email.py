@@ -284,6 +284,30 @@ def build_graph_email_folder_transport(
     )
 
 
+def build_graph_email_rule_transport(
+    credentials: GraphCredentials,
+    *,
+    graph_transport: GraphTransport | None = None,
+    token_transport: GraphTokenTransport | None = None,
+    use_bearer_auth: bool = False,
+) -> GraphEmailRuleTransport:
+    """Build a Graph email rule transport from local credentials."""
+
+    if use_bearer_auth:
+        access_token = _required_text(credentials.access_token, "access_token")
+    else:
+        provider = GraphClientCredentialsTokenProvider(
+            credentials=credentials,
+            transport=token_transport or UrllibGraphTokenTransport(),
+        )
+        access_token = provider.access_token()
+
+    return GraphEmailRuleTransport(
+        access_token=access_token,
+        transport=graph_transport or UrllibGraphTransport(),
+    )
+
+
 @dataclass(frozen=True)
 class GraphFolderEnsureResult:
     """Result for ensuring one mailbox folder path exists."""
@@ -460,6 +484,58 @@ class GraphEmailFolderTransport:
         return (
             f"{self._base_url()}/users/{encoded_mailbox}/mailFolders/"
             f"{encoded_folder_id}/childFolders"
+        )
+
+    def _base_url(self) -> str:
+        return self.base_url.rstrip("/")
+
+
+@dataclass(frozen=True)
+class GraphEmailRuleTransport:
+    """Read Outlook Inbox rules using Microsoft Graph."""
+
+    access_token: str = field(repr=False)
+    transport: GraphTransport = field(repr=False)
+    base_url: str = GRAPH_BASE_URL
+
+    def list_inbox_rules(self, mailbox: str) -> tuple[Mapping[str, Any], ...]:
+        """Return raw Microsoft Graph messageRule objects for one mailbox Inbox."""
+
+        clean_mailbox = _required_text(mailbox, "mailbox")
+        payload = self._get_json(self._message_rules_url(clean_mailbox))
+        raw_rules = payload.get("value")
+        if not isinstance(raw_rules, list):
+            raise GraphClientError("Microsoft Graph messageRules response missing value.")
+
+        rules = []
+        for raw_rule in raw_rules:
+            if not isinstance(raw_rule, Mapping):
+                raise GraphClientError(
+                    "Microsoft Graph messageRules response item must be an object."
+                )
+            rules.append(raw_rule)
+        return tuple(rules)
+
+    def _get_json(self, url: str) -> Mapping[str, Any]:
+        response = self.transport.get(url, headers=self._json_headers())
+        if response.status_code != 200:
+            raise GraphClientError(
+                f"Microsoft Graph message rule read failed with status {response.status_code}"
+            )
+        return response.json()
+
+    def _json_headers(self) -> dict[str, str]:
+        token = _required_text(self.access_token, "access_token")
+        return {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+        }
+
+    def _message_rules_url(self, mailbox: str) -> str:
+        encoded_mailbox = quote(mailbox, safe="")
+        return (
+            f"{self._base_url()}/users/{encoded_mailbox}/mailFolders/inbox/"
+            "messageRules"
         )
 
     def _base_url(self) -> str:
@@ -671,7 +747,10 @@ class GraphEmailReadTransport:
                 ),
             }
         )
-        return f"{self._base_url()}/users/{encoded_mailbox}/messages?{query}"
+        return (
+            f"{self._base_url()}/users/{encoded_mailbox}/mailFolders/inbox/"
+            f"messages?{query}"
+        )
 
     def _message_headers_url(self, mailbox: str, message_id: str) -> str:
         encoded_mailbox = quote(mailbox, safe="")

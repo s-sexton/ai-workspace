@@ -75,6 +75,26 @@ python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai
 This still only prints the PowerShell registration script. Review it before
 running it locally.
 
+## Codex Pro Summarization Handoff
+
+ChatGPT/Codex Pro cannot be used as an API key from local Python. To use Codex
+as the summarization surface, schedule or run Clarity so it writes a local
+handoff report:
+
+``` powershell
+python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph --codex-handoff
+```
+
+The cycle writes `reports/clarity-codex-handoff.md` with bounded local context
+and instructions for Codex. A Codex scheduled task or an interactive Codex chat
+can summarize that report without Clarity calling a paid API provider.
+
+For a handoff without refreshing email first:
+
+``` powershell
+python -m assistant.src.generate_llm_brief --codex-handoff --request "Help me prioritize my morning"
+```
+
 If the cycle fails, the command exits with status `1`, writes a failure report
 to the configured cycle report path, and records a failed `clarity-cycle` run in
 local memory when memory is available. Error text is sanitized before it is
@@ -118,7 +138,11 @@ python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai
 ```
 
 Email moves remain separate. They require a locally approved action and an
-explicit `python -m assistant.src.execute_email_moves --graph --execute` run.
+explicit provider execution command such as
+`python -m assistant.src.execute_email_moves --graph --execute` or
+`python -m assistant.src.execute_email_moves --gmail --execute`. When the
+configured Gmail Spam cleanup policy is enabled, the Gmail execution command
+also moves current Spam messages for the configured Gmail mailbox to Trash.
 
 ## Remove The Task
 

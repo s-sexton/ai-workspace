@@ -48,6 +48,10 @@
           ]
         },
         {
+          "address": "scott.sexton@sendthisfile.com",
+          "accessMode": "read_write"
+        },
+        {
           "address": "sesexton@gmail.com",
           "accessMode": "read_write"
         }
@@ -59,6 +63,12 @@
         "noise": "Clarity/Noise",
         "trash": "Deleted Items"
       },
+      "gmailCleanupPolicy": {
+        "trashSpam": true,
+        "mailboxes": [
+          "sesexton@gmail.com"
+        ]
+      },
       "maxMessages": 25
     },
     "calendar": {
@@ -67,7 +77,7 @@
           "label": "sexton-family",
           "provider": "google",
           "source": "7u1kmojd4tva0ea3j4gng46s3g@group.calendar.google.com",
-          "accessMode": "read"
+          "accessMode": "read_write"
         },
         {
           "label": "work",

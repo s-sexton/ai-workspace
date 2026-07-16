@@ -61,6 +61,16 @@ Google OAuth refresh-token access for approved Google integrations.
 `GOOGLE_ACCESS_TOKEN` is available for explicit Bearer-token experiments. These
 values are local secrets and must not be committed.
 
+OpenAI LLM summarization uses these local values:
+
+-   `OPENAI_API_KEY`
+-   `OPENAI_MODEL`
+-   `OPENAI_BASE_URL`
+
+`OPENAI_API_KEY` and `OPENAI_MODEL` are required for explicit live LLM brief
+generation. `OPENAI_BASE_URL` is optional and defaults to the OpenAI API base
+URL. The API key is a local secret and must not be committed.
+
 ## Shared Settings
 
 `config/config.json` (committed)
@@ -138,6 +148,9 @@ Clarity Jira, email, calendar, and Graph read paths:
 -   `assistant.email.folderPolicy`: non-empty object mapping classification
     labels to proposed folder destinations; must include `review`, `noise`, and
     `trash`
+-   `assistant.email.gmailCleanupPolicy`: optional Gmail cleanup object;
+    `trashSpam` must be a boolean, and enabled cleanup mailboxes must be
+    approved with `read_write` access
 -   `assistant.email.maxMessages`: positive integer
 -   `assistant.calendar.approvedCalendars`: non-empty list of calendar objects
     with `label`, `provider`, `source`, and `accessMode`
