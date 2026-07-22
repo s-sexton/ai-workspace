@@ -24,20 +24,21 @@
     "email": {
       "approvedMailboxes": [
         {
-          "address": "inbox@example.invalid",
+          "address": "scott@developkansas.com",
+          "graphUserId": "scott.dk@sendthisfile1.onmicrosoft.com",
           "accessMode": "read_write"
         },
         {
-          "address": "legal@example.invalid",
+          "address": "legal@sendthisfile.com",
+          "accessMode": "read_write"
+        },
+        {
+          "address": "accounting@developkansas.com",
           "accessMode": "read"
         },
         {
-          "address": "accounting@example.invalid",
-          "accessMode": "read"
-        },
-        {
-          "address": "dpo@example.invalid",
-          "accessMode": "read"
+          "address": "dpo@sendthisfile.com",
+          "accessMode": "read_write"
         },
         {
           "address": "clarity@sendthisfile.ai",
@@ -56,7 +57,7 @@
           "accessMode": "read_write"
         }
       ],
-      "defaultMailbox": "inbox@example.invalid",
+      "defaultMailbox": "scott.sexton@sendthisfile.com",
       "folderNamespace": "Clarity",
       "folderPolicy": {
         "review": "Clarity/Review",
@@ -84,6 +85,13 @@
           "provider": "graph",
           "source": "scott.sexton@sendthisfile.com",
           "accessMode": "read_write"
+        },
+        {
+          "label": "stf-holiday-vacation",
+          "provider": "graph",
+          "source": "scott.sexton@sendthisfile.com",
+          "calendarName": "SendThisFile Holiday and Vacation Schedule",
+          "accessMode": "read"
         }
       ],
       "defaultCalendar": "sexton-family",

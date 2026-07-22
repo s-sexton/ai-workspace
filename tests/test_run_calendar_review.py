@@ -5,6 +5,22 @@ from common.calendar import StaticCalendarTransport
 from common.memory import DuckDbMemoryStore
 
 
+class RecordingCalendarTransport:
+    def __init__(self):
+        self.calls = []
+
+    def list_events(self, calendar: str, date: str, limit: int):
+        self.calls.append((calendar, date, limit))
+        return (
+            {
+                "event_id": "holiday-1",
+                "calendar": calendar,
+                "title": "Company Holiday",
+                "starts_at": "2026-07-10T00:00:00-05:00",
+            },
+        )
+
+
 def test_run_calendar_review_records_events_and_generates_brief(tmp_path):
     _write_config(tmp_path)
     memory_path = tmp_path / "logs" / "memory.duckdb"
@@ -123,6 +139,31 @@ def test_main_can_use_graph_calendar_transport(tmp_path, monkeypatch, capsys):
     assert "Read 1 calendar event(s) from work for 2026-07-10" in output
 
 
+def test_run_calendar_review_uses_configured_graph_calendar_name(tmp_path):
+    _write_named_graph_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    transport = RecordingCalendarTransport()
+
+    result = run_calendar_review(
+        root=tmp_path,
+        calendar="stf-holiday-vacation",
+        review_date="2026-07-10",
+        memory_path=memory_path,
+        transport=transport,
+        use_graph=True,
+    )
+
+    assert result.event_count == 1
+    assert transport.calls == [
+        (
+            "scott.sexton@example.invalid::"
+            "SendThisFile Holiday and Vacation Schedule",
+            "2026-07-10",
+            25,
+        )
+    ]
+
+
 def test_main_can_use_google_calendar_transport(tmp_path, monkeypatch, capsys):
     _write_google_config(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -214,6 +255,33 @@ def _write_graph_config(root):
                 }
               ],
               "defaultCalendar": "work",
+              "maxEvents": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+
+def _write_named_graph_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "stf-holiday-vacation",
+                  "provider": "graph",
+                  "source": "scott.sexton@example.invalid",
+                  "calendarName": "SendThisFile Holiday and Vacation Schedule",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "stf-holiday-vacation",
               "maxEvents": 25
             }
           }

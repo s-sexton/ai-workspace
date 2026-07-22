@@ -11,6 +11,7 @@ from common.configuration import GraphCredentials
 from common.graph_calendar import (
     GraphCalendarReadTransport,
     build_graph_calendar_read_transport,
+    graph_calendar_reference,
 )
 from common.graph_email import GraphClientError
 
@@ -149,6 +150,103 @@ def test_graph_calendar_read_transport_lists_calendar_view():
     parsed = urlparse(transport.get_calls[0][0])
     assert parsed.path.endswith("/calendarView")
     assert parse_qs(parsed.query)["startDateTime"] == ["2026-07-10T00:00:00Z"]
+
+
+def test_graph_calendar_read_transport_lists_named_calendar_view():
+    base_url = "https://graph.example/v1.0"
+    calendars_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40example.invalid/"
+        "calendars?%24top=100&%24select=id%2Cname"
+    )
+    list_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40example.invalid/"
+        "calendars/calendar-id-1/calendarView?"
+        "startDateTime=2026-07-10T00%3A00%3A00Z&"
+        "endDateTime=2026-07-11T00%3A00%3A00Z&%24top=2&"
+        "%24orderby=start%2FdateTime&%24select="
+        "id%2Csubject%2Cstart%2Cend%2Clocation%2Corganizer%2CshowAs%2CisCancelled"
+    )
+    transport = FakeGraphTransport(
+        {
+            calendars_url: FakeGraphResponse(
+                200,
+                {
+                    "value": [
+                        {
+                            "id": "calendar-id-1",
+                            "name": "SendThisFile Holiday and Vacation Schedule",
+                        }
+                    ]
+                },
+            ),
+            list_url: FakeGraphResponse(
+                200,
+                {
+                    "value": [
+                        {
+                            "id": "event-1",
+                            "subject": "Company Holiday",
+                            "start": {
+                                "dateTime": "2026-07-10T00:00:00",
+                                "timeZone": "Central Standard Time",
+                            },
+                            "end": {
+                                "dateTime": "2026-07-11T00:00:00",
+                                "timeZone": "Central Standard Time",
+                            },
+                        }
+                    ]
+                },
+            ),
+        }
+    )
+    client = GraphCalendarReadTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+    )
+
+    events = client.list_events(
+        graph_calendar_reference(
+            "scott.sexton@example.invalid",
+            "SendThisFile Holiday and Vacation Schedule",
+        ),
+        "2026-07-10",
+        2,
+    )
+
+    assert events[0]["title"] == "Company Holiday"
+    assert (
+        events[0]["calendar"]
+        == "scott.sexton@example.invalid::SendThisFile Holiday and Vacation Schedule"
+    )
+    assert transport.get_calls[0][0] == calendars_url
+    assert transport.get_calls[1][0] == list_url
+
+
+def test_graph_calendar_read_transport_rejects_missing_named_calendar():
+    base_url = "https://graph.example/v1.0"
+    calendars_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40example.invalid/"
+        "calendars?%24top=100&%24select=id%2Cname"
+    )
+    client = GraphCalendarReadTransport(
+        access_token="access-token",
+        transport=FakeGraphTransport(
+            {calendars_url: FakeGraphResponse(200, {"value": []})}
+        ),
+        base_url=base_url,
+    )
+
+    with pytest.raises(GraphClientError, match="calendar was not found"):
+        client.list_events(
+            graph_calendar_reference(
+                "scott.sexton@example.invalid",
+                "SendThisFile Holiday and Vacation Schedule",
+            ),
+            "2026-07-10",
+            1,
+        )
 
 
 def test_graph_calendar_read_transport_rejects_invalid_date():

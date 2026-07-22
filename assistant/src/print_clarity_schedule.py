@@ -32,6 +32,9 @@ def build_windows_task_scheduler_script(
     mailbox: str | None = None,
     use_graph: bool = False,
     use_graph_bearer: bool = False,
+    refresh_email: bool = False,
+    use_gmail: bool = False,
+    use_gmail_bearer: bool = False,
     use_sample_graph: bool = False,
     refresh_calendar: bool = False,
     calendar: str | None = None,
@@ -43,6 +46,10 @@ def build_windows_task_scheduler_script(
     brief_path: Path | str | None = None,
     daily_brief_date: str | None = None,
     daily_brief_limit: int | None = None,
+    daily_brief_days: int | None = None,
+    refresh_jira: bool = False,
+    jira_bearer: bool = False,
+    jira_report_path: Path | str | None = None,
     manifest_path: Path | str | None = None,
     cycle_report_path: Path | str | None = None,
     log_path: Path | str | None = DEFAULT_TASK_LOG_PATH,
@@ -58,9 +65,21 @@ def build_windows_task_scheduler_script(
         raise ValueError("use_google_bearer requires use_google_calendar.")
     if use_graph and use_sample_graph:
         raise ValueError("use_graph and use_sample_graph are mutually exclusive.")
-    if use_graph_calendar and use_google_calendar:
+    if use_gmail and use_sample_graph:
+        raise ValueError("use_gmail and use_sample_graph are mutually exclusive.")
+    if use_gmail_bearer and not use_gmail:
+        raise ValueError("use_gmail_bearer requires use_gmail.")
+    if refresh_email and not (use_graph or use_gmail):
+        raise ValueError("refresh_email requires use_graph or use_gmail.")
+    if jira_bearer and not refresh_jira:
+        raise ValueError("jira_bearer requires refresh_jira.")
+    if (
+        workflow == WORKFLOW_CYCLE
+        and use_graph_calendar
+        and use_google_calendar
+    ):
         raise ValueError(
-            "use_graph_calendar and use_google_calendar are mutually exclusive."
+            "use_graph_calendar and use_google_calendar are mutually exclusive for cycle."
         )
     if calendar and not refresh_calendar:
         raise ValueError("calendar requires refresh_calendar.")
@@ -72,17 +91,38 @@ def build_windows_task_scheduler_script(
         raise ValueError("use_google_calendar requires refresh_calendar.")
     if not _is_valid_time(at):
         raise ValueError("at must be in HH:mm 24-hour format.")
-    if workflow != WORKFLOW_CYCLE and (
+    if workflow == WORKFLOW_DAILY_BRIEF_SEND and (
         use_sample_graph
+        or calendar
+        or calendar_date
+        or cycle_report_path
+    ):
+        raise ValueError("cycle-only options require workflow='cycle'.")
+    if (
+        workflow == WORKFLOW_DAILY_BRIEF_SEND
+        and (use_gmail or use_gmail_bearer)
+        and not refresh_email
+    ):
+        raise ValueError("Gmail daily brief refresh requires refresh_email.")
+    if workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL and (
+        use_sample_graph
+        or use_gmail
+        or use_gmail_bearer
+        or refresh_email
         or refresh_calendar
         or calendar
         or calendar_date
         or use_graph_calendar
         or use_google_calendar
         or use_google_bearer
+        or refresh_jira
+        or jira_bearer
+        or jira_report_path
         or cycle_report_path
     ):
         raise ValueError("cycle-only options require workflow='cycle'.")
+    if refresh_calendar and not (use_graph_calendar or use_google_calendar):
+        raise ValueError("refresh_calendar requires a calendar provider.")
     if workflow == WORKFLOW_DAILY_BRIEF_SEND and execute != use_graph:
         raise ValueError("daily-brief-send requires use_graph and execute together.")
     if workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL and not use_graph:
@@ -94,6 +134,9 @@ def build_windows_task_scheduler_script(
         mailbox=mailbox,
         use_graph=use_graph,
         use_graph_bearer=use_graph_bearer,
+        refresh_email=refresh_email,
+        use_gmail=use_gmail,
+        use_gmail_bearer=use_gmail_bearer,
         use_sample_graph=use_sample_graph,
         refresh_calendar=refresh_calendar,
         calendar=calendar,
@@ -105,6 +148,10 @@ def build_windows_task_scheduler_script(
         brief_path=brief_path,
         daily_brief_date=daily_brief_date,
         daily_brief_limit=daily_brief_limit,
+        daily_brief_days=daily_brief_days,
+        refresh_jira=refresh_jira,
+        jira_bearer=jira_bearer,
+        jira_report_path=jira_report_path,
         manifest_path=manifest_path,
         cycle_report_path=cycle_report_path,
         execute=execute,
@@ -163,6 +210,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             mailbox=args.mailbox,
             use_graph=args.graph,
             use_graph_bearer=args.graph_bearer,
+            refresh_email=args.refresh_email,
+            use_gmail=args.gmail,
+            use_gmail_bearer=args.gmail_bearer,
             use_sample_graph=args.sample_graph,
             refresh_calendar=args.refresh_calendar,
             calendar=args.calendar,
@@ -174,6 +224,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             brief_path=args.brief,
             daily_brief_date=args.date,
             daily_brief_limit=args.limit,
+            daily_brief_days=args.days,
+            refresh_jira=args.refresh_jira,
+            jira_bearer=args.jira_bearer,
+            jira_report_path=args.jira_report,
             manifest_path=args.manifest,
             cycle_report_path=args.cycle_report,
             log_path=args.log,
@@ -189,6 +243,9 @@ def _workflow_command(
     mailbox: str | None,
     use_graph: bool,
     use_graph_bearer: bool,
+    refresh_email: bool,
+    use_gmail: bool,
+    use_gmail_bearer: bool,
     use_sample_graph: bool,
     refresh_calendar: bool,
     calendar: str | None,
@@ -200,6 +257,10 @@ def _workflow_command(
     brief_path: Path | str | None,
     daily_brief_date: str | None,
     daily_brief_limit: int | None,
+    daily_brief_days: int | None,
+    refresh_jira: bool,
+    jira_bearer: bool,
+    jira_report_path: Path | str | None,
     manifest_path: Path | str | None,
     cycle_report_path: Path | str | None,
     execute: bool,
@@ -209,6 +270,8 @@ def _workflow_command(
             mailbox=mailbox,
             use_graph=use_graph,
             use_graph_bearer=use_graph_bearer,
+            use_gmail=use_gmail,
+            use_gmail_bearer=use_gmail_bearer,
             use_sample_graph=use_sample_graph,
             refresh_calendar=refresh_calendar,
             calendar=calendar,
@@ -224,10 +287,21 @@ def _workflow_command(
         return _daily_brief_send_command(
             use_graph=use_graph,
             use_graph_bearer=use_graph_bearer,
+            refresh_email=refresh_email,
+            use_gmail=use_gmail,
+            use_gmail_bearer=use_gmail_bearer,
+            refresh_calendar=refresh_calendar,
+            use_graph_calendar=use_graph_calendar,
+            use_google_calendar=use_google_calendar,
+            use_google_bearer=use_google_bearer,
             memory_path=memory_path,
             brief_path=brief_path,
             daily_brief_date=daily_brief_date,
             daily_brief_limit=daily_brief_limit,
+            daily_brief_days=daily_brief_days,
+            refresh_jira=refresh_jira,
+            jira_bearer=jira_bearer,
+            jira_report_path=jira_report_path,
             execute=execute,
         )
     return _daily_brief_reply_poll_command(
@@ -245,6 +319,8 @@ def _cycle_command(
     mailbox: str | None,
     use_graph: bool,
     use_graph_bearer: bool,
+    use_gmail: bool,
+    use_gmail_bearer: bool,
     use_sample_graph: bool,
     refresh_calendar: bool,
     calendar: str | None,
@@ -263,6 +339,10 @@ def _cycle_command(
         parts.append("--graph")
     if use_graph_bearer:
         parts.append("--graph-bearer")
+    if use_gmail:
+        parts.append("--gmail")
+    if use_gmail_bearer:
+        parts.append("--gmail-bearer")
     if use_sample_graph:
         parts.append("--sample-graph")
     if refresh_calendar:
@@ -290,10 +370,21 @@ def _daily_brief_send_command(
     *,
     use_graph: bool,
     use_graph_bearer: bool,
+    refresh_email: bool,
+    use_gmail: bool,
+    use_gmail_bearer: bool,
+    refresh_calendar: bool,
+    use_graph_calendar: bool,
+    use_google_calendar: bool,
+    use_google_bearer: bool,
     memory_path: Path | str | None,
     brief_path: Path | str | None,
     daily_brief_date: str | None,
     daily_brief_limit: int | None,
+    daily_brief_days: int | None,
+    refresh_jira: bool,
+    jira_bearer: bool,
+    jira_report_path: Path | str | None,
     execute: bool,
 ) -> str:
     parts = ["python", "-m", "assistant.src.send_daily_brief"]
@@ -305,6 +396,30 @@ def _daily_brief_send_command(
         parts.extend(("--date", _ps_single_quote(daily_brief_date)))
     if daily_brief_limit is not None:
         parts.extend(("--limit", str(daily_brief_limit)))
+    if daily_brief_days is not None:
+        parts.extend(("--days", str(daily_brief_days)))
+    if refresh_email:
+        parts.append("--refresh-email")
+        if use_graph:
+            parts.append("--graph-email")
+    if use_gmail:
+        parts.append("--gmail")
+    if use_gmail_bearer:
+        parts.append("--gmail-bearer")
+    if refresh_calendar:
+        parts.append("--refresh-calendars")
+    if use_graph_calendar:
+        parts.append("--graph-calendars")
+    if use_google_calendar:
+        parts.append("--google-calendars")
+    if use_google_bearer:
+        parts.append("--google-bearer")
+    if refresh_jira:
+        parts.append("--refresh-jira")
+    if jira_report_path is not None:
+        parts.extend(("--jira-output", _ps_single_quote(str(jira_report_path))))
+    if jira_bearer:
+        parts.append("--jira-bearer")
     if use_graph:
         parts.append("--graph")
     if use_graph_bearer:
@@ -385,6 +500,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
     )
     parser.add_argument(
+        "--refresh-email",
+        action="store_true",
+        help="Refresh approved inbox metadata before daily brief generation.",
+    )
+    parser.add_argument(
+        "--gmail",
+        action="store_true",
+        help="Include Gmail inbox refresh for gmail.com approved mailboxes.",
+    )
+    parser.add_argument(
+        "--gmail-bearer",
+        action="store_true",
+        help="Use GOOGLE_ACCESS_TOKEN for Gmail inbox refresh.",
+    )
+    parser.add_argument(
         "--refresh-calendar",
         action="store_true",
         help="Also schedule approved read-only calendar metadata refresh.",
@@ -399,13 +529,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help="Calendar date to refresh in YYYY-MM-DD format.",
     )
-    calendar_group = parser.add_mutually_exclusive_group()
-    calendar_group.add_argument(
+    parser.add_argument(
         "--graph-calendar",
         action="store_true",
         help="Schedule approved Microsoft Graph calendar metadata reads.",
     )
-    calendar_group.add_argument(
+    parser.add_argument(
         "--google-calendar",
         action="store_true",
         help="Schedule approved Google Calendar metadata reads.",
@@ -427,6 +556,27 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=int,
         default=None,
         help="Daily brief item limit or reply poll limit.",
+    )
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=None,
+        help="Daily brief rolling calendar window in days.",
+    )
+    parser.add_argument(
+        "--refresh-jira",
+        action="store_true",
+        help="Refresh live Jira report before daily brief generation.",
+    )
+    parser.add_argument(
+        "--jira-bearer",
+        action="store_true",
+        help="Use JIRA_ACCESS_TOKEN Bearer auth for Jira refresh.",
+    )
+    parser.add_argument(
+        "--jira-report",
+        default=None,
+        help="Jira report path used by the daily brief refresh phase.",
     )
     parser.add_argument(
         "--manifest",
@@ -454,6 +604,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         parser.error("--graph-bearer requires --graph or --graph-calendar.")
     if args.google_bearer and not args.google_calendar:
         parser.error("--google-bearer requires --google-calendar.")
+    if args.jira_bearer and not args.refresh_jira:
+        parser.error("--jira-bearer requires --refresh-jira.")
+    if args.refresh_email and not (args.graph or args.gmail):
+        parser.error("--refresh-email requires --graph or --gmail.")
     if args.calendar and not args.refresh_calendar:
         parser.error("--calendar requires --refresh-calendar.")
     if args.calendar_date and not args.refresh_calendar:
@@ -464,16 +618,38 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         parser.error("--google-calendar requires --refresh-calendar.")
     if not _is_valid_time(args.at):
         parser.error("--at must be in HH:mm 24-hour format.")
-    if args.workflow != WORKFLOW_CYCLE and (
+    if args.workflow == WORKFLOW_CYCLE and args.graph_calendar and args.google_calendar:
+        parser.error(
+            "--graph-calendar and --google-calendar are mutually exclusive for --workflow cycle."
+        )
+    if args.workflow == WORKFLOW_DAILY_BRIEF_SEND and (
+        args.sample_graph or args.calendar or args.calendar_date
+    ):
+        parser.error("cycle-only options require --workflow cycle.")
+    if (
+        args.workflow == WORKFLOW_DAILY_BRIEF_SEND
+        and (args.gmail or args.gmail_bearer)
+        and not args.refresh_email
+    ):
+        parser.error("--gmail for daily-brief-send requires --refresh-email.")
+    if args.workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL and (
         args.sample_graph
+        or args.refresh_email
+        or args.gmail
+        or args.gmail_bearer
         or args.refresh_calendar
         or args.calendar
         or args.calendar_date
         or args.graph_calendar
         or args.google_calendar
         or args.google_bearer
+        or args.refresh_jira
+        or args.jira_bearer
+        or args.jira_report
     ):
         parser.error("cycle-only options require --workflow cycle.")
+    if args.refresh_calendar and not (args.graph_calendar or args.google_calendar):
+        parser.error("--refresh-calendar requires --graph-calendar or --google-calendar.")
     if args.workflow == WORKFLOW_DAILY_BRIEF_SEND and args.execute != args.graph:
         parser.error("--workflow daily-brief-send requires --graph and --execute together.")
     if args.workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL and not args.graph:

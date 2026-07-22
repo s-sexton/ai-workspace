@@ -142,6 +142,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     transport = build_graph_read_transport_from_config(
         use_bearer_auth=args.graph_bearer,
+        include_body_text=True,
     )
     result = poll_daily_brief_replies(
         memory_path=args.memory,
@@ -165,7 +166,7 @@ def _skip_reason(
         return "Skipped: reply already processed."
     if not _sender_allowed(message.sender, allowed_senders):
         return "Skipped: sender is not allowed."
-    if not _authentication_passes(message):
+    if not _authentication_passes(message, allowed_senders=allowed_senders):
         return "Skipped: message authentication did not pass."
     if not _subject_matches_daily_brief(message.subject, subject_prefix):
         return "Skipped: message is not tied to a Clarity daily brief."
@@ -181,10 +182,33 @@ def _sender_allowed(sender: str | None, allowed_senders: tuple[str, ...]) -> boo
     return clean_sender in {allowed_sender.lower() for allowed_sender in allowed_senders}
 
 
-def _authentication_passes(message: EmailMessage) -> bool:
+def _authentication_passes(
+    message: EmailMessage,
+    *,
+    allowed_senders: tuple[str, ...],
+) -> bool:
+    return _internet_authentication_passes(message) or _exchange_internal_auth_passes(
+        message,
+        allowed_senders=allowed_senders,
+    )
+
+
+def _internet_authentication_passes(message: EmailMessage) -> bool:
     return _auth_passes(message.dmarc) and (
         _auth_passes(message.spf) or _auth_passes(message.dkim)
     )
+
+
+def _exchange_internal_auth_passes(
+    message: EmailMessage,
+    *,
+    allowed_senders: tuple[str, ...],
+) -> bool:
+    if (message.exchange_auth_as or "").strip().lower() != "internal":
+        return False
+    if not _sender_allowed(message.sender, allowed_senders):
+        return False
+    return _sender_allowed(message.return_path, allowed_senders)
 
 
 def _subject_matches_daily_brief(subject: str, subject_prefix: str) -> bool:
@@ -289,8 +313,9 @@ def _format_result(result: PollDailyBriefRepliesResult, *, execute: bool) -> str
             lines.append(f"  Message: {reply.message_id}")
             if reply.sender:
                 lines.append(f"  Sender: {reply.sender}")
-            first_line = reply.result.splitlines()[0] if reply.result else ""
-            lines.append(f"  Result: {first_line}")
+            lines.append("  Result:")
+            for result_line in (reply.result or "").splitlines():
+                lines.append(f"    {result_line}")
     return "\n".join(lines)
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -218,6 +219,7 @@ def build_graph_email_move_transport(
     graph_transport: GraphTransport | None = None,
     token_transport: GraphTokenTransport | None = None,
     use_bearer_auth: bool = False,
+    mailbox_identity_overrides: Mapping[str, str] | None = None,
 ) -> GraphEmailMoveTransport:
     """Build a Graph email move transport from local credentials."""
 
@@ -233,6 +235,9 @@ def build_graph_email_move_transport(
     return GraphEmailMoveTransport(
         access_token=access_token,
         transport=graph_transport or UrllibGraphTransport(),
+        mailbox_identity_overrides=MappingProxyType(
+            dict(mailbox_identity_overrides or {})
+        ),
     )
 
 
@@ -242,6 +247,8 @@ def build_graph_email_read_transport(
     graph_transport: GraphTransport | None = None,
     token_transport: GraphTokenTransport | None = None,
     use_bearer_auth: bool = False,
+    include_body_text: bool = False,
+    mailbox_identity_overrides: Mapping[str, str] | None = None,
 ) -> GraphEmailReadTransport:
     """Build a Graph email read transport from local credentials."""
 
@@ -257,6 +264,10 @@ def build_graph_email_read_transport(
     return GraphEmailReadTransport(
         access_token=access_token,
         transport=graph_transport or UrllibGraphTransport(),
+        include_body_text=include_body_text,
+        mailbox_identity_overrides=MappingProxyType(
+            dict(mailbox_identity_overrides or {})
+        ),
     )
 
 
@@ -266,6 +277,7 @@ def build_graph_email_folder_transport(
     graph_transport: GraphTransport | None = None,
     token_transport: GraphTokenTransport | None = None,
     use_bearer_auth: bool = False,
+    mailbox_identity_overrides: Mapping[str, str] | None = None,
 ) -> GraphEmailFolderTransport:
     """Build a Graph email folder transport from local credentials."""
 
@@ -281,6 +293,9 @@ def build_graph_email_folder_transport(
     return GraphEmailFolderTransport(
         access_token=access_token,
         transport=graph_transport or UrllibGraphTransport(),
+        mailbox_identity_overrides=MappingProxyType(
+            dict(mailbox_identity_overrides or {})
+        ),
     )
 
 
@@ -290,6 +305,7 @@ def build_graph_email_rule_transport(
     graph_transport: GraphTransport | None = None,
     token_transport: GraphTokenTransport | None = None,
     use_bearer_auth: bool = False,
+    mailbox_identity_overrides: Mapping[str, str] | None = None,
 ) -> GraphEmailRuleTransport:
     """Build a Graph email rule transport from local credentials."""
 
@@ -305,6 +321,9 @@ def build_graph_email_rule_transport(
     return GraphEmailRuleTransport(
         access_token=access_token,
         transport=graph_transport or UrllibGraphTransport(),
+        mailbox_identity_overrides=MappingProxyType(
+            dict(mailbox_identity_overrides or {})
+        ),
     )
 
 
@@ -347,8 +366,9 @@ class GraphEmailSendTransport:
         recipients: tuple[str, ...],
         subject: str,
         body_text: str,
+        body_html: str | None = None,
     ) -> None:
-        """Send one plain-text email from an approved sender mailbox."""
+        """Send one email from an approved sender mailbox."""
 
         clean_sender = _required_text(sender, "sender")
         clean_recipients = tuple(
@@ -363,8 +383,8 @@ class GraphEmailSendTransport:
                 "message": {
                     "subject": _required_text(subject, "subject"),
                     "body": {
-                        "contentType": "Text",
-                        "content": _required_body_text(body_text),
+                        "contentType": "HTML" if body_html else "Text",
+                        "content": _required_body_text(body_html or body_text),
                     },
                     "toRecipients": [
                         {"emailAddress": {"address": recipient}}
@@ -376,7 +396,8 @@ class GraphEmailSendTransport:
         )
         if response.status_code != 202:
             raise GraphClientError(
-                f"Microsoft Graph sendMail failed with status {response.status_code}"
+                "Microsoft Graph sendMail failed with status "
+                f"{response.status_code}{_graph_error_detail(response)}"
             )
 
     def _json_headers(self) -> dict[str, str]:
@@ -411,6 +432,7 @@ class GraphEmailFolderTransport:
     access_token: str = field(repr=False)
     transport: GraphTransport = field(repr=False)
     base_url: str = GRAPH_BASE_URL
+    mailbox_identity_overrides: Mapping[str, str] = field(default_factory=dict)
 
     def ensure_folder_path(
         self,
@@ -547,7 +569,7 @@ class GraphEmailFolderTransport:
         *,
         parent_folder_id: str | None,
     ) -> str:
-        encoded_mailbox = quote(mailbox, safe="")
+        encoded_mailbox = quote(self._graph_mailbox(mailbox), safe="")
         query = urlencode({"$top": "100"})
         if parent_folder_id is None:
             return f"{self._base_url()}/users/{encoded_mailbox}/mailFolders?{query}"
@@ -563,7 +585,7 @@ class GraphEmailFolderTransport:
         *,
         parent_folder_id: str | None,
     ) -> str:
-        encoded_mailbox = quote(mailbox, safe="")
+        encoded_mailbox = quote(self._graph_mailbox(mailbox), safe="")
         if parent_folder_id is None:
             return f"{self._base_url()}/users/{encoded_mailbox}/mailFolders"
         encoded_folder_id = quote(parent_folder_id, safe="")
@@ -575,6 +597,9 @@ class GraphEmailFolderTransport:
     def _base_url(self) -> str:
         return self.base_url.rstrip("/")
 
+    def _graph_mailbox(self, mailbox: str) -> str:
+        return self.mailbox_identity_overrides.get(mailbox, mailbox)
+
 
 @dataclass(frozen=True)
 class GraphEmailRuleTransport:
@@ -583,6 +608,7 @@ class GraphEmailRuleTransport:
     access_token: str = field(repr=False)
     transport: GraphTransport = field(repr=False)
     base_url: str = GRAPH_BASE_URL
+    mailbox_identity_overrides: Mapping[str, str] = field(default_factory=dict)
 
     def list_inbox_rules(self, mailbox: str) -> tuple[Mapping[str, Any], ...]:
         """Return raw Microsoft Graph messageRule objects for one mailbox Inbox."""
@@ -618,7 +644,7 @@ class GraphEmailRuleTransport:
         }
 
     def _message_rules_url(self, mailbox: str) -> str:
-        encoded_mailbox = quote(mailbox, safe="")
+        encoded_mailbox = quote(self._graph_mailbox(mailbox), safe="")
         return (
             f"{self._base_url()}/users/{encoded_mailbox}/mailFolders/inbox/"
             "messageRules"
@@ -626,6 +652,9 @@ class GraphEmailRuleTransport:
 
     def _base_url(self) -> str:
         return self.base_url.rstrip("/")
+
+    def _graph_mailbox(self, mailbox: str) -> str:
+        return self.mailbox_identity_overrides.get(mailbox, mailbox)
 
 
 @dataclass(frozen=True)
@@ -635,6 +664,7 @@ class GraphEmailMoveTransport:
     access_token: str = field(repr=False)
     transport: GraphTransport = field(repr=False)
     base_url: str = GRAPH_BASE_URL
+    mailbox_identity_overrides: Mapping[str, str] = field(default_factory=dict)
 
     def move_message(
         self,
@@ -658,7 +688,8 @@ class GraphEmailMoveTransport:
         )
         if response.status_code not in (200, 201):
             raise GraphClientError(
-                f"Microsoft Graph message move failed with status {response.status_code}"
+                "Microsoft Graph message move failed with status "
+                f"{response.status_code}{_graph_error_detail(response)}"
             )
 
     def _destination_id(self, *, mailbox: str, target_folder: str) -> str:
@@ -666,19 +697,13 @@ class GraphEmailMoveTransport:
         if clean_target == "Deleted Items":
             return "deleteditems"
 
-        segments = _folder_segments(clean_target)
-        folder_id = self._find_child_folder_id(
-            mailbox=mailbox,
-            parent_folder_id=None,
-            display_name=segments[0],
-        )
-        for segment in segments[1:]:
-            folder_id = self._find_child_folder_id(
-                mailbox=mailbox,
-                parent_folder_id=folder_id,
-                display_name=segment,
-            )
-        return folder_id
+        result = GraphEmailFolderTransport(
+            access_token=self.access_token,
+            transport=self.transport,
+            base_url=self.base_url,
+            mailbox_identity_overrides=self.mailbox_identity_overrides,
+        ).ensure_folder_path(mailbox=mailbox, folder_path=clean_target)
+        return result.folder_id
 
     def _find_child_folder_id(
         self,
@@ -728,7 +753,7 @@ class GraphEmailMoveTransport:
         *,
         parent_folder_id: str | None,
     ) -> str:
-        encoded_mailbox = quote(mailbox, safe="")
+        encoded_mailbox = quote(self._graph_mailbox(mailbox), safe="")
         query = urlencode({"$top": "100"})
         if parent_folder_id is None:
             return f"{self._base_url()}/users/{encoded_mailbox}/mailFolders?{query}"
@@ -739,7 +764,7 @@ class GraphEmailMoveTransport:
         )
 
     def _message_move_url(self, mailbox: str, message_id: str) -> str:
-        encoded_mailbox = quote(mailbox, safe="")
+        encoded_mailbox = quote(self._graph_mailbox(mailbox), safe="")
         encoded_message_id = quote(message_id, safe="")
         return (
             f"{self._base_url()}/users/{encoded_mailbox}/messages/"
@@ -749,6 +774,9 @@ class GraphEmailMoveTransport:
     def _base_url(self) -> str:
         return self.base_url.rstrip("/")
 
+    def _graph_mailbox(self, mailbox: str) -> str:
+        return self.mailbox_identity_overrides.get(mailbox, mailbox)
+
 
 @dataclass(frozen=True)
 class GraphEmailReadTransport:
@@ -757,6 +785,8 @@ class GraphEmailReadTransport:
     access_token: str = field(repr=False)
     transport: GraphTransport = field(repr=False)
     base_url: str = GRAPH_BASE_URL
+    include_body_text: bool = False
+    mailbox_identity_overrides: Mapping[str, str] = field(default_factory=dict)
 
     def list_messages(self, mailbox: str, limit: int) -> SequenceEmailMessages:
         """Return normalized email payloads for messages in one mailbox."""
@@ -765,7 +795,8 @@ class GraphEmailReadTransport:
         if limit < 1:
             raise EmailClientError("limit must be positive.")
 
-        payload = self._get_json(self._messages_url(clean_mailbox, limit=limit))
+        route_mailbox = self._graph_mailbox(clean_mailbox)
+        payload = self._get_json(self._messages_url(route_mailbox, limit=limit))
         raw_messages = payload.get("value")
         if not isinstance(raw_messages, list):
             raise GraphClientError("Microsoft Graph messages response missing value.")
@@ -781,7 +812,7 @@ class GraphEmailReadTransport:
                 raise GraphClientError("Microsoft Graph message missing id.")
             enriched_message = dict(raw_message)
             enriched_message["internetMessageHeaders"] = self._message_headers(
-                mailbox=clean_mailbox,
+                mailbox=route_mailbox,
                 message_id=message_id,
             )
             messages.append(
@@ -803,7 +834,8 @@ class GraphEmailReadTransport:
         response = self.transport.get(url, headers=self._json_headers())
         if response.status_code != 200:
             raise GraphClientError(
-                f"Microsoft Graph email read failed with status {response.status_code}"
+                "Microsoft Graph email read failed with status "
+                f"{response.status_code}{_graph_error_detail(response)}"
             )
         return response.json()
 
@@ -816,21 +848,22 @@ class GraphEmailReadTransport:
 
     def _messages_url(self, mailbox: str, *, limit: int) -> str:
         encoded_mailbox = quote(mailbox, safe="")
+        selected_fields = [
+            "id",
+            "subject",
+            "from",
+            "sender",
+            "receivedDateTime",
+            "bodyPreview",
+            "categories",
+        ]
+        if self.include_body_text:
+            selected_fields.append("body")
         query = urlencode(
             {
                 "$top": str(limit),
                 "$orderby": "receivedDateTime desc",
-                "$select": ",".join(
-                    (
-                        "id",
-                        "subject",
-                        "from",
-                        "sender",
-                        "receivedDateTime",
-                        "bodyPreview",
-                        "categories",
-                    )
-                ),
+                "$select": ",".join(selected_fields),
             }
         )
         return (
@@ -850,6 +883,9 @@ class GraphEmailReadTransport:
     def _base_url(self) -> str:
         return self.base_url.rstrip("/")
 
+    def _graph_mailbox(self, mailbox: str) -> str:
+        return self.mailbox_identity_overrides.get(mailbox, mailbox)
+
 
 def _folder_segments(folder_path: str) -> tuple[str, ...]:
     segments = tuple(segment.strip() for segment in folder_path.split("/"))
@@ -868,3 +904,23 @@ def _required_body_text(value: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise EmailClientError("Microsoft Graph email value is required: body_text")
     return value
+
+
+def _graph_error_detail(response: GraphResponse) -> str:
+    try:
+        payload = response.json()
+    except GraphClientError:
+        return ""
+    error = payload.get("error")
+    if not isinstance(error, Mapping):
+        return ""
+    parts = []
+    code = error.get("code")
+    message = error.get("message")
+    if isinstance(code, str) and code.strip():
+        parts.append(code.strip())
+    if isinstance(message, str) and message.strip():
+        parts.append(message.strip())
+    if not parts:
+        return ""
+    return ": " + " - ".join(parts)

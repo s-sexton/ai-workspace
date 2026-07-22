@@ -83,6 +83,23 @@ def test_build_windows_task_scheduler_script_can_include_calendar_refresh(tmp_pa
     assert "--google-bearer" in script
 
 
+def test_build_windows_task_scheduler_script_can_refresh_all_configured_mailboxes(
+    tmp_path,
+):
+    script = build_windows_task_scheduler_script(
+        root=tmp_path,
+        use_graph=True,
+        use_gmail=True,
+        use_gmail_bearer=True,
+    )
+
+    assert "python -m assistant.src.run_clarity_cycle" in script
+    assert "--mailbox" not in script
+    assert "--graph" in script
+    assert "--gmail" in script
+    assert "--gmail-bearer" in script
+
+
 def test_build_windows_task_scheduler_script_can_schedule_daily_brief_send(tmp_path):
     script = build_windows_task_scheduler_script(
         root=tmp_path,
@@ -95,6 +112,7 @@ def test_build_windows_task_scheduler_script_can_schedule_daily_brief_send(tmp_p
         brief_path="reports/clarity-daily-brief.md",
         daily_brief_date="2026-07-16",
         daily_brief_limit=8,
+        daily_brief_days=7,
         execute=True,
         cycle_report_path=None,
     )
@@ -105,10 +123,70 @@ def test_build_windows_task_scheduler_script_can_schedule_daily_brief_send(tmp_p
     assert "--output 'reports/clarity-daily-brief.md'" in script
     assert "--date '2026-07-16'" in script
     assert "--limit 8" in script
+    assert "--days 7" in script
     assert "--graph" in script
     assert "--graph-bearer" in script
     assert "--execute" in script
     assert "run_clarity_cycle" not in script
+
+
+def test_build_windows_task_scheduler_script_can_refresh_daily_brief_calendars(tmp_path):
+    script = build_windows_task_scheduler_script(
+        root=tmp_path,
+        workflow="daily-brief-send",
+        task_name="Clarity Daily Brief",
+        at="07:15",
+        use_graph=True,
+        use_graph_bearer=True,
+        refresh_calendar=True,
+        use_graph_calendar=True,
+        use_google_calendar=True,
+        use_google_bearer=True,
+        daily_brief_days=7,
+        execute=True,
+        cycle_report_path=None,
+    )
+
+    assert "python -m assistant.src.send_daily_brief" in script
+    assert "--refresh-calendars" in script
+    assert "--graph-calendars" in script
+    assert "--google-calendars" in script
+    assert "--google-bearer" in script
+    assert "--days 7" in script
+
+
+def test_build_windows_task_scheduler_script_can_refresh_data_before_daily_brief(
+    tmp_path,
+):
+    script = build_windows_task_scheduler_script(
+        root=tmp_path,
+        workflow="daily-brief-send",
+        task_name="Clarity Daily Brief",
+        at="07:15",
+        use_graph=True,
+        refresh_email=True,
+        use_gmail=True,
+        use_gmail_bearer=True,
+        refresh_calendar=True,
+        use_graph_calendar=True,
+        use_google_calendar=True,
+        refresh_jira=True,
+        daily_brief_days=7,
+        execute=True,
+        cycle_report_path=None,
+    )
+
+    assert "python -m assistant.src.send_daily_brief" in script
+    assert "--refresh-email" in script
+    assert "--graph-email" in script
+    assert "--gmail" in script
+    assert "--gmail-bearer" in script
+    assert "--refresh-calendars" in script
+    assert "--graph-calendars" in script
+    assert "--google-calendars" in script
+    assert "--refresh-jira" in script
+    assert "--graph" in script
+    assert "--execute" in script
 
 
 def test_build_windows_task_scheduler_script_can_schedule_reply_poll(tmp_path):
@@ -184,6 +262,8 @@ def test_build_windows_task_scheduler_script_rejects_invalid_flags(tmp_path):
             root=tmp_path,
             workflow="daily-brief-send",
             refresh_calendar=True,
+            use_google_calendar=True,
+            calendar="family",
         )
 
 
@@ -255,6 +335,8 @@ def test_main_prints_daily_brief_send_schedule(tmp_path, monkeypatch, capsys):
             "reports/clarity-daily-brief.md",
             "--limit",
             "5",
+            "--days",
+            "7",
         ]
     )
 
@@ -263,9 +345,89 @@ def test_main_prints_daily_brief_send_schedule(tmp_path, monkeypatch, capsys):
     assert "python -m assistant.src.send_daily_brief" in output
     assert "--output 'reports/clarity-daily-brief.md'" in output
     assert "--limit 5" in output
+    assert "--days 7" in output
     assert "--graph" in output
     assert "--execute" in output
     assert "--cycle-report" not in output
+
+
+def test_main_prints_daily_brief_send_schedule_with_calendar_refresh(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "--workflow",
+            "daily-brief-send",
+            "--task-name",
+            "Clarity Daily Brief",
+            "--graph",
+            "--graph-bearer",
+            "--execute",
+            "--refresh-calendar",
+            "--graph-calendar",
+            "--google-calendar",
+            "--google-bearer",
+            "--days",
+            "7",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "python -m assistant.src.send_daily_brief" in output
+    assert "--refresh-calendars" in output
+    assert "--graph-calendars" in output
+    assert "--google-calendars" in output
+    assert "--google-bearer" in output
+    assert "--days 7" in output
+
+
+def test_main_prints_daily_brief_send_schedule_with_data_refresh(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "--workflow",
+            "daily-brief-send",
+            "--task-name",
+            "Clarity Daily Brief",
+            "--graph",
+            "--execute",
+            "--refresh-email",
+            "--gmail",
+            "--refresh-calendar",
+            "--graph-calendar",
+            "--google-calendar",
+            "--refresh-jira",
+            "--days",
+            "7",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "python -m assistant.src.send_daily_brief" in output
+    assert "--refresh-email" in output
+    assert "--graph-email" in output
+    assert "--gmail" in output
+    assert "--refresh-calendars" in output
+    assert "--graph-calendars" in output
+    assert "--google-calendars" in output
+    assert "--refresh-jira" in output
+    assert "--graph" in output
+    assert "--execute" in output
 
 
 def test_main_prints_reply_poll_schedule(tmp_path, monkeypatch, capsys):

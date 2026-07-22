@@ -549,6 +549,10 @@ def test_graph_message_payload_maps_headers_into_email_metadata():
                     "value": "<bounce@sendthisfile.com>",
                 },
                 {
+                    "name": "X-MS-Exchange-Organization-AuthAs",
+                    "value": "Internal",
+                },
+                {
                     "name": "Authentication-Results",
                     "value": (
                         "mx.example; spf=pass smtp.mailfrom=sendthisfile.com; "
@@ -579,6 +583,7 @@ def test_graph_message_payload_maps_headers_into_email_metadata():
     assert message.spf == "pass"
     assert message.dkim == "pass"
     assert message.dmarc == "pass"
+    assert message.exchange_auth_as == "Internal"
     assert classification.label == "review"
 
 
@@ -646,6 +651,18 @@ def test_graph_message_payload_can_use_sender_when_from_is_missing():
     )
 
     assert payload["sender"] == "sesexton@gmail.com"
+
+
+def test_graph_message_payload_uses_placeholder_for_missing_subject():
+    payload = graph_message_to_email_payload(
+        {
+            "id": "graph-no-subject",
+            "subject": None,
+        },
+        mailbox="clarity@sendthisfile.ai",
+    )
+
+    assert payload["subject"] == "(No subject)"
 
 
 def test_invalid_graph_header_payload_raises_error():

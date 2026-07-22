@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Protocol, Sequence
 
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
-from common.configuration import EmailSettings, find_workspace_root, load_workspace_config
+from common.configuration import (
+    ConfigurationError,
+    EmailSettings,
+    find_workspace_root,
+    load_workspace_config,
+)
 from common.email import EmailMoveClient, EmailMoveTransport
 from common.google_gmail import (
     GoogleCalendarTransport,
@@ -47,6 +52,18 @@ class BlockedEmailMovePlanItem:
     reason: str
     source_type: str | None = None
     item_type: str | None = None
+    subject: str | None = None
+
+
+@dataclass(frozen=True)
+class FailedEmailMovePlanItem:
+    """An approved local email move that failed during provider execution."""
+
+    action_id: str
+    mailbox: str
+    message_id: str
+    target_folder: str
+    reason: str
     subject: str | None = None
 
 
@@ -141,25 +158,38 @@ def execute_email_moves(
             )
             action_type = "dry_run_email_moves"
         else:
-            _execute_plan(plan, move_transport=move_transport)
-            for item in plan:
+            moved_plan, failed_plan = _execute_plan(
+                plan,
+                move_transport=move_transport,
+            )
+            for item in moved_plan:
                 store.update_assistant_action_approval(
                     action_id=item.action_id,
                     approval_status="executed",
                 )
+            for item in failed_plan:
+                store.update_assistant_action_approval(
+                    action_id=item.action_id,
+                    approval_status="failed",
+                )
             result_summary = _summary_sentence(
                 action="Executed",
-                plan=plan,
+                plan=moved_plan,
                 blocked_plan=blocked_plan,
+                failed_plan=failed_plan,
                 gmail_spam_cleanup_results=gmail_spam_cleanup_results,
             )
             run_summary = _summary_sentence(
                 action="Executed email move plan",
-                plan=plan,
+                plan=moved_plan,
                 blocked_plan=blocked_plan,
+                failed_plan=failed_plan,
                 gmail_spam_cleanup_results=gmail_spam_cleanup_results,
             )
             action_type = "execute_email_moves"
+        if dry_run:
+            moved_plan = plan
+            failed_plan = ()
         store.record_assistant_action(
             run_id=run.run_id,
             action_type=action_type,
@@ -182,14 +212,16 @@ def execute_email_moves(
     ]
     lines.extend(
         _summary_lines(
-            plan,
+            plan if dry_run else moved_plan,
             blocked_plan=blocked_plan,
+            failed_plan=failed_plan,
             dry_run=dry_run,
             gmail_spam_cleanup_results=gmail_spam_cleanup_results,
         )
     )
     lines.extend(("", "## Moves", ""))
-    for item in plan:
+    rendered_plan = plan if dry_run else moved_plan
+    for item in rendered_plan:
         verb = "Would move" if dry_run else "Moved"
         lines.append(
             f"- {verb} message {item.message_id} in mailbox "
@@ -201,6 +233,9 @@ def execute_email_moves(
     if blocked_plan:
         lines.extend(("", "## Blocked Moves", ""))
         lines.extend(_blocked_plan_lines(blocked_plan))
+    if failed_plan:
+        lines.extend(("", "## Failed Moves", ""))
+        lines.extend(_failed_plan_lines(failed_plan))
     if gmail_spam_cleanup_results:
         lines.extend(("", "## Gmail Spam Cleanup", ""))
         verb = "Would trash" if dry_run else "Trashed"
@@ -249,11 +284,16 @@ def build_graph_move_transport_from_config(
     workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
     config = load_workspace_config(workspace_root)
     credentials = config.require_graph_credentials(use_bearer_auth=use_bearer_auth)
+    try:
+        mailbox_identity_overrides = config.email_settings.mailbox_graph_user_ids
+    except ConfigurationError:
+        mailbox_identity_overrides = {}
     return build_graph_email_move_transport(
         credentials,
         graph_transport=graph_transport,
         token_transport=token_transport,
         use_bearer_auth=use_bearer_auth,
+        mailbox_identity_overrides=mailbox_identity_overrides,
     )
 
 
@@ -304,16 +344,33 @@ def _execute_plan(
     plan: tuple[EmailMovePlanItem, ...],
     *,
     move_transport: EmailMoveTransport | None,
-) -> None:
+) -> tuple[tuple[EmailMovePlanItem, ...], tuple[FailedEmailMovePlanItem, ...]]:
     if move_transport is None:
         raise RuntimeError("move_transport is required for email move execution.")
     client = EmailMoveClient(transport=move_transport)
+    moved: list[EmailMovePlanItem] = []
+    failed: list[FailedEmailMovePlanItem] = []
     for item in plan:
-        client.move_message(
-            mailbox=item.mailbox,
-            message_id=item.message_id,
-            target_folder=item.target_folder,
-        )
+        try:
+            client.move_message(
+                mailbox=item.mailbox,
+                message_id=item.message_id,
+                target_folder=item.target_folder,
+            )
+        except Exception as exc:
+            failed.append(
+                FailedEmailMovePlanItem(
+                    action_id=item.action_id,
+                    mailbox=item.mailbox,
+                    message_id=item.message_id,
+                    target_folder=item.target_folder,
+                    reason=str(exc),
+                    subject=item.subject,
+                )
+            )
+        else:
+            moved.append(item)
+    return tuple(moved), tuple(failed)
 
 
 def _configured_gmail_spam_cleanup_mailboxes(
@@ -382,17 +439,49 @@ def _validate_email_move_plan(
                 )
             )
             continue
-        if item.target_folder not in configured_targets:
+        if not _is_allowed_target_folder(
+            item.target_folder,
+            configured_targets=configured_targets,
+            folder_namespace=email_settings.folder_namespace,
+        ):
             blocked.append(
                 _blocked_item(
                     item,
-                    reason="target folder is not in the current email folder policy",
+                    reason=(
+                        "target folder is not in the current email folder policy "
+                        "or assistant folder namespace"
+                    ),
                 )
             )
             continue
         executable.append(item)
 
     return tuple(executable), tuple(blocked)
+
+
+def _is_allowed_target_folder(
+    target_folder: str,
+    *,
+    configured_targets: set[str],
+    folder_namespace: str,
+) -> bool:
+    if target_folder in configured_targets:
+        return True
+    namespace_prefix = f"{folder_namespace}/"
+    if not target_folder.lower().startswith(namespace_prefix.lower()):
+        return False
+    segments = target_folder.split("/")
+    if len(segments) < 2:
+        return False
+    for segment in segments:
+        clean_segment = segment.strip()
+        if (
+            not clean_segment
+            or clean_segment in {".", ".."}
+            or any(character in clean_segment for character in '<>:"|?*')
+        ):
+            return False
+    return True
 
 
 def _blocked_item(
@@ -444,11 +533,27 @@ def _blocked_plan_lines(
     return lines
 
 
+def _failed_plan_lines(
+    failed_plan: tuple[FailedEmailMovePlanItem, ...],
+) -> list[str]:
+    lines: list[str] = []
+    for item in failed_plan:
+        lines.append(
+            f"- Failed message {item.message_id} in mailbox {item.mailbox} "
+            f"to {item.target_folder}: {item.reason}."
+        )
+        if item.subject:
+            lines.append(f"  Subject: {item.subject}")
+        lines.append(f"  Action: {item.action_id}")
+    return lines
+
+
 def _summary_sentence(
     *,
     action: str,
     plan: tuple[EmailMovePlanItem, ...],
     blocked_plan: tuple[BlockedEmailMovePlanItem, ...],
+    failed_plan: tuple[FailedEmailMovePlanItem, ...] = (),
     gmail_spam_cleanup_results: tuple[GmailSpamCleanupResult, ...],
 ) -> str:
     gmail_spam_count = sum(
@@ -456,7 +561,7 @@ def _summary_sentence(
     )
     summary = (
         f"{action} for {len(plan)} approved email move(s); "
-        f"{len(blocked_plan)} blocked/skipped."
+        f"{len(blocked_plan)} blocked/skipped; {len(failed_plan)} failed."
     )
     if gmail_spam_cleanup_results:
         summary += f" {gmail_spam_count} Gmail Spam message(s) trashed."
@@ -467,6 +572,7 @@ def _summary_lines(
     plan: tuple[EmailMovePlanItem, ...],
     *,
     blocked_plan: tuple[BlockedEmailMovePlanItem, ...],
+    failed_plan: tuple[FailedEmailMovePlanItem, ...] = (),
     dry_run: bool,
     gmail_spam_cleanup_results: tuple[GmailSpamCleanupResult, ...],
 ) -> list[str]:
@@ -478,6 +584,7 @@ def _summary_lines(
     lines = [
         f"- {ready_label}: {len(plan)}",
         f"- Blocked/skipped: {len(blocked_plan)}",
+        f"- Failed: {len(failed_plan)}",
     ]
     if gmail_spam_cleanup_results:
         if dry_run:

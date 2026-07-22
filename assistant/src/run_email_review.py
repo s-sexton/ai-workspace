@@ -9,11 +9,16 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from assistant.src.generate_brief import generate_memory_brief
+from assistant.src.email_cleanup_batch import (
+    _folder_memory_recommendation,
+    _folder_memory_rules,
+)
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import ConfigurationError, load_workspace_config
 from common.email import (
     EmailClient,
     EmailFeedbackRule,
+    EmailFolderProposal,
     EmailMessage,
     EmailSenderPreference,
     EmailTransport,
@@ -33,7 +38,7 @@ from common.graph_email import (
     GraphTransport,
     build_graph_email_read_transport,
 )
-from common.memory import DuckDbMemoryStore
+from common.memory import DuckDbMemoryStore, SourceMemoryRecord
 
 
 SAMPLE_EMAIL_MESSAGES: tuple[Mapping[str, object], ...] = (
@@ -217,16 +222,23 @@ def build_graph_read_transport_from_config(
     graph_transport: GraphTransport | None = None,
     token_transport: GraphTokenTransport | None = None,
     use_bearer_auth: bool = False,
+    include_body_text: bool = False,
 ) -> EmailTransport:
     """Build a Graph email read transport from local workspace configuration."""
 
     config = load_workspace_config(root)
     credentials = config.require_graph_credentials(use_bearer_auth=use_bearer_auth)
+    try:
+        mailbox_identity_overrides = config.email_settings.mailbox_graph_user_ids
+    except ConfigurationError:
+        mailbox_identity_overrides = {}
     return build_graph_email_read_transport(
         credentials,
         graph_transport=graph_transport,
         token_transport=token_transport,
         use_bearer_auth=use_bearer_auth,
+        include_body_text=include_body_text,
+        mailbox_identity_overrides=mailbox_identity_overrides,
     )
 
 
@@ -286,8 +298,15 @@ def _record_email_memory(
             access_mode="read",
         )
         feedback_rules = _email_feedback_rules(store, mailbox=mailbox)
+        folder_memory_rules = _folder_memory_rules(
+            store,
+            mailbox=mailbox,
+            folder_namespace=folder_policy.get("review", "Clarity/Review").split("/")[0],
+            limit=250,
+        )
         sender_preferences = _email_sender_preferences(store, mailbox=mailbox)
         for message in messages:
+            memory_message = _safe_memory_message(message)
             classification = classify_email_message(
                 message,
                 allowed_senders=allowed_senders,
@@ -304,8 +323,8 @@ def _record_email_memory(
                 source_id=source.source_id,
                 external_id=message.message_id,
                 item_type="email_message",
-                subject=message.subject,
-                sender_or_owner=message.sender,
+                subject=memory_message.subject,
+                sender_or_owner=memory_message.sender,
                 updated_at=message.received_at,
                 content_hash=_message_hash(message),
                 first_seen_run_id=run.run_id,
@@ -313,7 +332,7 @@ def _record_email_memory(
             store.record_item_learning_features(
                 item_id=item.item_id,
                 feature_type="email_content_term",
-                feature_values=email_learning_terms(message),
+                feature_values=email_learning_terms(memory_message),
             )
             store.record_classification(
                 item_id=item.item_id,
@@ -322,6 +341,22 @@ def _record_email_memory(
                 reason=classification.reason,
             )
             proposal = propose_email_folder_action(classification, folder_policy)
+            folder_memory_proposal = _folder_memory_proposal(
+                item=item,
+                classification_label=classification.label,
+                classification_reason=classification.reason,
+                rules=folder_memory_rules,
+            )
+            if folder_memory_proposal is not None:
+                proposal = folder_memory_proposal
+            if _active_email_move_exists(
+                store,
+                mailbox=mailbox,
+                external_id=message.message_id,
+                action_type=proposal.action_type,
+                action_target=proposal.target_folder,
+            ):
+                continue
             store.record_assistant_action(
                 run_id=run.run_id,
                 item_id=item.item_id,
@@ -348,6 +383,67 @@ def _record_email_memory(
         return run.run_id, review_count, noise_count, trash_count, proposed_action_count
     finally:
         store.close()
+
+
+def _active_email_move_exists(
+    store: DuckDbMemoryStore,
+    *,
+    mailbox: str,
+    external_id: str,
+    action_type: str,
+    action_target: str,
+) -> bool:
+    row = store._connection.execute(
+        """
+        SELECT 1
+        FROM assistant_actions a
+        JOIN items_seen i ON i.item_id = a.item_id
+        JOIN sources s ON s.source_id = i.source_id
+        WHERE s.source_type = 'email'
+          AND s.scope_label = ?
+          AND i.external_id = ?
+          AND a.action_type = ?
+          AND a.action_target = ?
+          AND a.approval_status IN ('required', 'approved')
+        LIMIT 1
+        """,
+        [mailbox, external_id, action_type, action_target],
+    ).fetchone()
+    return row is not None
+
+
+def _folder_memory_proposal(
+    *,
+    item,
+    classification_label: str,
+    classification_reason: str,
+    rules,
+) -> EmailFolderProposal | None:
+    if classification_label == "trash":
+        return None
+    recommendation = _folder_memory_recommendation(
+        SourceMemoryRecord(
+            item_id=item.item_id,
+            external_id=item.external_id,
+            source_type="email",
+            display_name="",
+            scope_label="",
+            item_type=item.item_type,
+            subject=item.subject,
+            sender_or_owner=item.sender_or_owner,
+            updated_at=item.updated_at,
+            label=classification_label,
+            reason=classification_reason,
+        ),
+        rules=rules,
+    )
+    if recommendation is None:
+        return None
+    return EmailFolderProposal(
+        action_type="propose_email_move_folder",
+        target_folder=recommendation.target_folder,
+        reason=recommendation.reason,
+    )
 
 
 def _email_feedback_rules(
@@ -397,6 +493,53 @@ def _message_hash(message: EmailMessage) -> str:
         )
     )
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+_SENSITIVE_METADATA_MARKERS = (
+    "api_token=",
+    "access_token=",
+    "authorization:",
+    "bearer ",
+    "basic ",
+    "password=",
+)
+
+
+def _safe_memory_message(message: EmailMessage) -> EmailMessage:
+    return EmailMessage(
+        message_id=message.message_id,
+        mailbox=message.mailbox,
+        subject=_safe_memory_text(message.subject, replacement="[redacted email subject]"),
+        sender=_safe_memory_optional_text(message.sender, replacement="[redacted sender]"),
+        received_at=message.received_at,
+        preview=_safe_memory_optional_text(
+            message.preview,
+            replacement="[redacted email preview]",
+        ),
+        return_path=_safe_memory_optional_text(
+            message.return_path,
+            replacement="[redacted return path]",
+        ),
+        spf=message.spf,
+        dkim=message.dkim,
+        dmarc=message.dmarc,
+        exchange_auth_as=message.exchange_auth_as,
+    )
+
+
+def _safe_memory_text(value: str, *, replacement: str) -> str:
+    return replacement if _contains_sensitive_marker(value) else value
+
+
+def _safe_memory_optional_text(value: str | None, *, replacement: str) -> str | None:
+    if value is None:
+        return None
+    return _safe_memory_text(value, replacement=replacement)
+
+
+def _contains_sensitive_marker(value: str) -> bool:
+    lowered = value.lower()
+    return any(marker in lowered for marker in _SENSITIVE_METADATA_MARKERS)
 
 
 def _resolve_path(workspace_root: Path, path: Path) -> Path:

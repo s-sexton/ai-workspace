@@ -35,7 +35,9 @@ parse provider-specific payloads directly.
 `common.graph_calendar` contains the Microsoft Graph-specific runtime adapter:
 
 -   `GraphCalendarReadTransport` lists event metadata from the Graph
-    `calendarView` endpoint.
+    `calendarView` endpoint. When a Graph calendar config includes
+    `calendarName`, it resolves the user's named calendar and reads
+    `/users/{source}/calendars/{calendar-id}/calendarView`.
 -   `build_graph_calendar_read_transport()` builds the transport from local
     Graph credentials.
 
@@ -88,6 +90,34 @@ Then run:
 python -m assistant.src.run_calendar_review --calendar work --date 2026-07-10 --graph
 ```
 
+To read a named calendar under a Graph mailbox, add `calendarName`:
+
+``` json
+{
+  "assistant": {
+    "calendar": {
+      "approvedCalendars": [
+        {
+          "label": "stf-holiday-vacation",
+          "provider": "graph",
+          "source": "scott.sexton@sendthisfile.com",
+          "calendarName": "SendThisFile Holiday and Vacation Schedule",
+          "accessMode": "read"
+        }
+      ],
+      "defaultCalendar": "stf-holiday-vacation",
+      "maxEvents": 25
+    }
+  }
+}
+```
+
+Then run:
+
+``` powershell
+python -m assistant.src.run_calendar_review --calendar stf-holiday-vacation --date 2026-07-10 --graph
+```
+
 Use `--graph-bearer` with `--graph` only when intentionally testing a local
 `GRAPH_ACCESS_TOKEN`; otherwise the command uses app-only client credentials
 from `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET`.
@@ -130,6 +160,20 @@ To ask from remembered calendar metadata:
 python -m assistant.src.clarity "What is on my family calendar today?"
 python -m assistant.src.ask_memory calendar-items
 ```
+
+## Daily Brief Refresh
+
+The daily brief can refresh approved calendars before generating the email
+body:
+
+``` powershell
+python -m assistant.src.send_daily_brief --days 7 --refresh-calendars --graph-calendars --google-calendars --graph --execute
+```
+
+This reads each approved Graph and Google calendar for the rolling brief
+window and records metadata in local memory before the "Day In A Glance"
+section is generated. It does not create, update, delete, or respond to
+calendar events.
 
 ## Memory Rules
 

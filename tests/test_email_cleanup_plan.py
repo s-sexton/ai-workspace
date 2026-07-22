@@ -28,7 +28,7 @@ def test_build_email_cleanup_plan_groups_ready_pending_and_blocked(tmp_path):
         mailbox="sesexton@gmail.com",
         message_id="blocked-1",
         approval_status="approved",
-        target_folder="Clarity/Unknown",
+        target_folder="Archive/Unknown",
         subject="Promo blocked",
     )
 

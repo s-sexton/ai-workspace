@@ -73,9 +73,14 @@ Current implementation:
 - Source-aware calendar questions for family, work, and personal calendars
 - Explicit read-only calendar refresh before answering calendar questions
 - Combined email and calendar refresh in scheduled-friendly Clarity cycles
+- Scheduled cycle refresh across all configured readable inboxes when no
+  mailbox is specified
 - Schedule-printer support for optional calendar refresh flags
-- Email-ready daily brief generation with Outlook attention, calendar, Jira,
-  pending approval counts, and reply guidance
+- Email-ready daily brief generation with approved inbox attention, a rolling
+  seven-day calendar window, Jira, open delegated tasks, pending approval
+  counts, and reply guidance
+- Daily brief inbox attention grouped by source mailbox, including Outlook,
+  shared, and family Gmail inboxes
 - Explicit-only Microsoft Graph daily brief send command with dry-run preview
 - Daily brief JSON manifest for stable reply item resolution
 - Deterministic local daily brief reply command processor
@@ -83,6 +88,10 @@ Current implementation:
   duplicate skipping
 - Windows schedule-printer support for daily brief send and reply poll
   workflows
+- Daily brief send can refresh approved Graph and Google calendars for the
+  rolling window before generating the email body
+- Daily brief send can refresh approved inboxes and live Jira before generating
+  the email body
 
 ## Phase 4: Calendar Awareness
 
@@ -97,6 +106,8 @@ Calendar support begins as read-only metadata:
 - Filter remembered calendar items by simple requested date
 - Filter remembered calendar items by simple requested source
 - Refresh approved read-only calendar metadata before answering when requested
+- Refresh approved read-only calendar metadata before scheduled daily brief
+  email generation
 - Avoid creating, updating, deleting, or responding to calendar events
 
 Live calendar providers require a separate design and approval before use.
@@ -153,6 +164,9 @@ Likely first candidates:
 - Scheduled read-only refresh
 - Scheduled local brief generation
 - Scheduled email-ready daily brief generation
+- Scheduled daily brief generation with read-only calendar pre-refresh
+- Scheduled daily brief generation with read-only inbox, calendar, and Jira
+  pre-refresh
 - Approved email filing inside configured Clarity folders
 - Local audit history
 

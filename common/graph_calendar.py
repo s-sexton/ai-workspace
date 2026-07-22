@@ -23,6 +23,19 @@ from common.graph_email import (
 )
 
 
+_NAMED_CALENDAR_SEPARATOR = "::"
+
+
+def graph_calendar_reference(user: str, calendar_name: str | None = None) -> str:
+    """Return an opaque Graph calendar reference for the transport."""
+
+    clean_user = _required_text(user, "user")
+    if calendar_name is None:
+        return clean_user
+    clean_name = _required_text(calendar_name, "calendar_name")
+    return f"{clean_user}{_NAMED_CALENDAR_SEPARATOR}{clean_name}"
+
+
 def build_graph_calendar_read_transport(
     credentials: GraphCredentials,
     *,
@@ -64,11 +77,22 @@ class GraphCalendarReadTransport:
         """Return normalized calendar payloads for one user's calendar view."""
 
         clean_calendar = _required_text(calendar, "calendar")
+        user, calendar_name = _split_calendar_reference(clean_calendar)
         if limit < 1:
             raise CalendarClientError("limit must be positive.")
 
+        calendar_id = (
+            self._calendar_id_for_name(user, calendar_name)
+            if calendar_name is not None
+            else None
+        )
         payload = self._get_json(
-            self._calendar_view_url(clean_calendar, date=date, limit=limit)
+            self._calendar_view_url(
+                user,
+                calendar_id=calendar_id,
+                date=date,
+                limit=limit,
+            )
         )
         raw_events = payload.get("value")
         if not isinstance(raw_events, list):
@@ -84,6 +108,28 @@ class GraphCalendarReadTransport:
                 graph_event_to_calendar_payload(raw_event, calendar=clean_calendar)
             )
         return tuple(events)
+
+    def _calendar_id_for_name(self, user: str, calendar_name: str) -> str:
+        payload = self._get_json(self._calendars_url(user))
+        raw_calendars = payload.get("value")
+        if not isinstance(raw_calendars, list):
+            raise GraphClientError("Microsoft Graph calendars response missing value.")
+        clean_name = calendar_name.casefold()
+        for raw_calendar in raw_calendars:
+            if not isinstance(raw_calendar, Mapping):
+                raise GraphClientError(
+                    "Microsoft Graph calendar response item must be an object."
+                )
+            name = raw_calendar.get("name")
+            calendar_id = raw_calendar.get("id")
+            if (
+                isinstance(name, str)
+                and name.casefold() == clean_name
+                and isinstance(calendar_id, str)
+                and calendar_id.strip()
+            ):
+                return calendar_id
+        raise GraphClientError(f"Microsoft Graph calendar was not found: {calendar_name}")
 
     def _get_json(self, url: str) -> Mapping[str, Any]:
         response = self.transport.get(url, headers=self._json_headers())
@@ -101,8 +147,25 @@ class GraphCalendarReadTransport:
             "Prefer": 'outlook.timezone="UTC"',
         }
 
-    def _calendar_view_url(self, calendar: str, *, date: str, limit: int) -> str:
-        encoded_calendar = quote(calendar, safe="")
+    def _calendars_url(self, user: str) -> str:
+        encoded_user = quote(user, safe="")
+        query = urlencode(
+            {
+                "$top": "100",
+                "$select": "id,name",
+            }
+        )
+        return f"{self._base_url()}/users/{encoded_user}/calendars?{query}"
+
+    def _calendar_view_url(
+        self,
+        user: str,
+        *,
+        calendar_id: str | None = None,
+        date: str,
+        limit: int,
+    ) -> str:
+        encoded_user = quote(user, safe="")
         start, end = _date_window(date)
         query = urlencode(
             {
@@ -124,8 +187,13 @@ class GraphCalendarReadTransport:
                 ),
             }
         )
+        calendar_segment = (
+            "calendarView"
+            if calendar_id is None
+            else f"calendars/{quote(calendar_id, safe='')}/calendarView"
+        )
         return (
-            f"{self._base_url()}/users/{encoded_calendar}/calendarView?"
+            f"{self._base_url()}/users/{encoded_user}/{calendar_segment}?"
             f"{query}"
         )
 
@@ -143,6 +211,16 @@ def _date_window(value: str) -> tuple[str, str]:
     return (
         f"{selected_date.isoformat()}T00:00:00Z",
         f"{next_date.isoformat()}T00:00:00Z",
+    )
+
+
+def _split_calendar_reference(calendar: str) -> tuple[str, str | None]:
+    if _NAMED_CALENDAR_SEPARATOR not in calendar:
+        return calendar, None
+    user, calendar_name = calendar.split(_NAMED_CALENDAR_SEPARATOR, maxsplit=1)
+    return (
+        _required_text(user, "calendar user"),
+        _required_text(calendar_name, "calendar name"),
     )
 
 

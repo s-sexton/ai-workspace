@@ -144,7 +144,9 @@ Clarity Jira, email, calendar, and Graph read paths:
 -   `assistant.jira.reportFields`: non-empty list of strings
 -   `assistant.email.approvedMailboxes`: non-empty list of mailbox objects with
     `address` and `accessMode`; optional `allowedSenders` may restrict a
-    mailbox to specific senders
+    mailbox to specific senders; optional `graphUserId` may route Microsoft
+    Graph calls through a UPN or directory id when it differs from the mailbox
+    address
 -   `assistant.email.defaultMailbox`: non-empty string listed in
     `approvedMailboxes`
 -   `assistant.email.folderNamespace`: single folder name for assistant-managed
@@ -157,7 +159,8 @@ Clarity Jira, email, calendar, and Graph read paths:
     approved with `read_write` access
 -   `assistant.email.maxMessages`: positive integer
 -   `assistant.calendar.approvedCalendars`: non-empty list of calendar objects
-    with `label`, `provider`, `source`, and `accessMode`
+    with `label`, `provider`, `source`, and `accessMode`; Graph calendars may
+    also include `calendarName` for a named calendar under the source mailbox
 -   `assistant.calendar.defaultCalendar`: non-empty label listed in
     `approvedCalendars`
 -   `assistant.calendar.maxEvents`: positive integer
@@ -170,12 +173,18 @@ Email `accessMode` must be either `read` or `read_write`. Current email
 workflows only read fake metadata; `read_write` is reserved for future approved
 mailbox actions.
 
+Email `graphUserId` is only used for Microsoft Graph URL construction. Clarity
+still records and displays the configured mailbox `address`, and the mailbox
+must still be explicitly listed in `approvedMailboxes`.
+
 Calendar `provider` must be `sample`, `graph`, or `google`. Calendar
 `accessMode` must be `read` or `read_write`, but current workflows only read
 calendar metadata. For Graph calendars, `source` is the Graph user principal
-name used in the `/users/{source}/calendarView` request. For Google calendars,
-`source` is the Google Calendar ID used in the
-`/calendars/{source}/events` request.
+name used in the `/users/{source}/calendarView` request. If `calendarName` is
+present, Clarity first resolves the named calendar under that mailbox and then
+uses `/users/{source}/calendars/{calendar-id}/calendarView`. For Google
+calendars, `source` is the Google Calendar ID used in the `/calendars/{source}/events`
+request.
 
 Email folder policy is used only to record proposed local actions. Non-trash
 destinations must live under `assistant.email.folderNamespace`, such as

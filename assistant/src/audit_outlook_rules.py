@@ -97,11 +97,16 @@ def build_graph_rule_transport_from_config(
     workspace_root = Path(root).resolve() if root is not None else find_workspace_root()
     config = load_workspace_config(workspace_root)
     credentials = config.require_graph_credentials(use_bearer_auth=use_bearer_auth)
+    try:
+        mailbox_identity_overrides = config.email_settings.mailbox_graph_user_ids
+    except ConfigurationError:
+        mailbox_identity_overrides = {}
     return build_graph_email_rule_transport(
         credentials,
         graph_transport=graph_transport,
         token_transport=token_transport,
         use_bearer_auth=use_bearer_auth,
+        mailbox_identity_overrides=mailbox_identity_overrides,
     )
 
 

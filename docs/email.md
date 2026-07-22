@@ -34,6 +34,22 @@ Gmail Spam cleanup is a separate standing policy. When
 Spam messages to Gmail Trash. Spam cleanup does not inspect or classify normal
 Inbox messages and does not permanently delete Gmail messages.
 
+Normal Gmail inbox cleanup uses a numbered review batch. The Gmail batch keeps
+the same item numbers in its JSON manifest, but renders the Markdown in decision
+groups:
+
+-   `Move To Specific Clarity Folders` for learned or known Gmail folders under
+    the configured namespace
+-   `Likely Delete` for noise items that should move to Gmail Trash only after
+    approval
+-   `Review` for messages that still need a human decision
+
+Known Gmail folder recommendations are intentionally narrow and mailbox-local.
+They currently cover repeated cleanup patterns such as Monarch, Experian, USPS,
+Travelers Insurance, VW, Garmin, K-State, Sedgwick HS, Fiddlers Creek, and
+Smith Orthodontics. Other specific folders can still be taught through numbered
+cleanup directions, such as `move 4 to Clarity/Vendor Name`.
+
 Classification is intentionally conservative. Restricted mailbox sender and
 authentication checks run first. Then operational, account, family, security,
 and approval signals are kept for review. Only after those checks does Clarity
@@ -150,6 +166,11 @@ Approved mailbox scope is configured in `config/config.json`:
           "accessMode": "read_write"
         },
         {
+          "address": "smtp-alias@example.invalid",
+          "graphUserId": "mailbox-upn@example.invalid",
+          "accessMode": "read_write"
+        },
+        {
           "address": "clarity@sendthisfile.ai",
           "accessMode": "read_write",
           "allowedSenders": [
@@ -189,6 +210,11 @@ must keep this approval boundary.
 `read` means Clarity may inspect metadata and remember results. `read_write`
 means approved move/trash actions may execute for that mailbox through an
 explicit provider command.
+
+`graphUserId` is optional. Use it when Microsoft Graph must address the mailbox
+by a UPN or directory identity that differs from the human-facing mailbox
+address. Clarity still scopes memory, approvals, and folder moves to the
+configured `address`.
 
 `allowedSenders` restricts a mailbox to messages from specific senders. For
 `clarity@sendthisfile.ai`, Clarity should ignore anything not sent by
@@ -278,6 +304,64 @@ means the `Clarity/Review` folder inside the `scott.sexton@sendthisfile.com`
 mailbox. If Clarity reviews `clarity@sendthisfile.ai`, the same folder name
 refers to that mailbox's folder tree.
 
+## Numbered Cleanup Batches
+
+For inbox cleanup sessions, use a numbered batch instead of the historical
+pending-action list:
+
+``` powershell
+python -m assistant.src.run_email_review --mailbox scott.sexton@sendthisfile.com --graph
+python -m assistant.src.email_cleanup_batch --mailbox scott.sexton@sendthisfile.com
+```
+
+The batch writes `reports/email-cleanup-batch.md` plus a JSON manifest beside
+it. The Markdown report is intentionally compact: date, sender, subject,
+recommendation, and reason. Every item gets a batch-local number so the human
+can give directions such as `Move 1 to Noise`, `Move 2 to Review`, or
+`Move 3 to Clarity/Vendor Name`.
+
+The JSON manifest preserves the mapping from number to provider message ID and
+source mailbox. That keeps future approval and execution commands tied to the
+current mailbox batch rather than stale proposals from previous cleanup runs.
+
+Numbered directions can be recorded as approved local actions with:
+
+``` powershell
+python -m assistant.src.process_email_cleanup_batch --directions "delete 1, 3. move 2 to Clarity/Vendor Name" --execute
+```
+
+This does not call an email provider directly. It records approved actions in
+local memory so `assistant.src.execute_email_moves` can apply them. `Review`,
+`Noise`, and `Delete` map through `assistant.email.folderPolicy`; any other
+destination is treated as a specific mailbox-local folder under
+`assistant.email.folderNamespace`.
+
+When executed, numbered cleanup directions also record local feedback for
+learning. Deletes and moves to `Clarity/Noise` become `noise` feedback. Moves to
+`Clarity/Review` or another specific `Clarity/...` folder become `review`
+feedback with the destination folder in the note. Future email reviews can use
+that feedback, along with sanitized learning terms captured during email review,
+to improve deterministic recommendations.
+
+The numbered batch report also uses prior specific-folder cleanup decisions as
+folder memory. If a current item matches a prior folder move by sender, or by a
+meaningful folder-name term in the subject, the recommendation can point
+directly to that remembered destination, such as `Clarity/Azure`,
+`Clarity/Hartford`, `Clarity/DPF`, or another mailbox-local `Clarity/...`
+folder.
+
+The normal email review path uses the same mailbox-scoped cleanup learning
+before it records pending move proposals. That means scheduled refreshes and
+daily email reports can show learned specific-folder recommendations instead of
+falling back to generic `Clarity/Review` when a safe prior folder decision
+matches the current inbox item.
+
+When Microsoft Graph executes an approved move, missing `Clarity/...` folder
+paths are created in the source mailbox before the message is moved. This keeps
+specific cleanup folders mailbox-local: `Clarity/Vendor Name` in
+`scott.sexton@sendthisfile.com` is a different folder tree than the same path in
+another approved mailbox.
+
 The local review workflow records one proposed folder action per message. Those
 actions are audit records only. They do not move messages. Proposed folder
 destinations are stored as structured action targets so future execution logic
@@ -285,11 +369,29 @@ can use the recorded target without parsing human-readable text. The action
 queue also includes the email item ID, which maps to the provider message ID in
 future live Graph workflows.
 
+If the same mailbox message is seen again, Clarity does not create another
+active move proposal for the same provider message, classification action, and
+target folder while an existing proposal is still pending or approved. This
+keeps scheduled refreshes from multiplying the approval queue.
+
 Pending proposed actions can be reviewed with:
 
 ``` powershell
 python -m assistant.src.ask_memory pending-actions
 ```
+
+The daily brief also includes a `Pending Approvals` section whenever local
+actions still require approval. Each item includes the action ID, source
+mailbox or source scope, target, and compact recommendation so the email shows
+what Clarity is waiting on instead of only showing a count. Replying with
+`Approve pending cleanup actions` approves pending email move proposals in local
+memory. Replying with `Approve action ACTION_ID` or `Reject action ACTION_ID`
+updates one pending action from that section. These reply commands do not
+perform provider mailbox moves or Jira writes by themselves.
+
+Daily brief generation keeps the Markdown report as the source artifact and also
+writes an HTML companion beside it. The email send path uses the HTML body when
+available and keeps the Markdown text as the fallback body.
 
 The first Clarity command surface can answer common email-attention questions
 from local memory:
@@ -329,12 +431,18 @@ from `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`.
 One non-interactive Clarity cycle can be run by a local scheduler:
 
 ``` powershell
-python -m assistant.src.run_clarity_cycle --mailbox clarity@sendthisfile.ai --graph
+python -m assistant.src.run_clarity_cycle --graph --gmail
 ```
 
-The cycle performs a read-only refresh and prints safe review and pending-action
-sections. It also writes `reports/clarity-cycle.md` by default. It does not
-create the scheduled task itself.
+When `--mailbox` is omitted, the cycle refreshes every readable mailbox in
+`assistant.email.approvedMailboxes`. Gmail is used for `gmail.com` mailboxes
+when `--gmail` is supplied; Microsoft Graph is used for the rest when `--graph`
+is supplied. Pass `--mailbox clarity@sendthisfile.ai` only for a focused
+one-mailbox refresh.
+
+The cycle performs read-only refreshes and prints safe review and
+pending-action sections. It also writes `reports/clarity-cycle.md` by default.
+It does not create the scheduled task itself.
 
 Before scheduling a live Graph cycle, check setup without reading mail:
 
@@ -346,7 +454,7 @@ To print PowerShell commands for registering that daily task with Windows Task
 Scheduler:
 
 ``` powershell
-python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30
+python -m assistant.src.print_clarity_schedule --graph --gmail --at 07:30
 ```
 
 See `docs/scheduling.md` for the scheduling workflow and removal command.

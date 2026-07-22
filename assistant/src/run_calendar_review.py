@@ -23,7 +23,10 @@ from common.google_calendar import (
     GoogleTokenTransport,
     build_google_calendar_read_transport,
 )
-from common.graph_calendar import build_graph_calendar_read_transport
+from common.graph_calendar import (
+    build_graph_calendar_read_transport,
+    graph_calendar_reference,
+)
 from common.graph_email import GraphTokenTransport, GraphTransport
 from common.memory import DuckDbMemoryStore
 
@@ -121,7 +124,7 @@ def run_calendar_review(
         )
     )
     read_result = client.list_events(
-        calendar=calendar_scope.source,
+        calendar=_calendar_transport_source(calendar_scope),
         date=selected_date,
         limit=effective_limit,
     )
@@ -194,6 +197,15 @@ def build_graph_calendar_read_transport_from_config(
         token_transport=token_transport,
         use_bearer_auth=use_bearer_auth,
     )
+
+
+def _calendar_transport_source(calendar_scope) -> str:
+    if calendar_scope.provider == "graph":
+        return graph_calendar_reference(
+            calendar_scope.source,
+            calendar_scope.calendar_name,
+        )
+    return calendar_scope.source
 
 
 def build_google_calendar_read_transport_from_config(

@@ -21,12 +21,18 @@ from assistant.src.run_calendar_review import (
     run_calendar_review,
 )
 from assistant.src.run_email_review import (
+    EmailReviewResult,
+    build_gmail_read_transport_from_config,
     build_graph_read_transport_from_config,
     run_email_review,
 )
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.calendar import CalendarTransport
-from common.configuration import find_workspace_root
+from common.configuration import (
+    ConfigurationError,
+    find_workspace_root,
+    load_workspace_config,
+)
 from common.email import EmailTransport
 from common.memory import DuckDbMemoryStore
 
@@ -51,6 +57,7 @@ class ClarityCycleResult:
     memory_path: Path
     brief_path: Path
     mailbox: str
+    mailbox_count: int
     message_count: int
     review_count: int
     noise_count: int
@@ -67,6 +74,22 @@ class ClarityCycleResult:
     pending_answer: str
 
 
+@dataclass(frozen=True)
+class EmailCycleRefreshResult:
+    """Aggregate result for one cycle's mailbox refresh work."""
+
+    memory_path: Path
+    brief_path: Path
+    mailbox: str
+    mailbox_count: int
+    message_count: int
+    review_count: int
+    noise_count: int
+    trash_count: int
+    proposed_action_count: int
+    results: tuple[EmailReviewResult, ...]
+
+
 def run_clarity_cycle(
     *,
     root: Path | str | None = None,
@@ -76,8 +99,10 @@ def run_clarity_cycle(
     brief_path: Path | str | None = None,
     cycle_report_path: Path | str = DEFAULT_CYCLE_REPORT_PATH,
     transport: EmailTransport | None = None,
+    gmail_transport: EmailTransport | None = None,
     calendar_transport: CalendarTransport | None = None,
     use_sample_graph: bool = False,
+    use_gmail: bool = False,
     refresh_calendar: bool = False,
     calendar: str | None = None,
     calendar_date: str | None = None,
@@ -92,14 +117,16 @@ def run_clarity_cycle(
 
     review_result = _run_cycle_phase(
         "Refresh email metadata",
-        lambda: run_email_review(
+        lambda: _refresh_cycle_email(
             root=root,
-            mailbox=mailbox or "",
+            mailbox=mailbox,
             limit=limit,
             memory_path=memory_path,
             brief_output_path=brief_path,
-            transport=transport,
+            graph_transport=transport,
+            gmail_transport=gmail_transport,
             use_sample_graph=use_sample_graph,
+            use_gmail=use_gmail,
         ),
     )
     calendar_result = None
@@ -140,6 +167,7 @@ def run_clarity_cycle(
         root=root,
         output_path=cycle_report_path,
         mailbox=review_result.mailbox,
+        mailbox_count=review_result.mailbox_count,
         message_count=review_result.message_count,
         review_count=review_result.review_count,
         noise_count=review_result.noise_count,
@@ -157,6 +185,7 @@ def run_clarity_cycle(
         memory_path=review_result.memory_path,
         cycle_report_path=resolved_cycle_report_path,
         mailbox=review_result.mailbox,
+        mailbox_count=review_result.mailbox_count,
         message_count=review_result.message_count,
         review_count=review_result.review_count,
         noise_count=review_result.noise_count,
@@ -199,6 +228,7 @@ def run_clarity_cycle(
         memory_path=review_result.memory_path,
         brief_path=review_result.brief_path,
         mailbox=review_result.mailbox,
+        mailbox_count=review_result.mailbox_count,
         message_count=review_result.message_count,
         review_count=review_result.review_count,
         noise_count=review_result.noise_count,
@@ -227,6 +257,12 @@ def main(argv: Sequence[str] | None = None) -> None:
                 use_bearer_auth=args.graph_bearer
             ),
         ) if args.graph else None
+        gmail_transport = _run_cycle_phase(
+            "Build Gmail email transport",
+            lambda: build_gmail_read_transport_from_config(
+                use_bearer_auth=args.gmail_bearer
+            ),
+        ) if args.gmail else None
         calendar_transport = _run_cycle_phase(
             "Build calendar transport",
             lambda: _build_calendar_transport(args),
@@ -238,8 +274,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             brief_path=args.brief,
             cycle_report_path=args.cycle_report,
             transport=transport,
+            gmail_transport=gmail_transport,
             calendar_transport=calendar_transport,
             use_sample_graph=args.sample_graph,
+            use_gmail=args.gmail,
             refresh_calendar=args.refresh_calendar,
             calendar=args.calendar,
             calendar_date=args.calendar_date,
@@ -270,6 +308,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     print("# Clarity Cycle")
     print()
     print(f"Mailbox: {result.mailbox}")
+    if result.mailbox_count != 1:
+        print(f"Mailboxes refreshed: {result.mailbox_count}")
     print(f"Read: {result.message_count}")
     print(f"Review: {result.review_count}")
     print(f"Noise: {result.noise_count}")
@@ -315,6 +355,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Read approved mailbox metadata from Microsoft Graph.",
     )
     parser.add_argument(
+        "--gmail",
+        action="store_true",
+        help="Read approved gmail.com mailbox metadata from Gmail.",
+    )
+    parser.add_argument(
         "--refresh-calendar",
         action="store_true",
         help="Also refresh approved read-only calendar metadata.",
@@ -344,6 +389,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--graph-bearer",
         action="store_true",
         help="Use GRAPH_ACCESS_TOKEN instead of app-only client credentials.",
+    )
+    parser.add_argument(
+        "--gmail-bearer",
+        action="store_true",
+        help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials for Gmail.",
     )
     parser.add_argument(
         "--google-bearer",
@@ -388,6 +438,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.graph_bearer and not (args.graph or args.graph_calendar):
         parser.error("--graph-bearer requires --graph or --graph-calendar.")
+    if args.gmail and args.sample_graph:
+        parser.error("--gmail and --sample-graph cannot be used together.")
+    if args.gmail_bearer and not args.gmail:
+        parser.error("--gmail-bearer requires --gmail.")
     if args.google_bearer and not args.google_calendar:
         parser.error("--google-bearer requires --google-calendar.")
     if args.calendar and not args.refresh_calendar:
@@ -413,6 +467,106 @@ def _build_calendar_transport(args: argparse.Namespace) -> CalendarTransport | N
     return None
 
 
+def _refresh_cycle_email(
+    *,
+    root: Path | str | None,
+    mailbox: str | None,
+    limit: int,
+    memory_path: Path | str,
+    brief_output_path: Path | str | None,
+    graph_transport: EmailTransport | None,
+    gmail_transport: EmailTransport | None,
+    use_sample_graph: bool,
+    use_gmail: bool,
+) -> EmailCycleRefreshResult:
+    results: list[EmailReviewResult] = []
+    for selected_mailbox in _cycle_mailboxes(root=root, mailbox=mailbox):
+        selected_transport = _transport_for_mailbox(
+            mailbox=selected_mailbox,
+            graph_transport=graph_transport,
+            gmail_transport=gmail_transport,
+        )
+        results.append(
+            run_email_review(
+                root=root,
+                mailbox=selected_mailbox,
+                limit=limit,
+                memory_path=memory_path,
+                brief_output_path=brief_output_path,
+                transport=selected_transport,
+                use_sample_graph=use_sample_graph,
+                use_gmail=_uses_gmail_transport(
+                    mailbox=selected_mailbox,
+                    use_gmail=use_gmail,
+                    gmail_transport=gmail_transport,
+                ),
+            )
+        )
+    return _aggregate_email_refresh_results(tuple(results))
+
+
+def _cycle_mailboxes(
+    *,
+    root: Path | str | None,
+    mailbox: str | None,
+) -> tuple[str, ...]:
+    if mailbox:
+        return (mailbox,)
+    settings = load_workspace_config(root, include_process_env=False).email_settings
+    readable_mailboxes = tuple(
+        approved_mailbox
+        for approved_mailbox in settings.approved_mailboxes
+        if settings.access_mode_for(approved_mailbox) in ("read", "read_write")
+    )
+    if not readable_mailboxes:
+        raise ConfigurationError("No approved readable email mailboxes are configured.")
+    return readable_mailboxes
+
+
+def _transport_for_mailbox(
+    *,
+    mailbox: str,
+    graph_transport: EmailTransport | None,
+    gmail_transport: EmailTransport | None,
+) -> EmailTransport | None:
+    if _is_gmail_mailbox(mailbox) and gmail_transport is not None:
+        return gmail_transport
+    return graph_transport
+
+
+def _uses_gmail_transport(
+    *,
+    mailbox: str,
+    use_gmail: bool,
+    gmail_transport: EmailTransport | None,
+) -> bool:
+    return use_gmail and gmail_transport is not None and _is_gmail_mailbox(mailbox)
+
+
+def _is_gmail_mailbox(mailbox: str) -> bool:
+    return mailbox.lower().endswith("@gmail.com")
+
+
+def _aggregate_email_refresh_results(
+    results: tuple[EmailReviewResult, ...],
+) -> EmailCycleRefreshResult:
+    if not results:
+        raise ConfigurationError("No email mailboxes were refreshed.")
+    mailbox = results[0].mailbox if len(results) == 1 else "all approved mailboxes"
+    return EmailCycleRefreshResult(
+        memory_path=results[-1].memory_path,
+        brief_path=results[-1].brief_path,
+        mailbox=mailbox,
+        mailbox_count=len(results),
+        message_count=sum(result.message_count for result in results),
+        review_count=sum(result.review_count for result in results),
+        noise_count=sum(result.noise_count for result in results),
+        trash_count=sum(result.trash_count for result in results),
+        proposed_action_count=sum(result.proposed_action_count for result in results),
+        results=results,
+    )
+
+
 def _run_cycle_phase(phase: str, action: Callable[[], _T]) -> _T:
     try:
         return action()
@@ -427,6 +581,7 @@ def _write_cycle_report(
     root: Path | str | None,
     output_path: Path | str,
     mailbox: str,
+    mailbox_count: int,
     message_count: int,
     review_count: int,
     noise_count: int,
@@ -446,12 +601,18 @@ def _write_cycle_report(
         "# Clarity Cycle",
         "",
         f"Mailbox: {mailbox}",
-        f"Read: {message_count}",
-        f"Review: {review_count}",
-        f"Noise: {noise_count}",
-        f"Trash: {trash_count}",
-        f"Proposed actions: {proposed_action_count}",
     ]
+    if mailbox_count != 1:
+        lines.append(f"Mailboxes refreshed: {mailbox_count}")
+    lines.extend(
+        (
+            f"Read: {message_count}",
+            f"Review: {review_count}",
+            f"Noise: {noise_count}",
+            f"Trash: {trash_count}",
+            f"Proposed actions: {proposed_action_count}",
+        )
+    )
     if calendar:
         lines.extend(
             (
@@ -514,6 +675,7 @@ def _record_cycle_memory(
     memory_path: Path,
     cycle_report_path: Path,
     mailbox: str,
+    mailbox_count: int,
     message_count: int,
     review_count: int,
     noise_count: int,
@@ -539,6 +701,7 @@ def _record_cycle_memory(
             approval_status="not_required",
             result=_cycle_summary(
                 mailbox=mailbox,
+                mailbox_count=mailbox_count,
                 message_count=message_count,
                 review_count=review_count,
                 noise_count=noise_count,
@@ -554,6 +717,7 @@ def _record_cycle_memory(
             status="completed",
             summary=_cycle_summary(
                 mailbox=mailbox,
+                mailbox_count=mailbox_count,
                 message_count=message_count,
                 review_count=review_count,
                 noise_count=noise_count,
@@ -571,6 +735,7 @@ def _record_cycle_memory(
 def _cycle_summary(
     *,
     mailbox: str,
+    mailbox_count: int,
     message_count: int,
     review_count: int,
     noise_count: int,
@@ -585,6 +750,8 @@ def _cycle_summary(
         f"review={review_count}, noise={noise_count}, trash={trash_count}, "
         f"proposed_actions={proposed_action_count}."
     )
+    if mailbox_count != 1:
+        summary = f"Refreshed {mailbox_count} mailboxes. " + summary
     if calendar:
         summary += (
             f" Read {calendar_event_count} calendar event(s) "

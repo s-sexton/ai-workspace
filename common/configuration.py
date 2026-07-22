@@ -138,6 +138,7 @@ class EmailSettings:
     approved_mailboxes: tuple[str, ...]
     mailbox_access: Mapping[str, str]
     mailbox_allowed_senders: Mapping[str, tuple[str, ...]]
+    mailbox_graph_user_ids: Mapping[str, str]
     folder_namespace: str
     folder_policy: Mapping[str, str]
     gmail_cleanup_policy: GmailCleanupPolicy
@@ -159,6 +160,11 @@ class EmailSettings:
 
         return self.mailbox_allowed_senders.get(mailbox, ())
 
+    def graph_user_id_for(self, mailbox: str) -> str:
+        """Return the Microsoft Graph user identifier for a mailbox."""
+
+        return self.mailbox_graph_user_ids.get(mailbox, mailbox)
+
 
 @dataclass(frozen=True)
 class CalendarScope:
@@ -168,6 +174,7 @@ class CalendarScope:
     source: str
     provider: str
     access_mode: str
+    calendar_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -265,6 +272,7 @@ class WorkspaceConfig:
         settings = _get_mapping(self.settings, ("assistant", "email"))
         mailbox_access = _require_mailbox_access(settings, "approvedMailboxes")
         mailbox_allowed_senders = _mailbox_allowed_senders(settings, "approvedMailboxes")
+        mailbox_graph_user_ids = _mailbox_graph_user_ids(settings, "approvedMailboxes")
         folder_namespace = _require_folder_namespace(settings, "folderNamespace")
         approved_mailboxes = tuple(mailbox_access)
         default_mailbox = _require_non_empty_string(settings, "defaultMailbox")
@@ -277,6 +285,7 @@ class WorkspaceConfig:
             approved_mailboxes=approved_mailboxes,
             mailbox_access=MappingProxyType(mailbox_access),
             mailbox_allowed_senders=MappingProxyType(mailbox_allowed_senders),
+            mailbox_graph_user_ids=MappingProxyType(mailbox_graph_user_ids),
             folder_namespace=folder_namespace,
             folder_policy=MappingProxyType(
                 _require_folder_policy(settings, "folderPolicy", folder_namespace)
@@ -607,6 +616,7 @@ def _require_calendar_scopes(
         source = item.get("source")
         provider = item.get("provider", "sample")
         access_mode = item.get("accessMode", "read")
+        calendar_name = item.get("calendarName")
         if not isinstance(label, str) or not label.strip():
             raise ConfigurationError(
                 f"Calendar label must be a non-empty string: {key}[{index}]"
@@ -623,6 +633,12 @@ def _require_calendar_scopes(
             raise ConfigurationError(
                 f"Calendar accessMode must be read or read_write: {key}[{index}]"
             )
+        if calendar_name is not None and (
+            not isinstance(calendar_name, str) or not calendar_name.strip()
+        ):
+            raise ConfigurationError(
+                f"Calendar calendarName must be a non-empty string: {key}[{index}]"
+            )
         clean_label = label.strip()
         if clean_label in approved_calendars:
             raise ConfigurationError(f"Duplicate approved calendar: {clean_label}")
@@ -631,6 +647,7 @@ def _require_calendar_scopes(
             source=source.strip(),
             provider=provider,
             access_mode=access_mode,
+            calendar_name=calendar_name.strip() if calendar_name else None,
         )
 
     return approved_calendars
@@ -674,6 +691,40 @@ def _mailbox_allowed_senders(
         )
 
     return allowed_senders
+
+
+def _mailbox_graph_user_ids(
+    settings: Mapping[str, Any],
+    key: str,
+) -> dict[str, str]:
+    value = settings.get(key)
+    if not isinstance(value, list):
+        raise ConfigurationError(
+            f"Configuration value must be a non-empty list of mailbox objects: {key}"
+        )
+
+    graph_user_ids: dict[str, str] = {}
+    for index, item in enumerate(value, 1):
+        if not isinstance(item, Mapping):
+            raise ConfigurationError(f"Mailbox entry must be an object: {key}[{index}]")
+        address = item.get("address")
+        if not isinstance(address, str) or not address.strip():
+            raise ConfigurationError(
+                f"Mailbox address must be a non-empty string: {key}[{index}]"
+            )
+        graph_user_id = item.get("graphUserId")
+        if graph_user_id is None:
+            continue
+        if not isinstance(graph_user_id, str) or not graph_user_id.strip():
+            raise ConfigurationError(
+                f"Mailbox graphUserId must be a non-empty string: {key}[{index}]"
+            )
+        clean_address = address.strip()
+        clean_graph_user_id = graph_user_id.strip()
+        if clean_graph_user_id != clean_address:
+            graph_user_ids[clean_address] = clean_graph_user_id
+
+    return graph_user_ids
 
 
 def _require_folder_namespace(settings: Mapping[str, Any], key: str) -> str:

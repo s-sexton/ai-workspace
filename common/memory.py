@@ -24,6 +24,7 @@ ACTION_APPROVAL_STATUSES = (
     "approved",
     "rejected",
     "executed",
+    "failed",
     "not_required",
 )
 

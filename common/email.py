@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
@@ -101,6 +102,7 @@ class EmailMessage:
     spf: str | None = None
     dkim: str | None = None
     dmarc: str | None = None
+    exchange_auth_as: str | None = None
     received_at: str | None = None
     preview: str | None = None
     categories: tuple[str, ...] = ()
@@ -370,17 +372,28 @@ def graph_message_to_email_payload(
     """Convert Microsoft Graph message metadata into Clarity email payload shape."""
 
     headers = _graph_headers(payload.get("internetMessageHeaders"))
+    preview = _optional_string(payload.get("bodyPreview"))
+    body_text = _graph_body_text(payload.get("body"))
     return {
         "message_id": _required_string(payload, "id"),
         "mailbox": mailbox,
-        "subject": _required_string(payload, "subject"),
+        "subject": _graph_subject(payload),
         "sender": _graph_sender(payload),
         "return_path": _first_header(headers, "return-path"),
         "authentication_results": _header_values(headers, "authentication-results"),
+        "exchange_auth_as": _first_header(
+            headers,
+            "x-ms-exchange-organization-authas",
+        ),
         "received_at": _optional_string(payload.get("receivedDateTime")),
-        "preview": _optional_string(payload.get("bodyPreview")),
+        "preview": body_text or preview,
         "categories": _string_tuple(payload.get("categories", ())),
     }
+
+
+def _graph_subject(payload: Mapping[str, Any]) -> str:
+    subject = _optional_string(payload.get("subject"))
+    return subject or "(No subject)"
 
 
 def _sender_is_allowed(sender: str | None, allowed_senders: tuple[str, ...]) -> bool:
@@ -388,6 +401,27 @@ def _sender_is_allowed(sender: str | None, allowed_senders: tuple[str, ...]) -> 
         return False
     clean_sender = sender.strip().lower()
     return clean_sender in {allowed_sender.lower() for allowed_sender in allowed_senders}
+
+
+def _graph_body_text(body: Any) -> str | None:
+    if not isinstance(body, Mapping):
+        return None
+    content = body.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return None
+    content_type = body.get("contentType")
+    if isinstance(content_type, str) and content_type.strip().lower() == "html":
+        return _html_to_text(content)
+    return content
+
+
+def _html_to_text(value: str) -> str:
+    text = re.sub(r"(?is)<(br|p|div|li|tr|h[1-6])\b[^>]*>", "\n", value)
+    text = re.sub(r"(?is)<style\b.*?</style>", "", text)
+    text = re.sub(r"(?is)<script\b.*?</script>", "", text)
+    text = re.sub(r"(?s)<[^>]+>", "", text)
+    lines = [" ".join(html.unescape(line).split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 def _message_authentication_passes(message: EmailMessage) -> bool:
@@ -595,6 +629,7 @@ def _normalize_message(payload: Mapping[str, Any], *, mailbox: str) -> EmailMess
         or parsed_auth.get("dkim"),
         dmarc=_optional_auth_status(payload.get("dmarc"), "dmarc")
         or parsed_auth.get("dmarc"),
+        exchange_auth_as=_optional_string(payload.get("exchange_auth_as")),
         received_at=_optional_string(payload.get("received_at")),
         preview=_optional_string(payload.get("preview")),
         categories=_string_tuple(payload.get("categories", ())),

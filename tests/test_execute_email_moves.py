@@ -64,6 +64,17 @@ class FakeGmailCleanupTransport:
         return ("spam-1", "spam-2")
 
 
+class FailingMoveTransport:
+    def __init__(self, failing_message_id: str):
+        self.failing_message_id = failing_message_id
+        self.moved_messages = []
+
+    def move_message(self, *, mailbox: str, message_id: str, target_folder: str) -> None:
+        if message_id == self.failing_message_id:
+            raise RuntimeError("provider could not find message")
+        self.moved_messages.append((mailbox, message_id, target_folder))
+
+
 def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
@@ -75,6 +86,7 @@ def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
     assert "## Summary" in result
     assert "- Ready to move: 1" in result
     assert "- Blocked/skipped: 0" in result
+    assert "- Failed: 0" in result
     assert "- Mailbox scott.sexton@sendthisfile.com: 1 move(s)" in result
     assert "- Destination Clarity/Review: 1 move(s)" in result
     assert "## Moves" in result
@@ -96,11 +108,13 @@ def test_execute_email_moves_dry_run_lists_approved_moves(tmp_path):
     assert latest_run is not None
     assert (
         latest_run.summary
-        == "Dry-run email move plan for 1 approved email move(s); 0 blocked/skipped."
+        == "Dry-run email move plan for 1 approved email move(s); "
+        "0 blocked/skipped; 0 failed."
     )
     assert actions[0].action_type == "dry_run_email_moves"
     assert actions[0].result == (
-        "Prepared dry-run plan for 1 approved email move(s); 0 blocked/skipped."
+        "Prepared dry-run plan for 1 approved email move(s); "
+        "0 blocked/skipped; 0 failed."
     )
 
 
@@ -135,12 +149,27 @@ def test_execute_email_moves_blocks_read_only_mailbox(tmp_path):
     assert f"Action: {action_id}" in result
 
 
-def test_execute_email_moves_blocks_unconfigured_target_folder(tmp_path):
+def test_execute_email_moves_allows_specific_clarity_target_folder(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
+    _seed_approved_email_move(
+        memory_path,
+        target_folder="Clarity/Authorize.net",
+    )
+
+    result = execute_email_moves(root=tmp_path, memory_path=memory_path)
+
+    assert "- Ready to move: 1" in result
+    assert "- Blocked/skipped: 0" in result
+    assert "- Destination Clarity/Authorize.net: 1 move(s)" in result
+
+
+def test_execute_email_moves_blocks_target_folder_outside_namespace(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
     action_id = _seed_approved_email_move(
         memory_path,
-        target_folder="Clarity/Unconfigured",
+        target_folder="Archive/Unconfigured",
     )
 
     result = execute_email_moves(root=tmp_path, memory_path=memory_path)
@@ -276,13 +305,54 @@ def test_execute_email_moves_can_execute_with_injected_transport(tmp_path):
     assert latest_run is not None
     assert (
         latest_run.summary
-        == "Executed email move plan for 1 approved email move(s); 0 blocked/skipped."
+        == "Executed email move plan for 1 approved email move(s); "
+        "0 blocked/skipped; 0 failed."
     )
     assert actions[0].action_type == "execute_email_moves"
     assert actions[0].result == (
-        "Executed for 1 approved email move(s); 0 blocked/skipped."
+        "Executed for 1 approved email move(s); 0 blocked/skipped; 0 failed."
     )
     assert executed_actions[0].action_id == action_id
+
+
+def test_execute_email_moves_reports_provider_failures_per_item(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
+    failed_action_id = _seed_approved_email_move(
+        memory_path,
+        message_id="missing-message",
+    )
+    moved_action_id = _seed_approved_email_move(
+        memory_path,
+        message_id="available-message",
+    )
+    transport = FailingMoveTransport(failing_message_id="missing-message")
+
+    result = execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        dry_run=False,
+        move_transport=transport,
+    )
+
+    assert "# Email Move Execution" in result
+    assert "- Moved: 1" in result
+    assert "- Failed: 1" in result
+    assert "Moved message available-message" in result
+    assert "Failed message missing-message" in result
+    assert "provider could not find message" in result
+    assert f"Action: {failed_action_id}" in result
+    assert f"Action: {moved_action_id}" in result
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        executed_actions = store.actions_by_approval_status("executed", limit=10)
+        failed_actions = store.actions_by_approval_status("failed", limit=10)
+    finally:
+        store.close()
+
+    assert {action.action_id for action in executed_actions} == {moved_action_id}
+    assert {action.action_id for action in failed_actions} == {failed_action_id}
 
 
 def test_execute_email_moves_does_not_repeat_executed_actions(tmp_path):

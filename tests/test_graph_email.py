@@ -349,6 +349,66 @@ def test_graph_email_send_transport_sends_plain_text_mail():
     assert body["saveToSentItems"] is True
 
 
+def test_graph_email_send_transport_sends_html_mail_when_supplied():
+    send_url = "https://graph.example/v1.0/users/clarity%40example.invalid/sendMail"
+    transport = FakeGraphTransport({send_url: FakeGraphResponse(202, {})})
+    client = GraphEmailSendTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://graph.example/v1.0",
+    )
+
+    client.send_mail(
+        sender="clarity@example.invalid",
+        recipients=("scott@example.invalid",),
+        subject="Clarity Day in a Glance - 2026-07-16",
+        body_text="# Clarity Daily Brief\n",
+        body_html="<h1>Clarity Daily Brief</h1>",
+    )
+
+    _, _, body = transport.post_calls[0]
+    assert body["message"]["body"] == {
+        "contentType": "HTML",
+        "content": "<h1>Clarity Daily Brief</h1>",
+    }
+
+
+def test_graph_email_send_transport_reports_graph_error_detail():
+    send_url = "https://graph.example/v1.0/users/clarity%40example.invalid/sendMail"
+    transport = FakeGraphTransport(
+        {
+            send_url: FakeGraphResponse(
+                403,
+                {
+                    "error": {
+                        "code": "ErrorAccessDenied",
+                        "message": "Access is denied. Check credentials.",
+                    }
+                },
+            )
+        }
+    )
+    client = GraphEmailSendTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://graph.example/v1.0",
+    )
+
+    with pytest.raises(GraphClientError) as exc_info:
+        client.send_mail(
+            sender="clarity@example.invalid",
+            recipients=("scott@example.invalid",),
+            subject="Clarity Day in a Glance - 2026-07-16",
+            body_text="# Clarity Daily Brief\n",
+        )
+
+    error = str(exc_info.value)
+    assert "403" in error
+    assert "ErrorAccessDenied" in error
+    assert "Access is denied" in error
+    assert "access-token" not in error
+
+
 def test_graph_email_folder_transport_creates_missing_folder_path():
     base_url = "https://graph.example/v1.0"
     root_list_url = (
@@ -556,6 +616,32 @@ def test_graph_email_move_uses_deleted_items_well_known_folder():
     assert body == {"destinationId": "deleteditems"}
 
 
+def test_graph_email_move_uses_mailbox_identity_override():
+    move_url = (
+        "https://graph.example/v1.0/users/scott.dk%40sendthisfile1.onmicrosoft.com/"
+        "messages/graph-message-1/move"
+    )
+    transport = FakeGraphTransport(
+        {move_url: FakeGraphResponse(201, {"id": "moved-message"})}
+    )
+    client = GraphEmailMoveTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://graph.example/v1.0",
+        mailbox_identity_overrides={
+            "scott@developkansas.com": "scott.dk@sendthisfile1.onmicrosoft.com",
+        },
+    )
+
+    client.move_message(
+        mailbox="scott@developkansas.com",
+        message_id="graph-message-1",
+        target_folder="Deleted Items",
+    )
+
+    assert transport.post_calls[0][0] == move_url
+
+
 def test_graph_email_move_url_encodes_mailbox_and_message_id():
     root_url = (
         "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
@@ -599,13 +685,41 @@ def test_graph_email_move_url_encodes_mailbox_and_message_id():
     assert parse_qs(urlparse(transport.get_calls[0][0]).query) == {"$top": ["100"]}
 
 
-def test_graph_email_move_raises_when_folder_is_missing():
+def test_graph_email_move_creates_missing_folder_path_before_move():
     root_url = (
         "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
         "mailFolders?%24top=100"
     )
+    create_root_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
+        "mailFolders"
+    )
+    child_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
+        "mailFolders/folder-clarity/childFolders?%24top=100"
+    )
+    create_child_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
+        "mailFolders/folder-clarity/childFolders"
+    )
+    move_url = (
+        "https://graph.example/v1.0/users/scott.sexton%40sendthisfile.com/"
+        "messages/graph-message-1/move"
+    )
     transport = FakeGraphTransport(
-        {root_url: FakeGraphResponse(200, {"value": []})}
+        {
+            root_url: FakeGraphResponse(200, {"value": []}),
+            create_root_url: FakeGraphResponse(
+                201,
+                {"id": "folder-clarity", "displayName": "Clarity"},
+            ),
+            child_url: FakeGraphResponse(200, {"value": []}),
+            create_child_url: FakeGraphResponse(
+                201,
+                {"id": "folder-review", "displayName": "Review"},
+            ),
+            move_url: FakeGraphResponse(201, {"id": "moved-message"}),
+        }
     )
     client = GraphEmailMoveTransport(
         access_token="access-token",
@@ -613,15 +727,17 @@ def test_graph_email_move_raises_when_folder_is_missing():
         base_url="https://graph.example/v1.0",
     )
 
-    with pytest.raises(GraphClientError) as exc_info:
-        client.move_message(
-            mailbox="scott.sexton@sendthisfile.com",
-            message_id="graph-message-1",
-            target_folder="Clarity/Review",
-        )
+    client.move_message(
+        mailbox="scott.sexton@sendthisfile.com",
+        message_id="graph-message-1",
+        target_folder="Clarity/Review",
+    )
 
-    assert "Clarity" in str(exc_info.value)
-    assert transport.post_calls == []
+    assert len(transport.get_calls) == 2
+    assert len(transport.post_calls) == 3
+    assert transport.post_calls[0][2] == {"displayName": "Clarity"}
+    assert transport.post_calls[1][2] == {"displayName": "Review"}
+    assert transport.post_calls[2][2] == {"destinationId": "folder-review"}
 
 
 def test_graph_email_move_raises_for_non_successful_move_status():
@@ -696,6 +812,27 @@ def test_graph_email_rule_transport_lists_inbox_rules():
     assert len(transport.get_calls) == 1
     assert transport.get_calls[0][0] == rules_url
     assert transport.get_calls[0][1]["Authorization"] == "Bearer access-token"
+
+
+def test_graph_email_rule_transport_uses_mailbox_identity_override():
+    rules_url = (
+        "https://graph.example/v1.0/users/scott.dk%40sendthisfile1.onmicrosoft.com/"
+        "mailFolders/inbox/messageRules"
+    )
+    transport = FakeGraphTransport({rules_url: FakeGraphResponse(200, {"value": []})})
+    client = GraphEmailRuleTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://graph.example/v1.0",
+        mailbox_identity_overrides={
+            "scott@developkansas.com": "scott.dk@sendthisfile1.onmicrosoft.com",
+        },
+    )
+
+    rules = client.list_inbox_rules("scott@developkansas.com")
+
+    assert rules == ()
+    assert transport.get_calls[0][0] == rules_url
 
 
 def test_graph_email_rule_transport_rejects_missing_value_list():
@@ -779,6 +916,118 @@ def test_graph_email_read_transport_lists_messages_and_fetches_headers():
     assert len(transport.get_calls) == 2
     assert "/mailFolders/inbox/messages?" in transport.get_calls[0][0]
     assert transport.get_calls[0][1]["Authorization"] == "Bearer access-token"
+
+
+def test_graph_email_read_transport_uses_mailbox_identity_override():
+    base_url = "https://graph.example/v1.0"
+    list_url = (
+        "https://graph.example/v1.0/users/scott.dk%40sendthisfile1.onmicrosoft.com/"
+        "mailFolders/inbox/messages?"
+        "%24top=1&%24orderby=receivedDateTime+desc&%24select="
+        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories"
+    )
+    headers_url = (
+        "https://graph.example/v1.0/users/scott.dk%40sendthisfile1.onmicrosoft.com/"
+        "messages/graph-1?%24select=internetMessageHeaders"
+    )
+    transport = FakeGraphTransport(
+        {
+            list_url: FakeGraphResponse(
+                200,
+                {
+                    "value": [
+                        {
+                            "id": "graph-1",
+                            "subject": "Please review",
+                            "from": {
+                                "emailAddress": {
+                                    "address": "sender@example.invalid",
+                                }
+                            },
+                            "receivedDateTime": "2026-07-20T15:30:00Z",
+                            "bodyPreview": "Review this.",
+                        }
+                    ]
+                },
+            ),
+            headers_url: FakeGraphResponse(200, {"internetMessageHeaders": []}),
+        }
+    )
+    client = GraphEmailReadTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+        mailbox_identity_overrides={
+            "scott@developkansas.com": "scott.dk@sendthisfile1.onmicrosoft.com",
+        },
+    )
+
+    messages = client.list_messages("scott@developkansas.com", 1)
+
+    assert messages[0]["mailbox"] == "scott@developkansas.com"
+    assert transport.get_calls[0][0] == list_url
+    assert transport.get_calls[1][0] == headers_url
+
+
+def test_graph_email_read_transport_can_include_body_text():
+    base_url = "https://graph.example/v1.0"
+    list_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
+        "mailFolders/inbox/messages?"
+        "%24top=1&%24orderby=receivedDateTime+desc&%24select="
+        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2C"
+        "bodyPreview%2Ccategories%2Cbody"
+    )
+    headers_url = (
+        "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/messages/"
+        "graph-1?%24select=internetMessageHeaders"
+    )
+    transport = FakeGraphTransport(
+        {
+            list_url: FakeGraphResponse(
+                200,
+                {
+                    "value": [
+                        {
+                            "id": "graph-1",
+                            "subject": "RE: Clarity Day in a Glance",
+                            "from": {
+                                "emailAddress": {
+                                    "address": "scott.sexton@sendthisfile.com",
+                                }
+                            },
+                            "receivedDateTime": "2026-07-20T15:30:00Z",
+                            "bodyPreview": "Delete items 1-8",
+                            "body": {
+                                "contentType": "html",
+                                "content": (
+                                    "<div>Delete items 1-8</div>"
+                                    "<div>Delete gmail item 9</div>"
+                                    "<div>Mark Jira item 1 as done</div>"
+                                ),
+                            },
+                            "categories": [],
+                        }
+                    ]
+                },
+            ),
+            headers_url: FakeGraphResponse(200, {"internetMessageHeaders": []}),
+        }
+    )
+    client = GraphEmailReadTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url=base_url,
+        include_body_text=True,
+    )
+
+    messages = client.list_messages("clarity@sendthisfile.ai", 1)
+
+    assert messages[0]["preview"] == (
+        "Delete items 1-8\n"
+        "Delete gmail item 9\n"
+        "Mark Jira item 1 as done"
+    )
 
 
 def test_graph_email_read_transport_requires_positive_limit():

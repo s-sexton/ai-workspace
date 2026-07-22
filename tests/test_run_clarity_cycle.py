@@ -122,6 +122,56 @@ def test_run_clarity_cycle_can_refresh_calendar_too(tmp_path):
     assert "Read 1 calendar event(s) from family for 2026-07-10" in latest_cycle.summary
 
 
+def test_run_clarity_cycle_refreshes_all_configured_mailboxes(tmp_path):
+    _write_multi_mailbox_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    cycle_report_path = tmp_path / "reports" / "cycle.md"
+
+    result = run_clarity_cycle(
+        root=tmp_path,
+        memory_path=memory_path,
+        cycle_report_path=cycle_report_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "work-1",
+                    "mailbox": "work@example.invalid",
+                    "subject": "Work item needs review",
+                    "sender": "ops@example.invalid",
+                },
+            )
+        ),
+        gmail_transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "gmail-1",
+                    "mailbox": "person@gmail.com",
+                    "subject": "Family item needs review",
+                    "sender": "family@example.invalid",
+                },
+            )
+        ),
+        use_gmail=True,
+    )
+
+    assert result.mailbox == "all approved mailboxes"
+    assert result.mailbox_count == 2
+    assert result.message_count == 2
+    assert result.review_count == 2
+    assert "Work item needs review [review]" in result.review_answer
+    assert "Family item needs review [review]" in result.review_answer
+    report = cycle_report_path.read_text(encoding="utf-8")
+    assert "Mailbox: all approved mailboxes" in report
+    assert "Mailboxes refreshed: 2" in report
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        latest_cycle = store.latest_run(workflow="clarity-cycle")
+    finally:
+        store.close()
+
+    assert "Refreshed 2 mailboxes" in latest_cycle.summary
+
+
 def test_run_clarity_cycle_can_generate_llm_brief(tmp_path, monkeypatch):
     _write_config(tmp_path)
     memory_path = tmp_path / "logs" / "memory.duckdb"
@@ -275,6 +325,64 @@ def test_main_can_use_graph_read_transport(tmp_path, monkeypatch, capsys):
     assert calls == [True]
     assert "Read: 1" in output
     assert "Graph review item [review]" in output
+
+
+def test_main_can_refresh_graph_and_gmail_mailboxes(tmp_path, monkeypatch, capsys):
+    _write_multi_mailbox_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_build_graph_read_transport_from_config(**_):
+        calls.append("graph")
+        return StaticEmailTransport(
+            (
+                {
+                    "message_id": "graph-1",
+                    "mailbox": "work@example.invalid",
+                    "subject": "Graph review item",
+                },
+            )
+        )
+
+    def fake_build_gmail_read_transport_from_config(**_):
+        calls.append("gmail")
+        return StaticEmailTransport(
+            (
+                {
+                    "message_id": "gmail-1",
+                    "mailbox": "person@gmail.com",
+                    "subject": "Gmail review item",
+                },
+            )
+        )
+
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.build_graph_read_transport_from_config",
+        fake_build_graph_read_transport_from_config,
+    )
+    monkeypatch.setattr(
+        "assistant.src.run_clarity_cycle.build_gmail_read_transport_from_config",
+        fake_build_gmail_read_transport_from_config,
+    )
+
+    main(
+        [
+            "--graph",
+            "--gmail",
+            "--memory",
+            str(tmp_path / "logs" / "memory.duckdb"),
+            "--cycle-report",
+            str(tmp_path / "reports" / "cycle.md"),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert calls == ["graph", "gmail"]
+    assert "Mailbox: all approved mailboxes" in output
+    assert "Mailboxes refreshed: 2" in output
+    assert "Read: 2" in output
+    assert "Graph review item [review]" in output
+    assert "Gmail review item [review]" in output
 
 
 def test_main_can_refresh_google_calendar(tmp_path, monkeypatch, capsys):
@@ -494,6 +602,11 @@ def test_main_rejects_graph_bearer_without_graph():
         main(["--graph-bearer"])
 
 
+def test_main_rejects_gmail_bearer_without_gmail():
+    with pytest.raises(SystemExit):
+        main(["--gmail-bearer"])
+
+
 def test_main_rejects_calendar_provider_without_refresh_calendar():
     with pytest.raises(SystemExit):
         main(["--google-calendar"])
@@ -531,6 +644,46 @@ def _write_config(root):
                   "label": "google-family",
                   "source": "family-calendar@example.invalid",
                   "provider": "google",
+                  "accessMode": "read"
+                }
+              ],
+              "defaultCalendar": "family",
+              "maxEvents": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+
+def _write_multi_mailbox_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "work@example.invalid", "accessMode": "read"},
+                {"address": "person@gmail.com", "accessMode": "read_write"}
+              ],
+              "defaultMailbox": "work@example.invalid",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 25
+            },
+            "calendar": {
+              "approvedCalendars": [
+                {
+                  "label": "family",
+                  "source": "family",
+                  "provider": "sample",
                   "accessMode": "read"
                 }
               ],

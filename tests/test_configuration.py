@@ -100,6 +100,7 @@ def test_email_settings_are_validated_and_typed(tmp_path):
               "approvedMailboxes": [
                 {
                   "address": "inbox@example.invalid",
+                  "graphUserId": "inbox-upn@example.invalid",
                   "accessMode": "read_write",
                   "allowedSenders": [
                     "scott.sexton@sendthisfile.com",
@@ -137,6 +138,12 @@ def test_email_settings_are_validated_and_typed(tmp_path):
     assert email_settings.access_mode_for("inbox@example.invalid") == "read_write"
     assert email_settings.access_mode_for("legal@example.invalid") == "read"
     assert email_settings.access_mode_for("missing@example.invalid") is None
+    assert email_settings.graph_user_id_for("inbox@example.invalid") == (
+        "inbox-upn@example.invalid"
+    )
+    assert email_settings.graph_user_id_for("legal@example.invalid") == (
+        "legal@example.invalid"
+    )
     assert email_settings.allowed_senders_for("inbox@example.invalid") == (
         "scott.sexton@sendthisfile.com",
         "sesexton@gmail.com",
@@ -243,6 +250,7 @@ def test_calendar_settings_are_validated_and_typed(tmp_path):
                   "label": "work",
                   "provider": "graph",
                   "source": "scott.sexton@example.invalid",
+                  "calendarName": "SendThisFile Holiday and Vacation Schedule",
                   "accessMode": "read_write"
                 },
                 {
@@ -278,6 +286,7 @@ def test_calendar_settings_are_validated_and_typed(tmp_path):
     assert work is not None
     assert work.provider == "graph"
     assert work.source == "scott.sexton@example.invalid"
+    assert work.calendar_name == "SendThisFile Holiday and Vacation Schedule"
     assert work.access_mode == "read_write"
     assert google_family is not None
     assert google_family.provider == "google"
@@ -508,6 +517,44 @@ def test_email_allowed_senders_must_be_strings(tmp_path):
         config.email_settings
 
     assert "allowedSenders" in str(exc_info.value)
+
+
+def test_email_graph_user_id_must_be_string(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {
+                  "address": "inbox@example.invalid",
+                  "accessMode": "read",
+                  "graphUserId": 123
+                }
+              ],
+              "defaultMailbox": "inbox@example.invalid",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 25
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.email_settings
+
+    assert "graphUserId" in str(exc_info.value)
 
 
 def test_email_folder_policy_must_include_required_labels(tmp_path):

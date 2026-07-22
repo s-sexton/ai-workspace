@@ -67,7 +67,8 @@ Current components:
 -   `assistant.src.generate_brief`: generates a local Markdown brief from
     Clarity memory.
 -   `assistant.src.generate_daily_brief`: generates Clarity's email-ready daily
-    brief with Outlook attention, calendar, Jira, and reply guidance sections.
+    brief with inbox attention, a rolling calendar window, Jira, open tasks,
+    and reply guidance sections.
 -   `assistant.src.run_email_review`: runs the first local read-only email
     metadata review workflow with fake mailbox data.
 -   `common.memory`: records local Clarity memory for runs, Jira issues seen,
@@ -285,19 +286,25 @@ reading mail or writing files.
 To print the PowerShell commands for a daily Windows scheduled task:
 
 ``` powershell
-python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --at 07:30
+python -m assistant.src.print_clarity_schedule --graph --gmail --at 07:30
 ```
+
+When `--mailbox` is omitted, the scheduled cycle refreshes every readable
+mailbox listed in `assistant.email.approvedMailboxes`. Clarity uses Microsoft
+Graph for non-Gmail addresses and Gmail for `gmail.com` addresses when
+`--gmail` is supplied. Pass `--mailbox` only when you want a one-mailbox
+refresh.
 
 To print a scheduled task that includes approved read-only calendar refresh:
 
 ``` powershell
-python -m assistant.src.print_clarity_schedule --mailbox clarity@sendthisfile.ai --graph --refresh-calendar --calendar google-family --calendar-date 2026-07-10 --google-calendar --at 07:30
+python -m assistant.src.print_clarity_schedule --graph --gmail --refresh-calendar --calendar google-family --calendar-date 2026-07-10 --google-calendar --at 07:30
 ```
 
 To print a scheduled task for the daily brief email:
 
 ``` powershell
-python -m assistant.src.print_clarity_schedule --workflow daily-brief-send --task-name "Clarity Daily Brief" --graph --execute --at 07:30
+python -m assistant.src.print_clarity_schedule --workflow daily-brief-send --task-name "Clarity Daily Brief" --graph --execute --at 07:30 --days 7
 ```
 
 To print a scheduled task for authenticated daily brief reply polling:
@@ -450,6 +457,43 @@ This performs the same read-only calendar review first, records local memory,
 and then answers from memory. It does not create, update, delete, or respond to
 calendar events.
 
+To create a numbered mailbox cleanup batch from the latest remembered email
+metadata:
+
+``` powershell
+python -m assistant.src.email_cleanup_batch --mailbox scott.sexton@sendthisfile.com
+```
+
+This writes `reports/email-cleanup-batch.md` and
+`reports/email-cleanup-batch.json`. The Markdown report is the human review
+surface: every email gets its own number, items are scoped to the selected
+mailbox, and recommendations point to `Clarity/Review`, `Clarity/Noise`,
+`Deleted Items`, or a future specific `Clarity/<Folder Name>` destination. The
+JSON manifest keeps those numbers machine-readable so later approval commands
+can target the current batch instead of historical pending actions.
+
+For Gmail mailboxes, the batch is grouped for fast cleanup:
+
+-   `Move To Specific Clarity Folders` for learned or known personal folders,
+    such as `Clarity/Monarch`, `Clarity/Experian`, or `Clarity/USPS`
+-   `Likely Delete` for Gmail noise that should go to Trash after approval
+-   `Review` for items that still need a human decision
+
+Item numbers remain stable across those grouped sections, so directions like
+`delete 2, 7` or `move 14 to Clarity/Monarch` always refer to the current JSON
+manifest.
+
+To turn numbered cleanup directions into approved local move actions:
+
+``` powershell
+python -m assistant.src.process_email_cleanup_batch --directions "delete 1, 3. move 2 to Clarity/Authorize.net" --execute
+```
+
+This records approved local actions only. Run the email move executor afterward
+to apply those approved actions through the provider. Specific folders must stay
+inside the configured folder namespace, such as `Clarity/Authorize.net` or
+`Clarity/Travelers Insurance`.
+
 To dry-run approved email moves and record a local audit action:
 
 ``` powershell
@@ -457,16 +501,22 @@ python -m assistant.src.execute_email_moves
 ```
 
 Dry-run move planning re-checks current configuration. The source mailbox must
-be approved with `read_write` access, and the destination folder must still be in
-`assistant.email.folderPolicy`. Dry-run and execution output summarize
-ready/moved counts, blocked/skipped counts, source mailbox totals, and
-destination folder totals.
+be approved with `read_write` access, and the destination folder must either be
+in `assistant.email.folderPolicy` or under the configured assistant folder
+namespace, such as `Clarity/<Folder Name>`. Dry-run and execution output
+summarize ready/moved counts, blocked/skipped counts, source mailbox totals,
+and destination folder totals.
 
 To execute approved moves through Microsoft Graph:
 
 ``` powershell
 python -m assistant.src.execute_email_moves --graph --execute
 ```
+
+For Microsoft Graph moves, missing `Clarity/...` destination paths are created
+inside the source mailbox before the message is moved. For example, a move from
+`scott.sexton@sendthisfile.com` to `Clarity/Authorize.net` creates that folder
+path in `scott.sexton@sendthisfile.com` if needed.
 
 To execute approved Gmail cleanup actions:
 
@@ -493,26 +543,52 @@ python -m assistant.src.generate_daily_brief --date 2026-07-16
 ```
 
 This writes `reports/clarity-daily-brief.md` by default. It does not send
-email. The brief includes Outlook inbox attention items, a "Day In A Glance"
-calendar section for the requested date, open Jira tickets remembered from the
-latest Jira refresh, pending approval counts, and reply guidance for the future
-email command loop.
+email. The brief includes attention items from approved inboxes, a "Day In A
+Glance" calendar section for a rolling seven-day window starting on the brief
+date, open Jira tickets remembered from the latest Jira refresh, open delegated
+tasks, pending approval counts, and reply guidance for the future email command
+loop. Inbox attention items are grouped by source mailbox so shared, work, and
+personal inboxes stay visually distinct. Use `--days` to choose a different
+calendar window.
 
 To preview the daily brief email envelope without sending:
 
 ``` powershell
-python -m assistant.src.send_daily_brief --date 2026-07-16
+python -m assistant.src.send_daily_brief --date 2026-07-16 --days 7
 ```
 
 To send the generated daily brief through Microsoft Graph:
 
 ``` powershell
-python -m assistant.src.send_daily_brief --date 2026-07-16 --graph --execute
+python -m assistant.src.send_daily_brief --date 2026-07-16 --days 7 --graph --execute
 ```
 
 The send command uses `assistant.dailyBrief` configuration for sender,
 recipients, and subject prefix. It generates the local daily brief first, then
 requires both `--graph` and `--execute` before calling Graph `sendMail`.
+
+To refresh approved calendars immediately before generating and sending the
+rolling seven-day brief:
+
+``` powershell
+python -m assistant.src.send_daily_brief --days 7 --refresh-calendars --graph-calendars --google-calendars --graph --execute
+```
+
+Calendar refresh is read-only. It refreshes each approved calendar for the
+brief window before the email body is generated, so the "Day In A Glance"
+section is not limited to stale local memory.
+
+For the normal scheduled daily email, refresh the data sources first, then
+generate and send the brief:
+
+``` powershell
+python -m assistant.src.send_daily_brief --days 7 --refresh-email --graph-email --gmail --refresh-calendars --graph-calendars --google-calendars --refresh-jira --graph --execute
+```
+
+This command reads approved inbox metadata, reads approved calendars for the
+rolling window, refreshes the live Jira report into local memory, generates the
+daily brief from that refreshed memory, and only then sends the email. The
+refresh phases remain read-only.
 
 To process deterministic directions from a daily brief reply locally:
 
@@ -537,9 +613,16 @@ python -m assistant.src.poll_daily_brief_replies --graph --execute
 The poller reads `assistant.dailyBrief.sender` by default, requires that mailbox
 to be approved with `allowedSenders`, checks SPF/DKIM/DMARC metadata, skips
 messages whose subject is not tied to the configured daily brief subject,
-skips previously processed replies, and feeds supported reply text into the
-local reply processor. It does not mark messages read, move reply messages,
-send mail, write Jira, or modify calendars.
+skips previously processed replies, and feeds supported full-body reply text
+into the local reply processor. It does not mark messages read, move reply
+messages, send mail, write Jira, or modify calendars.
+
+Daily brief replies can reference email items with `outlook`, `inbox`, or
+`gmail` wording. Custom email folder directions such as
+`move 10 to Capitol Federal folder` are recorded as mailbox-local
+`Clarity/Capitol Federal` move requests. Jira reply directions are recorded as
+local pending Jira requests only; Clarity does not write Jira from the reply
+poller.
 
 To run the first local email metadata review:
 

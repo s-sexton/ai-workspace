@@ -163,6 +163,64 @@ def test_poll_daily_brief_replies_skips_unauthorized_or_failed_auth(tmp_path):
     assert result.replies[1].result == "Skipped: message authentication did not pass."
 
 
+def test_poll_daily_brief_replies_accepts_internal_exchange_reply(tmp_path):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    manifest_path = _seed_daily_brief(tmp_path, memory_path)
+
+    result = poll_daily_brief_replies(
+        root=tmp_path,
+        memory_path=memory_path,
+        manifest_path=manifest_path,
+        transport=StaticEmailTransport(
+            (
+                _reply_message(
+                    message_id="reply-internal",
+                    preview="Move item 1 to Noise",
+                    dmarc="none",
+                    spf=None,
+                    dkim=None,
+                    return_path="scott@example.invalid",
+                    exchange_auth_as="Internal",
+                ),
+            )
+        ),
+    )
+
+    assert result.selected_count == 1
+    assert result.skipped_count == 0
+    assert "# Daily Brief Reply Plan" in result.replies[0].result
+
+
+def test_poll_daily_brief_replies_rejects_internal_exchange_wrong_return_path(tmp_path):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    manifest_path = _seed_daily_brief(tmp_path, memory_path)
+
+    result = poll_daily_brief_replies(
+        root=tmp_path,
+        memory_path=memory_path,
+        manifest_path=manifest_path,
+        transport=StaticEmailTransport(
+            (
+                _reply_message(
+                    message_id="reply-internal-spoof",
+                    preview="Move item 1 to Noise",
+                    dmarc="none",
+                    spf=None,
+                    dkim=None,
+                    return_path="intruder@example.invalid",
+                    exchange_auth_as="Internal",
+                ),
+            )
+        ),
+    )
+
+    assert result.selected_count == 0
+    assert result.skipped_count == 1
+    assert result.replies[0].result == "Skipped: message authentication did not pass."
+
+
 def test_poll_daily_brief_replies_skips_allowed_sender_without_daily_brief_subject(tmp_path):
     _write_config(tmp_path)
     memory_path = tmp_path / "logs" / "memory.duckdb"
@@ -278,7 +336,7 @@ def _seed_daily_brief(root, memory_path):
     store = DuckDbMemoryStore(memory_path)
     try:
         store.initialize_schema()
-        run = store.start_run(workflow="poll-fixture")
+        run = store.start_run(workflow="email-review")
         source = store.record_source(
             source_type="email",
             display_name="scott.sexton@sendthisfile.com",
@@ -318,18 +376,22 @@ def _reply_message(
     sender="scott@example.invalid",
     subject="Re: Clarity Day in a Glance - 2026-07-16",
     preview,
+    return_path=None,
     dmarc="pass",
     spf="pass",
     dkim=None,
+    exchange_auth_as=None,
 ):
     return {
         "message_id": message_id,
         "mailbox": "clarity@example.invalid",
         "subject": subject,
         "sender": sender,
+        "return_path": return_path,
         "received_at": "2026-07-16T08:00:00-05:00",
         "preview": preview,
         "dmarc": dmarc,
         "spf": spf,
         "dkim": dkim,
+        "exchange_auth_as": exchange_auth_as,
     }

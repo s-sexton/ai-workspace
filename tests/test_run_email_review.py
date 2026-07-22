@@ -131,6 +131,158 @@ def test_run_email_review_records_metadata_and_generates_brief(tmp_path):
     assert any("Clarity/Noise" in (action.result or "") for action in proposals)
 
 
+def test_run_email_review_does_not_duplicate_active_move_proposals(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    brief_path = tmp_path / "reports" / "brief.md"
+    _write_config(tmp_path)
+    transport = StaticEmailTransport(
+        (
+            {
+                "message_id": "marketing-1",
+                "mailbox": "inbox@example.invalid",
+                "subject": "Monthly newsletter",
+                "sender": "marketing@example.invalid",
+                "preview": "Unsubscribe here.",
+            },
+        )
+    )
+
+    first = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=transport,
+    )
+    second = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=transport,
+    )
+
+    assert first.proposed_action_count == 1
+    assert second.proposed_action_count == 0
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        pending = store.pending_actions(limit=10)
+    finally:
+        store.close()
+
+    assert len(pending) == 1
+    assert pending[0].item_external_id == "marketing-1"
+
+
+def test_run_email_review_uses_specific_folder_cleanup_learning(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    brief_path = tmp_path / "reports" / "brief.md"
+    _write_config(tmp_path)
+
+    first = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "monarch-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Transactions need review in Monarch",
+                    "sender": "email@email.monarch.com",
+                    "preview": "Please review your transactions.",
+                },
+            )
+        ),
+    )
+    assert first.message_count == 1
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        item = store.recent_memory(limit=1)[0]
+        run = store.start_run(workflow="test-cleanup-feedback")
+        store.record_feedback(
+            item_id=item.item_id,
+            run_id=run.run_id,
+            feedback_type="review",
+            feedback_text="Filed to Clarity/Monarch during email cleanup.",
+        )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+
+    second = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "monarch-2",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Transactions need review in Monarch",
+                    "sender": "email@email.monarch.com",
+                    "preview": "Please review your transactions.",
+                },
+            )
+        ),
+    )
+
+    assert second.proposed_action_count == 1
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        pending = store.pending_actions(limit=10)
+    finally:
+        store.close()
+
+    folder_moves = [
+        action
+        for action in pending
+        if action.item_external_id == "monarch-2"
+    ]
+    assert len(folder_moves) == 1
+    assert folder_moves[0].action_type == "propose_email_move_folder"
+    assert folder_moves[0].action_target == "Clarity/Monarch"
+
+
+def test_run_email_review_redacts_sensitive_subject_before_memory(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    brief_path = tmp_path / "reports" / "brief.md"
+    _write_config(tmp_path)
+
+    result = run_email_review(
+        root=tmp_path,
+        mailbox="inbox@example.invalid",
+        memory_path=memory_path,
+        brief_output_path=brief_path,
+        transport=StaticEmailTransport(
+            (
+                {
+                    "message_id": "sensitive-subject-1",
+                    "mailbox": "inbox@example.invalid",
+                    "subject": "Authorization: Basic token value",
+                    "sender": "security@example.invalid",
+                    "preview": "password=not-for-memory",
+                },
+            )
+        ),
+    )
+
+    assert result.message_count == 1
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        recent = store.recent_memory()
+        learning = store.email_feedback_learning(mailbox="inbox@example.invalid")
+    finally:
+        store.close()
+
+    assert recent[0].subject == "[redacted email subject]"
+    assert "Authorization" not in brief_path.read_text(encoding="utf-8")
+    assert learning == ()
+
+
 def test_run_email_review_uses_prior_email_feedback(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     brief_path = tmp_path / "reports" / "brief.md"
