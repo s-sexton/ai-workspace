@@ -60,6 +60,7 @@ ai-workspace/
 â”œâ”€â”€ assistant/
 â”œâ”€â”€ developer/
 â”œâ”€â”€ analytics/
+â”œâ”€â”€ marketing/
 â”œâ”€â”€ security/
 â”œâ”€â”€ documentation/
 â”œâ”€â”€ research/
@@ -125,6 +126,23 @@ Examples:
 - QuickBooks
 - Business metrics
 - Customer trends
+
+---
+
+## marketing/
+
+SendThisFile marketing assistant.
+
+Examples:
+
+- Google Analytics review
+- Google Search Console review
+- Google Tag Manager migration planning
+- Marketing-site funnel analysis
+- SEO recommendations
+- Landing page and conversion recommendations
+- Low-cost growth experiments
+- Customer profile research
 
 ---
 
