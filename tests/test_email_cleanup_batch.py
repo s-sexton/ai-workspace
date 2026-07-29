@@ -35,11 +35,11 @@ def test_generate_email_cleanup_batch_numbers_current_mailbox_items(tmp_path):
     assert "- Review: Clarity/Review" in batch
     assert "- Noise: Clarity/Noise" in batch
     assert "- Specific folders: Clarity/<Folder Name>" in batch
-    assert "1. Date: 2026-07-17T08:00:00-05:00" in batch
+    assert "Item 1: Date: 2026-07-17T08:00:00-05:00" in batch
     assert "From: vendor@example.invalid" in batch
     assert "Subject: SaaS tax webinar" in batch
     assert "Recommendation: Move to Clarity/Noise" in batch
-    assert "2. Date: 2026-07-17T07:55:00-05:00" in batch
+    assert "Item 2: Date: 2026-07-17T07:55:00-05:00" in batch
     assert "Subject: Customer escalation" in batch
     assert "Recommendation: Move to Clarity/Review" in batch
     assert "other-mailbox-message" not in batch
@@ -122,22 +122,22 @@ def test_generate_email_cleanup_batch_groups_gmail_recommendations(tmp_path):
     assert "## Move To Specific Clarity Folders" in batch
     assert "## Likely Delete" in batch
     assert "## Review" in batch
-    assert "1. Date: 2026-07-18T09:00:00-05:00" in batch
+    assert "Item 1: Date: 2026-07-18T09:00:00-05:00" in batch
     assert "Subject: USPS Informed Delivery Daily Digest" in batch
     assert "Recommendation: Move to Clarity/USPS" in batch
-    assert "3. Date: 2026-07-18T08:50:00-05:00" in batch
+    assert "Item 3: Date: 2026-07-18T08:50:00-05:00" in batch
     assert "Subject: Monarch found a recurring merchant" in batch
     assert "Recommendation: Move to Clarity/Monarch" in batch
-    assert "4. Date: 2026-07-18T08:45:00-05:00" in batch
+    assert "Item 4: Date: 2026-07-18T08:45:00-05:00" in batch
     assert "Subject: Your Experian score changed" in batch
     assert "Recommendation: Move to Clarity/Experian" in batch
-    assert "5. Date: 2026-07-18T08:40:00-05:00" in batch
+    assert "Item 5: Date: 2026-07-18T08:40:00-05:00" in batch
     assert "Subject: Eddy's Volkswagen vehicle value" in batch
     assert "Recommendation: Move to Clarity/VW" in batch
-    assert "2. Date: 2026-07-18T08:55:00-05:00" in batch
+    assert "Item 2: Date: 2026-07-18T08:55:00-05:00" in batch
     assert "Subject: Flash sale ends tonight" in batch
     assert "Recommendation: Delete (Deleted Items)" in batch
-    assert "6. Date: 2026-07-18T08:35:00-05:00" in batch
+    assert "Item 6: Date: 2026-07-18T08:35:00-05:00" in batch
     assert "Subject: School registration reminder" in batch
     assert "Recommendation: Move to Clarity/Review" in batch
     assert manifest["items"][0]["recommendation"] == {

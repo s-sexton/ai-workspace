@@ -316,9 +316,10 @@ python -m assistant.src.email_cleanup_batch --mailbox scott.sexton@sendthisfile.
 
 The batch writes `reports/email-cleanup-batch.md` plus a JSON manifest beside
 it. The Markdown report is intentionally compact: date, sender, subject,
-recommendation, and reason. Every item gets a batch-local number so the human
-can give directions such as `Move 1 to Noise`, `Move 2 to Review`, or
-`Move 3 to Clarity/Vendor Name`.
+recommendation, and reason. Every item gets a batch-local `Item N` reference
+that remains globally unique across all recommendation sections in that batch,
+so the human can give directions such as `Move Item 1 to Noise`,
+`Move Item 2 to Review`, or `Move Item 3 to Clarity/Vendor Name`.
 
 The JSON manifest preserves the mapping from number to provider message ID and
 source mailbox. That keeps future approval and execution commands tied to the

@@ -200,10 +200,10 @@ def render_email_cleanup_batch(
         (
             "## Example Directions",
             "",
-            "- Move 1 to Noise",
-            "- Move 2 to Review",
-            f"- Move 3 to {folder_namespace}/Vendor Name",
-            "- Delete 4",
+            "- Move Item 1 to Noise",
+            "- Move Item 2 to Review",
+            f"- Move Item 3 to {folder_namespace}/Vendor Name",
+            "- Delete Item 4",
         )
     )
     return "\n".join(lines).rstrip() + "\n"
@@ -567,7 +567,7 @@ def _record_lines(
     recommendation: BatchRecommendation,
 ) -> list[str]:
     return [
-        f"{index}. Date: {record.updated_at or 'Unknown'}",
+        f"Item {index}: Date: {record.updated_at or 'Unknown'}",
         f"   From: {record.sender_or_owner or 'Unknown'}",
         f"   Subject: {record.subject}",
         f"   Recommendation: {_recommendation_text(recommendation)}",
