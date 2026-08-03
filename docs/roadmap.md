@@ -190,3 +190,22 @@ slices:
 - Parse deterministic reply commands into local actions
 - Keep destructive or external writes behind approval unless a narrow standing
   policy is explicitly approved
+
+## Phase 9: Teams Command Relay
+
+Status: design started.
+
+Clarity should support durable two-way Teams interaction through a Teams
+Workflow plus Azure Storage Queue relay while keeping private context and
+provider credentials local.
+
+First slices:
+
+- Define Teams queue message schema
+- Add approved Teams sender validation
+- Add local fake queue tests
+- Add read-only command processing for Teams-originated commands
+- Add Teams message manifests for safe item-number resolution
+- Add Azure Storage Queue transport only after the local path is proven
+
+See `docs/teams-relay-architecture.md`.

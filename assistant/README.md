@@ -637,6 +637,37 @@ The webhook is outbound only. Clarity can post short notifications to Teams,
 but Teams messages are not yet a command or approval surface. Do not print or
 commit the webhook URL.
 
+Use lightweight message-style posts for quick Teams summaries. The current
+Teams Workflows webhook requires a minimal Adaptive Card wrapper even for simple
+messages. Jira ticket keys must be rendered as links to the browser-facing Jira
+ticket URL. Richer Adaptive Cards should be reserved for review-heavy or
+action-oriented notifications.
+
+To send open `COMP` tickets to Teams without Done tickets:
+
+``` powershell
+python -m assistant.src.send_jira_teams_summary --project COMP --execute
+```
+
+To send the first 10 approved Gmail inbox messages to Teams:
+
+``` powershell
+python -m assistant.src.send_gmail_teams_summary --mailbox sesexton@gmail.com --limit 10 --execute
+```
+
+Gmail subjects are rendered as best-effort links using the Gmail message ID.
+
+To exercise the local Teams Workflow relay processor without Azure:
+
+``` powershell
+python -m assistant.src.process_teams_relay "show pending approvals"
+python -m assistant.src.process_teams_relay "show open COMP tickets"
+python -m assistant.src.process_teams_relay "show Gmail inbox"
+```
+
+This uses an in-memory fake queue, validates the sender, records a local audit
+entry, and executes only read-only command handlers.
+
 To run the first local email metadata review:
 
 ``` powershell

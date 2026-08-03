@@ -79,6 +79,15 @@ Microsoft Teams notification wiring uses this local value:
 `AI Workspace` / `Clarity` channel. It is a local secret and must not be
 committed or printed in diagnostics.
 
+Azure Storage Queue relay wiring uses these local values:
+
+-   `AZURE_TEAMS_RELAY_INBOUND_QUEUE_URL`
+-   `AZURE_TEAMS_RELAY_DEADLETTER_QUEUE_URL`
+
+These values should be queue SAS URLs or equivalent secret-bearing queue URLs
+for the Teams Workflow relay. They are local secrets and must not be committed
+or printed in diagnostics.
+
 ## Shared Settings
 
 `config/config.json` (committed)
@@ -103,6 +112,7 @@ The loader:
 -   Keeps Google client secrets out of object representations
 -   Keeps Google refresh and access tokens out of object representations
 -   Keeps Teams webhook URLs out of object representations
+-   Keeps Azure Storage Queue relay URLs out of object representations
 
 ## Public API
 

@@ -37,6 +37,13 @@ Current shared components:
 -   `common.memory`: provides the first local Clarity memory boundary, backed by
     DuckDB, for recording runs, approved sources, items seen, classifications,
     human feedback, and delegated tasks without storing secrets.
+-   `common.teams`: provides the first Microsoft Teams webhook notification
+    boundary for outbound Clarity notifications.
+-   `common.teams_relay`: defines the local Teams Workflow relay message
+    schema, validation, and fake queue boundary for future Azure Storage Queue
+    wiring.
+-   `common.teams_manifest`: writes and reads local Teams message manifests so
+    future replies and card actions can resolve numbered items safely.
 
 ## Assistant Structure
 
@@ -78,4 +85,13 @@ Current assistant components:
     external writes.
 -   Local assistant actions are recorded in `common.memory` so Clarity can
     answer what it did recently without inspecting logs.
+
+## Teams Relay
+
+Two-way Teams interaction should use a Teams Workflow plus Azure Storage Queue
+relay before moving Clarity into the cloud. The Teams Workflow writes commands
+to an inbound queue, and the local Clarity worker polls and processes those
+commands using local memory and approved integrations.
+
+See `docs/teams-relay-architecture.md`.
 

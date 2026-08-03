@@ -122,6 +122,9 @@ human operator.
 When sending Jira tickets to the human operator by Teams or email, render each
 ticket key as a hyperlink to the actual Jira ticket.
 
+When displaying dates or times to the human operator, use Central time unless
+the human operator explicitly requests a different timezone.
+
 When creating an `STF` Jira ticket, assign it to the human operator unless they
 explicitly specify a different assignee or no assignee. Move the ticket to the
 SendThisFile board under `To Do`. If work is performed on that ticket, move it
