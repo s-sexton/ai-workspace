@@ -95,7 +95,7 @@ class AzureStorageTeamsRelayQueue(TeamsRelayQueue):
         response = self.transport.request(
             "GET",
             _with_query(
-                self.inbound_queue_url,
+                _append_path(self.inbound_queue_url, "messages"),
                 {
                     "numofmessages": str(limit),
                     "visibilitytimeout": str(self.visibility_timeout_seconds),
@@ -182,7 +182,7 @@ def _parse_received_messages(body: bytes) -> tuple[TeamsQueueMessage, ...]:
         pop_receipt = _xml_text(raw_message, "PopReceipt")
         message_text = _xml_text(raw_message, "MessageText")
         dequeue_count = _optional_xml_int(raw_message, "DequeueCount") or 1
-        payload = json.loads(base64.b64decode(message_text).decode("utf-8"))
+        payload = _decode_message_payload(message_text)
         if not isinstance(payload, Mapping):
             raise AzureQueueError("Azure Queue message payload must be a JSON object.")
         messages.append(
@@ -200,6 +200,16 @@ def _split_queue_message_id(queue_message_id: str) -> tuple[str, str]:
     if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
         raise AzureQueueError("Azure Queue message id must include pop receipt.")
     return parts[0], parts[1]
+
+
+def _decode_message_payload(message_text: str) -> Any:
+    try:
+        return json.loads(base64.b64decode(message_text).decode("utf-8"))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        try:
+            return json.loads(message_text)
+        except json.JSONDecodeError as exc:
+            raise AzureQueueError("Azure Queue message payload must be JSON.") from exc
 
 
 def _xml_text(raw_message: ElementTree.Element, tag: str) -> str:

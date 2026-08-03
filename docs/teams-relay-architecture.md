@@ -64,6 +64,9 @@ Optional future queue:
 
 -   Queue: `clarity-outbound`
 
+The Teams Workflow setup checklist lives in
+`docs/teams-workflow-setup.md`.
+
 ## Message Shape
 
 Inbound queue messages should be small JSON documents:
@@ -156,27 +159,45 @@ Example:
 }
 ```
 
-## First Implementation Slice
+## Implemented Slices
 
-The first local slice should avoid Azure dependencies:
+The first local slice avoided Azure dependencies:
 
 1. Define the queue message schema as Python dataclasses. Implemented.
 2. Add validation for approved Teams sender identities. Implemented.
 3. Add a local fake queue for tests. Implemented.
-4. Add a local Teams command processor for read-only commands. Started:
+4. Add a local Teams command processor for read-only commands. Implemented:
    - `show open COMP tickets`
    - `show gmail inbox`
    - `show pending approvals`
 5. Record command audit entries in local memory. Implemented.
 6. Add local Teams message manifests for item-number resolution. Implemented.
+7. Add Azure Storage Queue transport using SAS queue URLs. Implemented.
+8. Add a local Azure relay worker that polls inbound messages, posts replies to
+   Teams, completes successful commands, and dead-letters rejected or failed
+   commands. Implemented.
 
-After that works locally, wire Azure Storage Queue as the live queue transport.
+Run the live worker from the workspace root:
+
+``` powershell
+python -m assistant.src.process_teams_relay --azure --post-reply --limit 5
+```
+
+Omit `--post-reply` to process messages without posting Teams responses. The
+worker still records local audit history.
+
+The currently supported live commands are read-only:
+
+-   `show open COMP tickets`
+-   `show Gmail inbox`
+-   `show pending approvals`
+
+Unsupported commands and unapproved senders are moved to
+`clarity-deadletter`.
 
 ## Future Slices
 
--   Azure Storage Queue transport
 -   Teams Workflow setup guide
--   Local worker command loop
 -   Teams manifest writer
 -   Card action IDs
 -   Pending-action command support

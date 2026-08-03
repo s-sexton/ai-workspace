@@ -668,6 +668,20 @@ python -m assistant.src.process_teams_relay "show Gmail inbox"
 This uses an in-memory fake queue, validates the sender, records a local audit
 entry, and executes only read-only command handlers.
 
+To process live Teams Workflow relay messages from the configured Azure Storage
+Queue:
+
+``` powershell
+python -m assistant.src.process_teams_relay --azure --post-reply --limit 5
+```
+
+This reads `AZURE_TEAMS_RELAY_INBOUND_QUEUE_URL` and
+`AZURE_TEAMS_RELAY_DEADLETTER_QUEUE_URL` from `config/.env`, validates the
+sender, runs only supported read-only commands, posts the result to Teams
+through `TEAMS_CLARITY_WEBHOOK_URL`, completes successful queue messages, and
+dead-letters rejected or failed messages. Treat all queue URLs and webhook URLs
+as secrets.
+
 To run the first local email metadata review:
 
 ``` powershell

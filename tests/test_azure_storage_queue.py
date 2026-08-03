@@ -63,8 +63,36 @@ def test_azure_queue_receive_parses_messages():
     assert messages[0].dequeue_count == 2
     method, url, _, _ = transport.calls[0]
     assert method == "GET"
+    assert url.startswith(
+        "https://acct.queue.core.windows.net/clarity-inbound/messages?"
+    )
     assert "numofmessages=1" in url
     assert "visibilitytimeout=60" in url
+
+
+def test_azure_queue_receive_accepts_plain_json_messages():
+    payload = {"schemaVersion": 1, "source": "teams", "commandId": "plain-json"}
+    body = f"""
+    <QueueMessagesList>
+      <QueueMessage>
+        <MessageId>message-1</MessageId>
+        <PopReceipt>receipt-1</PopReceipt>
+        <MessageText>{json.dumps(payload)}</MessageText>
+      </QueueMessage>
+    </QueueMessagesList>
+    """.encode("utf-8")
+    transport = RecordingAzureTransport(
+        responses=[AzureQueueHttpResponse(status_code=200, body=body)]
+    )
+    queue = AzureStorageTeamsRelayQueue(
+        inbound_queue_url="https://acct.queue.core.windows.net/clarity-inbound?sas=1",
+        deadletter_queue_url="https://acct.queue.core.windows.net/clarity-deadletter?sas=1",
+        transport=transport,
+    )
+
+    messages = queue.receive(limit=1)
+
+    assert messages[0].payload["commandId"] == "plain-json"
 
 
 def test_azure_queue_complete_deletes_message_with_pop_receipt():
