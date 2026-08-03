@@ -316,7 +316,7 @@ python -m assistant.src.print_clarity_schedule --workflow daily-brief-reply-poll
 To print a scheduled task for the Teams relay worker:
 
 ``` powershell
-python -m assistant.src.print_clarity_schedule --workflow teams-relay-worker --task-name "Clarity Teams Relay" --post-reply --limit 5 --at 08:05
+python -m assistant.src.print_clarity_schedule --workflow teams-relay-worker --task-name "Clarity Teams Relay" --post-reply --watch --active-interval-seconds 30 --idle-interval-seconds 3600 --limit 5 --at 08:05
 ```
 
 Review the printed script before running it. The generated task appends console
@@ -694,6 +694,16 @@ Supported email actions can record approved local cleanup actions for
 `trash`, `move_review`, and `move_noise`, but they do not move or delete email
 directly. Run the existing email move executor afterward to apply approved
 provider writes.
+
+For an always-running local relay watcher, use:
+
+``` powershell
+python -m assistant.src.process_teams_relay --azure --post-reply --watch --active-interval-seconds 30 --idle-interval-seconds 3600 --limit 5
+```
+
+The default active window is Monday-Friday, 5:00 AM through 6:59 PM Central.
+During that window the worker sleeps 30 seconds between polls. Outside that
+window it sleeps one hour between polls.
 
 To run the first local email metadata review:
 

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from assistant.src.ask_memory import answer_memory_question
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
@@ -29,6 +32,9 @@ from common.teams_relay import (
 
 
 CommandHandler = Callable[[TeamsRelayMessage], str]
+SleepFn = Callable[[float], None]
+NowFn = Callable[[], datetime]
+CENTRAL_TIME = ZoneInfo("America/Chicago")
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,17 @@ class TeamsRelayQueueRunResult:
     deadletter_count: int = 0
     posted_count: int = 0
     results: tuple[TeamsCommandResult, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class TeamsRelayWatchResult:
+    """Summary from a bounded Teams relay watch run."""
+
+    iterations: int
+    processed_count: int
+    completed_count: int
+    deadletter_count: int
+    posted_count: int
 
 
 def process_next_teams_relay_message(
@@ -141,6 +158,118 @@ def process_teams_relay_queue(
         posted_count=posted_count,
         results=tuple(results),
     )
+
+
+def watch_teams_relay_queue(
+    *,
+    queue: TeamsRelayQueue,
+    allowed_senders: Sequence[str],
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
+    root: Path | str | None = None,
+    handlers: Mapping[str, CommandHandler] | None = None,
+    limit: int = 1,
+    post_replies: bool = False,
+    webhook_url: str | None = None,
+    reply_transport: TeamsWebhookTransport | None = None,
+    action_manifest_path: Path | str | None = None,
+    active_interval_seconds: int = 30,
+    idle_interval_seconds: int = 3600,
+    active_start_hour: int = 5,
+    active_end_hour: int = 19,
+    now_fn: NowFn | None = None,
+    sleep_fn: SleepFn = time.sleep,
+    max_iterations: int | None = None,
+) -> TeamsRelayWatchResult:
+    """Continuously poll Teams relay messages using a business-hours cadence."""
+
+    if active_interval_seconds < 1:
+        raise TeamsRelayError("active_interval_seconds must be positive.")
+    if idle_interval_seconds < 1:
+        raise TeamsRelayError("idle_interval_seconds must be positive.")
+    _validate_hour(active_start_hour, "active_start_hour")
+    _validate_hour(active_end_hour, "active_end_hour")
+    if active_start_hour == active_end_hour:
+        raise TeamsRelayError("active_start_hour and active_end_hour must differ.")
+    if max_iterations is not None and max_iterations < 1:
+        raise TeamsRelayError("max_iterations must be positive.")
+
+    iterations = 0
+    processed_count = 0
+    completed_count = 0
+    deadletter_count = 0
+    posted_count = 0
+    clock = now_fn or (lambda: datetime.now(CENTRAL_TIME))
+    while max_iterations is None or iterations < max_iterations:
+        run_result = process_teams_relay_queue(
+            queue=queue,
+            allowed_senders=allowed_senders,
+            memory_path=memory_path,
+            root=root,
+            handlers=handlers,
+            limit=limit,
+            post_replies=post_replies,
+            webhook_url=webhook_url,
+            reply_transport=reply_transport,
+            action_manifest_path=action_manifest_path,
+        )
+        iterations += 1
+        processed_count += run_result.processed_count
+        completed_count += run_result.completed_count
+        deadletter_count += run_result.deadletter_count
+        posted_count += run_result.posted_count
+        _print_queue_run_result(run_result)
+        if max_iterations is not None and iterations >= max_iterations:
+            break
+        sleep_fn(
+            teams_relay_poll_interval_seconds(
+                now=clock(),
+                active_interval_seconds=active_interval_seconds,
+                idle_interval_seconds=idle_interval_seconds,
+                active_start_hour=active_start_hour,
+                active_end_hour=active_end_hour,
+            )
+        )
+
+    return TeamsRelayWatchResult(
+        iterations=iterations,
+        processed_count=processed_count,
+        completed_count=completed_count,
+        deadletter_count=deadletter_count,
+        posted_count=posted_count,
+    )
+
+
+def teams_relay_poll_interval_seconds(
+    *,
+    now: datetime,
+    active_interval_seconds: int = 30,
+    idle_interval_seconds: int = 3600,
+    active_start_hour: int = 5,
+    active_end_hour: int = 19,
+) -> int:
+    """Return the current Teams relay polling interval in seconds."""
+
+    local_now = now.astimezone(CENTRAL_TIME) if now.tzinfo else now.replace(tzinfo=CENTRAL_TIME)
+    if _is_active_relay_window(
+        local_now,
+        active_start_hour=active_start_hour,
+        active_end_hour=active_end_hour,
+    ):
+        return active_interval_seconds
+    return idle_interval_seconds
+
+
+def _is_active_relay_window(
+    local_now: datetime,
+    *,
+    active_start_hour: int,
+    active_end_hour: int,
+) -> bool:
+    if local_now.weekday() >= 5:
+        return False
+    if active_start_hour < active_end_hour:
+        return active_start_hour <= local_now.hour < active_end_hour
+    return local_now.hour >= active_start_hour or local_now.hour < active_end_hour
 
 
 def process_teams_relay_payload(
@@ -492,28 +621,46 @@ def _resolve_path(workspace_root: Path, path: Path) -> Path:
     return workspace_root / path
 
 
+def _validate_hour(value: int, field_name: str) -> None:
+    if value < 0 or value > 23:
+        raise TeamsRelayError(f"{field_name} must be between 0 and 23.")
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the local or Azure Teams relay command worker."""
 
     args = _parse_args(argv)
     if args.azure:
+        queue = build_azure_teams_relay_queue_from_config()
+        if args.watch:
+            result = watch_teams_relay_queue(
+                queue=queue,
+                allowed_senders=args.allowed_sender,
+                memory_path=args.memory,
+                limit=args.limit,
+                post_replies=args.post_reply,
+                action_manifest_path=args.teams_manifest,
+                active_interval_seconds=args.active_interval_seconds,
+                idle_interval_seconds=args.idle_interval_seconds,
+                active_start_hour=args.active_start_hour,
+                active_end_hour=args.active_end_hour,
+            )
+            print("")
+            print(f"Watch iterations: {result.iterations}")
+            print(f"Total processed: {result.processed_count}")
+            print(f"Total completed: {result.completed_count}")
+            print(f"Total dead-lettered: {result.deadletter_count}")
+            print(f"Total Teams replies: {result.posted_count}")
+            return
         result = process_teams_relay_queue(
-            queue=build_azure_teams_relay_queue_from_config(),
+            queue=queue,
             allowed_senders=args.allowed_sender,
             memory_path=args.memory,
             limit=args.limit,
             post_replies=args.post_reply,
             action_manifest_path=args.teams_manifest,
         )
-        print(f"Processed: {result.processed_count}")
-        print(f"Completed: {result.completed_count}")
-        print(f"Dead-lettered: {result.deadletter_count}")
-        print(f"Teams replies: {result.posted_count}")
-        for command_result in result.results:
-            print("")
-            print(f"Command: {command_result.command_id}")
-            print(f"Status: {command_result.status}")
-            print(_console_safe(command_result.response_text))
+        _print_queue_run_result(result)
         return
 
     queue = InMemoryTeamsRelayQueue()
@@ -569,6 +716,35 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Post command results back to Teams through TEAMS_CLARITY_WEBHOOK_URL.",
     )
     parser.add_argument("--limit", type=int, default=1)
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Keep polling the relay queue until stopped.",
+    )
+    parser.add_argument(
+        "--active-interval-seconds",
+        type=int,
+        default=30,
+        help="Watch sleep interval during active weekday hours.",
+    )
+    parser.add_argument(
+        "--idle-interval-seconds",
+        type=int,
+        default=3600,
+        help="Watch sleep interval outside active weekday hours.",
+    )
+    parser.add_argument(
+        "--active-start-hour",
+        type=int,
+        default=5,
+        help="Central-time hour when active polling starts.",
+    )
+    parser.add_argument(
+        "--active-end-hour",
+        type=int,
+        default=19,
+        help="Central-time hour when active polling ends.",
+    )
     parser.add_argument("--sender", default="scott.sexton@sendthisfile.com")
     parser.add_argument(
         "--allowed-sender",
@@ -585,7 +761,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if not args.azure and not args.text:
         parser.error("text is required unless --azure is supplied")
+    if args.watch and not args.azure:
+        parser.error("--watch requires --azure")
     return args
+
+
+def _print_queue_run_result(result: TeamsRelayQueueRunResult) -> None:
+    print(f"Processed: {result.processed_count}")
+    print(f"Completed: {result.completed_count}")
+    print(f"Dead-lettered: {result.deadletter_count}")
+    print(f"Teams replies: {result.posted_count}")
+    for command_result in result.results:
+        print("")
+        print(f"Command: {command_result.command_id}")
+        print(f"Status: {command_result.status}")
+        print(_console_safe(command_result.response_text))
 
 
 def _console_safe(text: str) -> str:

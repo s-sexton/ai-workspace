@@ -57,6 +57,9 @@ def build_windows_task_scheduler_script(
     log_path: Path | str | None = DEFAULT_TASK_LOG_PATH,
     execute: bool = False,
     post_reply: bool = False,
+    teams_relay_watch: bool = False,
+    active_interval_seconds: int | None = None,
+    idle_interval_seconds: int | None = None,
 ) -> str:
     """Return PowerShell commands that register one local scheduled task."""
 
@@ -64,6 +67,14 @@ def build_windows_task_scheduler_script(
         raise ValueError(f"workflow must be one of: {', '.join(WORKFLOWS)}.")
     if workflow != WORKFLOW_TEAMS_RELAY_WORKER and post_reply:
         raise ValueError("post_reply requires workflow='teams-relay-worker'.")
+    if workflow != WORKFLOW_TEAMS_RELAY_WORKER and (
+        teams_relay_watch or active_interval_seconds or idle_interval_seconds
+    ):
+        raise ValueError("Teams relay watch options require workflow='teams-relay-worker'.")
+    if active_interval_seconds is not None and active_interval_seconds < 1:
+        raise ValueError("active_interval_seconds must be positive.")
+    if idle_interval_seconds is not None and idle_interval_seconds < 1:
+        raise ValueError("idle_interval_seconds must be positive.")
     if use_graph_bearer and not (use_graph or use_graph_calendar):
         raise ValueError("use_graph_bearer requires use_graph or use_graph_calendar.")
     if use_google_bearer and not use_google_calendar:
@@ -183,6 +194,9 @@ def build_windows_task_scheduler_script(
         cycle_report_path=cycle_report_path,
         execute=execute,
         post_reply=post_reply,
+        teams_relay_watch=teams_relay_watch,
+        active_interval_seconds=active_interval_seconds,
+        idle_interval_seconds=idle_interval_seconds,
     )
     scheduled_command = (
         "Set-Location -LiteralPath "
@@ -261,6 +275,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             log_path=args.log,
             execute=args.execute,
             post_reply=args.post_reply,
+            teams_relay_watch=args.watch,
+            active_interval_seconds=args.active_interval_seconds,
+            idle_interval_seconds=args.idle_interval_seconds,
         ),
         end="",
     )
@@ -294,6 +311,9 @@ def _workflow_command(
     cycle_report_path: Path | str | None,
     execute: bool,
     post_reply: bool,
+    teams_relay_watch: bool,
+    active_interval_seconds: int | None,
+    idle_interval_seconds: int | None,
 ) -> str:
     if workflow == WORKFLOW_CYCLE:
         return _cycle_command(
@@ -348,6 +368,9 @@ def _workflow_command(
         manifest_path=manifest_path,
         limit=daily_brief_limit,
         post_reply=post_reply,
+        watch=teams_relay_watch,
+        active_interval_seconds=active_interval_seconds,
+        idle_interval_seconds=idle_interval_seconds,
     )
 
 
@@ -357,16 +380,25 @@ def _teams_relay_worker_command(
     manifest_path: Path | str | None,
     limit: int | None,
     post_reply: bool,
+    watch: bool,
+    active_interval_seconds: int | None,
+    idle_interval_seconds: int | None,
 ) -> str:
     parts = ["python", "-m", "assistant.src.process_teams_relay", "--azure"]
     if post_reply:
         parts.append("--post-reply")
+    if watch:
+        parts.append("--watch")
     if memory_path is not None:
         parts.extend(("--memory", _ps_single_quote(str(memory_path))))
     if manifest_path is not None:
         parts.extend(("--teams-manifest", _ps_single_quote(str(manifest_path))))
     if limit is not None:
         parts.extend(("--limit", str(limit)))
+    if active_interval_seconds is not None:
+        parts.extend(("--active-interval-seconds", str(active_interval_seconds)))
+    if idle_interval_seconds is not None:
+        parts.extend(("--idle-interval-seconds", str(idle_interval_seconds)))
     return " ".join(parts)
 
 
@@ -653,6 +685,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="For teams-relay-worker, post command results back to Teams.",
     )
     parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="For teams-relay-worker, keep the local relay worker running.",
+    )
+    parser.add_argument(
+        "--active-interval-seconds",
+        type=int,
+        default=None,
+        help="Teams relay watch interval during weekday active hours.",
+    )
+    parser.add_argument(
+        "--idle-interval-seconds",
+        type=int,
+        default=None,
+        help="Teams relay watch interval outside weekday active hours.",
+    )
+    parser.add_argument(
         "--log",
         default=str(DEFAULT_TASK_LOG_PATH),
         help="Append scheduled task console output to this local log path.",
@@ -734,6 +783,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         parser.error("source refresh options are not supported for teams-relay-worker.")
     if args.workflow != WORKFLOW_TEAMS_RELAY_WORKER and args.post_reply:
         parser.error("--post-reply requires --workflow teams-relay-worker.")
+    if args.workflow != WORKFLOW_TEAMS_RELAY_WORKER and (
+        args.watch or args.active_interval_seconds or args.idle_interval_seconds
+    ):
+        parser.error("Teams relay watch options require --workflow teams-relay-worker.")
+    if args.active_interval_seconds is not None and args.active_interval_seconds < 1:
+        parser.error("--active-interval-seconds must be positive.")
+    if args.idle_interval_seconds is not None and args.idle_interval_seconds < 1:
+        parser.error("--idle-interval-seconds must be positive.")
     if args.refresh_calendar and not (args.graph_calendar or args.google_calendar):
         parser.error("--refresh-calendar requires --graph-calendar or --google-calendar.")
     if args.workflow == WORKFLOW_DAILY_BRIEF_SEND and args.execute != args.graph:
@@ -745,6 +802,9 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         args.limit = None
         args.manifest = None
         args.post_reply = False
+        args.watch = False
+        args.active_interval_seconds = None
+        args.idle_interval_seconds = None
     else:
         args.cycle_report = None
     if args.no_log:

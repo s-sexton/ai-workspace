@@ -224,14 +224,20 @@ def test_build_windows_task_scheduler_script_can_schedule_teams_relay_worker(tmp
         daily_brief_limit=5,
         cycle_report_path=None,
         post_reply=True,
+        teams_relay_watch=True,
+        active_interval_seconds=30,
+        idle_interval_seconds=3600,
     )
 
     assert '-TaskName "Clarity Teams Relay"' in script
     assert "python -m assistant.src.process_teams_relay --azure" in script
     assert "--post-reply" in script
+    assert "--watch" in script
     assert "--memory 'logs/clarity-memory.duckdb'" in script
     assert "--teams-manifest 'reports/teams-gmail-manifest.json'" in script
     assert "--limit 5" in script
+    assert "--active-interval-seconds 30" in script
+    assert "--idle-interval-seconds 3600" in script
     assert "Poll Azure Storage Queue for Teams relay commands." in script
 
 
@@ -290,6 +296,9 @@ def test_build_windows_task_scheduler_script_rejects_invalid_flags(tmp_path):
 
     with pytest.raises(ValueError):
         build_windows_task_scheduler_script(root=tmp_path, post_reply=True)
+
+    with pytest.raises(ValueError):
+        build_windows_task_scheduler_script(root=tmp_path, teams_relay_watch=True)
 
     with pytest.raises(ValueError):
         build_windows_task_scheduler_script(
@@ -509,6 +518,11 @@ def test_main_prints_teams_relay_worker_schedule(tmp_path, monkeypatch, capsys):
             "--limit",
             "5",
             "--post-reply",
+            "--watch",
+            "--active-interval-seconds",
+            "30",
+            "--idle-interval-seconds",
+            "3600",
         ]
     )
 
@@ -516,8 +530,11 @@ def test_main_prints_teams_relay_worker_schedule(tmp_path, monkeypatch, capsys):
     assert '-TaskName "Clarity Teams Relay"' in output
     assert "python -m assistant.src.process_teams_relay --azure" in output
     assert "--post-reply" in output
+    assert "--watch" in output
     assert "--teams-manifest 'reports/teams-gmail-manifest.json'" in output
     assert "--limit 5" in output
+    assert "--active-interval-seconds 30" in output
+    assert "--idle-interval-seconds 3600" in output
 
 
 def test_main_can_disable_schedule_log(tmp_path, monkeypatch, capsys):
@@ -566,3 +583,8 @@ def test_main_rejects_daily_brief_send_execute_without_graph():
 def test_main_rejects_post_reply_without_teams_relay_worker():
     with pytest.raises(SystemExit):
         main(["--post-reply"])
+
+
+def test_main_rejects_watch_without_teams_relay_worker():
+    with pytest.raises(SystemExit):
+        main(["--watch"])

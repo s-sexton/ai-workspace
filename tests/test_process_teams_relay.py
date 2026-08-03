@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from common.memory import DuckDbMemoryStore
 from common.teams import TeamsWebhookResponse
@@ -12,6 +14,8 @@ from assistant.src.process_teams_relay import (
     process_next_teams_relay_message,
     process_teams_relay_payload,
     route_teams_text_command,
+    teams_relay_poll_interval_seconds,
+    watch_teams_relay_queue,
 )
 
 
@@ -194,6 +198,66 @@ def test_process_teams_relay_action_records_approved_email_action(tmp_path):
         store.close()
     assert approved[0].action_type == "propose_email_move_trash"
     assert approved[0].action_target == "Deleted Items"
+
+
+def test_teams_relay_poll_interval_uses_active_weekday_window():
+    central = ZoneInfo("America/Chicago")
+
+    assert (
+        teams_relay_poll_interval_seconds(
+            now=datetime(2026, 8, 3, 5, 0, tzinfo=central),
+            active_interval_seconds=30,
+            idle_interval_seconds=3600,
+        )
+        == 30
+    )
+    assert (
+        teams_relay_poll_interval_seconds(
+            now=datetime(2026, 8, 3, 18, 59, tzinfo=central),
+            active_interval_seconds=30,
+            idle_interval_seconds=3600,
+        )
+        == 30
+    )
+    assert (
+        teams_relay_poll_interval_seconds(
+            now=datetime(2026, 8, 3, 19, 0, tzinfo=central),
+            active_interval_seconds=30,
+            idle_interval_seconds=3600,
+        )
+        == 3600
+    )
+    assert (
+        teams_relay_poll_interval_seconds(
+            now=datetime(2026, 8, 8, 10, 0, tzinfo=central),
+            active_interval_seconds=30,
+            idle_interval_seconds=3600,
+        )
+        == 3600
+    )
+
+
+def test_watch_teams_relay_queue_sleeps_between_bounded_iterations(tmp_path, capsys):
+    queue = InMemoryTeamsRelayQueue()
+    sleep_values: list[float] = []
+
+    result = watch_teams_relay_queue(
+        queue=queue,
+        allowed_senders=("scott@example.com",),
+        memory_path=tmp_path / "memory.duckdb",
+        limit=5,
+        active_interval_seconds=30,
+        idle_interval_seconds=3600,
+        now_fn=lambda: datetime(2026, 8, 3, 9, 0, tzinfo=ZoneInfo("America/Chicago")),
+        sleep_fn=sleep_values.append,
+        max_iterations=2,
+    )
+
+    assert result.iterations == 2
+    assert result.processed_count == 0
+    assert sleep_values == [30]
+    output = capsys.readouterr().out
+    assert "Processed: 0" in output
 
 
 def _recent_action_result(memory_path):

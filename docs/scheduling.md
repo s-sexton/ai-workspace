@@ -266,15 +266,17 @@ does not move or delete email.
 To print a Windows scheduled task for the Teams relay worker:
 
 ``` powershell
-python -m assistant.src.print_clarity_schedule --workflow teams-relay-worker --task-name "Clarity Teams Relay" --post-reply --limit 5 --at 08:05
+python -m assistant.src.print_clarity_schedule --workflow teams-relay-worker --task-name "Clarity Teams Relay" --post-reply --watch --active-interval-seconds 30 --idle-interval-seconds 3600 --limit 5 --at 08:05
 ```
 
 The generated task runs
-`python -m assistant.src.process_teams_relay --azure --post-reply --limit 5`.
-It polls the configured Azure Storage Queue, validates Teams sender identity,
-executes supported read-only commands, records supported manifest-backed email
-actions as local approvals only, and posts a Teams reply. Provider writes still
-remain separate through the email move executor.
+`python -m assistant.src.process_teams_relay --azure --post-reply --watch ...`.
+The watcher polls every 30 seconds Monday-Friday from 5:00 AM through 6:59 PM
+Central, and every hour outside that window. It polls the configured Azure
+Storage Queue, validates Teams sender identity, executes supported read-only
+commands, records supported manifest-backed email actions as local approvals
+only, and posts a Teams reply. Provider writes still remain separate through
+the email move executor.
 
 To choose a different cycle report path:
 

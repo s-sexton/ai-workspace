@@ -103,6 +103,16 @@ Run the worker from the workspace root:
 python -m assistant.src.process_teams_relay --azure --post-reply --limit 5
 ```
 
+For a long-running local watcher:
+
+``` powershell
+python -m assistant.src.process_teams_relay --azure --post-reply --watch --active-interval-seconds 30 --idle-interval-seconds 3600 --limit 5
+```
+
+The default active window is Monday-Friday from 5:00 AM through 6:59 PM Central.
+During active hours, the watcher sleeps 30 seconds between polls. Outside that
+window, it sleeps one hour between polls.
+
 Supported commands are read-only:
 
 -   `show open COMP tickets`
