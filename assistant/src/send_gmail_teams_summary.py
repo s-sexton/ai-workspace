@@ -11,8 +11,10 @@ from typing import Sequence
 from zoneinfo import ZoneInfo
 
 from assistant.src.run_email_review import build_gmail_read_transport_from_config
+from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import ConfigurationError, load_workspace_config
 from common.email import EmailClient, EmailMessage
+from common.memory import DuckDbMemoryStore
 from common.teams import TeamsWebhookTransport, post_lightweight_card_to_teams
 from common.teams_manifest import (
     TeamsManifestItem,
@@ -43,6 +45,7 @@ def send_gmail_teams_summary(
     execute: bool = False,
     mention: str | None = "Scott Sexton",
     manifest_path: Path | str = Path("reports") / "teams-gmail-manifest.json",
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
     transport: TeamsWebhookTransport | None = None,
 ) -> GmailTeamsSummaryResult:
     """Read Gmail inbox metadata and optionally send a Teams summary."""
@@ -59,6 +62,12 @@ def send_gmail_teams_summary(
         transport=build_gmail_read_transport_from_config(root=config.root)
     )
     messages = client.list_messages(mailbox=mailbox, limit=effective_limit).messages
+    record_gmail_teams_summary_memory(
+        messages,
+        mailbox=mailbox,
+        access_mode=email_settings.access_mode_for(mailbox) or "read",
+        memory_path=_resolve_path(config.root, Path(memory_path)),
+    )
     resolved_manifest_path = _resolve_path(config.root, Path(manifest_path))
     manifest = create_gmail_teams_manifest(messages, mailbox=mailbox)
     write_teams_manifest(resolved_manifest_path, manifest)
@@ -140,6 +149,44 @@ def create_gmail_teams_manifest(
     )
 
 
+def record_gmail_teams_summary_memory(
+    messages: Sequence[EmailMessage],
+    *,
+    mailbox: str,
+    access_mode: str,
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
+) -> None:
+    """Record Teams-posted Gmail items so later actions resolve to memory."""
+
+    memory = DuckDbMemoryStore(memory_path)
+    try:
+        memory.initialize_schema()
+        run = memory.start_run(workflow="gmail-teams-summary")
+        source = memory.record_source(
+            source_type="email",
+            display_name=f"Gmail Inbox: {mailbox}",
+            scope_label=mailbox,
+            access_mode=access_mode,
+        )
+        for message in messages:
+            memory.record_item_seen(
+                source_id=source.source_id,
+                external_id=message.message_id,
+                item_type="email_message",
+                subject=_clean_subject(message.subject),
+                sender_or_owner=message.sender,
+                updated_at=message.received_at,
+                first_seen_run_id=run.run_id,
+            )
+        memory.finish_run(
+            run.run_id,
+            status="completed",
+            summary=f"Recorded {len(messages)} Gmail Teams summary item(s).",
+        )
+    finally:
+        memory.close()
+
+
 def _clean_subject(subject: str) -> str:
     return " ".join(subject.split()) or "(no subject)"
 
@@ -190,6 +237,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         execute=args.execute,
         mention=args.mention,
         manifest_path=args.manifest,
+        memory_path=args.memory,
     )
     print(f"Mailbox: {result.mailbox}")
     print(f"Messages: {result.message_count}")
@@ -212,6 +260,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=str(Path("reports") / "teams-gmail-manifest.json"),
         help="Teams manifest output path for numbered Gmail items.",
     )
+    parser.add_argument("--memory", default=str(DEFAULT_MEMORY_PATH))
     parser.add_argument(
         "--execute",
         action="store_true",

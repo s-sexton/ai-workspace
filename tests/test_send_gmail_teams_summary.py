@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from common.memory import DuckDbMemoryStore
 from common.email import EmailMessage
 from assistant.src.send_gmail_teams_summary import (
     create_gmail_teams_manifest,
     _formatted_received_at,
     _sender_display_text,
     gmail_message_link,
+    record_gmail_teams_summary_memory,
     render_gmail_teams_summary,
 )
 
@@ -57,6 +59,35 @@ def test_create_gmail_teams_manifest_allows_future_actions():
         "move_review",
         "move_noise",
     )
+
+
+def test_record_gmail_teams_summary_memory_links_manifest_items(tmp_path):
+    memory_path = tmp_path / "memory.duckdb"
+
+    record_gmail_teams_summary_memory(
+        (
+            EmailMessage(
+                message_id="abc123",
+                mailbox="sesexton@gmail.com",
+                subject="Test Gmail item",
+                sender="sender@example.com",
+                received_at="Mon, 3 Aug 2026 10:00:00 -0500",
+            ),
+        ),
+        mailbox="sesexton@gmail.com",
+        access_mode="read_write",
+        memory_path=memory_path,
+    )
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        item = store.find_item_seen("abc123")
+    finally:
+        store.close()
+    assert item is not None
+    assert item.subject == "Test Gmail item"
+    assert item.sender_or_owner == "sender@example.com"
 
 
 def test_sender_display_text_prefers_display_name():

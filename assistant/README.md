@@ -705,6 +705,16 @@ The default active window is Monday-Friday, 5:00 AM through 6:59 PM Central.
 During that window the worker sleeps 30 seconds between polls. Outside that
 window it sleeps one hour between polls.
 
+To enqueue Teams-style relay test messages into the configured Azure queue:
+
+``` powershell
+python -m assistant.src.enqueue_teams_relay --text "show pending approvals"
+python -m assistant.src.enqueue_teams_relay --action move_review --item 1 --manifest reports\teams-gmail-manifest.json
+```
+
+The action form simulates a future Teams card action. It records approved local
+cleanup intent only; provider writes still require the email move executor.
+
 To run the first local email metadata review:
 
 ``` powershell

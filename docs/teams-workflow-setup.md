@@ -160,6 +160,43 @@ python -m assistant.src.process_teams_relay --azure --post-reply --watch --activ
 
 Leave that PowerShell window open. Stop it with `Ctrl+C`.
 
+## Test The Inbound Relay
+
+After the watcher is running, send a small Gmail summary card:
+
+``` powershell
+python -m assistant.src.send_gmail_teams_summary --mailbox sesexton@gmail.com --limit 5 --execute
+```
+
+This posts the card, writes `reports/teams-gmail-manifest.json`, and records
+the five Gmail items in local Clarity memory so future actions can resolve to
+real message metadata.
+
+To test a read-only Teams text command through the queue:
+
+``` powershell
+python -m assistant.src.enqueue_teams_relay --text "show pending approvals"
+```
+
+The watcher should consume that queue message and post a Teams reply.
+
+To simulate a future Teams card action for item `1`:
+
+``` powershell
+python -m assistant.src.enqueue_teams_relay --action move_review --item 1 --manifest reports\teams-gmail-manifest.json
+```
+
+The watcher should consume the action and record an approved local move action
+for item `1`. It does not move Gmail directly. Verify the recorded action with:
+
+``` powershell
+python -m assistant.src.ask_memory approved-actions
+```
+
+Expected output should include the Gmail subject, mailbox, and destination
+classification. If the subject is missing, regenerate the Gmail Teams summary
+so the manifest and Clarity memory are aligned before testing actions.
+
 ## Print A Windows Scheduled Task
 
 Windows Task Scheduler is the fallback if Codex Scheduled is not enough. Print
