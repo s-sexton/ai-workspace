@@ -278,6 +278,8 @@ commands, records supported manifest-backed email actions as local approvals
 only, and posts a Teams reply. Provider writes still remain separate through
 the email move executor.
 
+For the Codex Scheduled setup steps, see `docs/teams-workflow-setup.md`.
+
 To choose a different cycle report path:
 
 ``` powershell

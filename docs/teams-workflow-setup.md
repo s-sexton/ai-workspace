@@ -113,6 +113,65 @@ The default active window is Monday-Friday from 5:00 AM through 6:59 PM Central.
 During active hours, the watcher sleeps 30 seconds between polls. Outside that
 window, it sleeps one hour between polls.
 
+## Start The Watcher With Codex Scheduled
+
+Use Codex Scheduled when you want Clarity to be supervised by Codex and show
+runs in the Scheduled surface.
+
+1. Open Codex **Scheduled**.
+2. Create a new scheduled task attached to the local `ai-workspace` project.
+3. Use the local project checkout, not a background worktree, because the
+   watcher needs local `config/.env`, `logs`, and `reports`.
+4. Set the schedule to start once when you want the watcher active, such as
+   `5:00 AM` on weekdays. The worker itself handles the 30-second and 1-hour
+   polling cadence after it starts.
+5. Use this task prompt:
+
+``` text
+Start the local Clarity Teams relay watcher.
+
+From the ai-workspace project root, run:
+
+python -m assistant.src.process_teams_relay --azure --post-reply --watch --active-interval-seconds 30 --idle-interval-seconds 3600 --limit 5
+
+Keep the process running. Do not modify files unless the command itself writes
+normal Clarity logs or reports. Do not run destructive commands. Do not execute
+email moves, Jira writes, calendar writes, or workflow transitions. If
+authentication, network, queue, or permission errors occur, report them and
+stop.
+```
+
+6. Review the first run output. If the queue is empty, expected output includes:
+
+``` text
+Processed: 0
+Completed: 0
+Dead-lettered: 0
+Teams replies: 0
+```
+
+## Start The Watcher Manually
+
+For a foreground manual run from PowerShell:
+
+``` powershell
+python -m assistant.src.process_teams_relay --azure --post-reply --watch --active-interval-seconds 30 --idle-interval-seconds 3600 --limit 5
+```
+
+Leave that PowerShell window open. Stop it with `Ctrl+C`.
+
+## Print A Windows Scheduled Task
+
+Windows Task Scheduler is the fallback if Codex Scheduled is not enough. Print
+the registration script:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --workflow teams-relay-worker --task-name "Clarity Teams Relay" --post-reply --watch --active-interval-seconds 30 --idle-interval-seconds 3600 --limit 5 --at 05:00
+```
+
+Review the printed script before running it. Registering the task is a local
+infrastructure change and should be done by the operator.
+
 Supported commands are read-only:
 
 -   `show open COMP tickets`
