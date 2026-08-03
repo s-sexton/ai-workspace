@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,8 @@ _SECRET_MARKERS = (
     "basic ",
     "password=",
 )
+_CONNECT_RETRY_ATTEMPTS = 10
+_CONNECT_RETRY_DELAY_SECONDS = 0.2
 
 
 class MemoryStoreError(RuntimeError):
@@ -238,7 +241,7 @@ class DuckDbMemoryStore:
 
     def __init__(self, path: str | Path = ":memory:") -> None:
         self.path = str(path)
-        self._connection = duckdb.connect(self.path)
+        self._connection = _connect_with_retry(self.path)
 
     def close(self) -> None:
         """Close the underlying database connection."""
@@ -1308,6 +1311,25 @@ class DuckDbMemoryStore:
 
 def _new_id() -> str:
     return uuid4().hex
+
+
+def _connect_with_retry(path: str):
+    for attempt in range(_CONNECT_RETRY_ATTEMPTS):
+        try:
+            return duckdb.connect(path)
+        except duckdb.IOException as exc:
+            if not _is_transient_duckdb_lock(exc) or attempt == _CONNECT_RETRY_ATTEMPTS - 1:
+                raise
+            time.sleep(_CONNECT_RETRY_DELAY_SECONDS)
+    raise MemoryStoreError("Unable to connect to Clarity memory.")
+
+
+def _is_transient_duckdb_lock(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "being used by another process" in message
+        or ("cannot open file" in message and "io error" in message)
+    )
 
 
 def _now() -> str:

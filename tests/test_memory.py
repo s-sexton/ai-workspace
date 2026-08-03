@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import duckdb
 import pytest
 
+import common.memory as memory_module
 from common.memory import DuckDbMemoryStore, MemoryStoreError
 
 
@@ -30,6 +32,45 @@ def test_records_run_lifecycle(memory_store):
     assert finished.status == "completed"
     assert finished.summary == "Generated the Jira report."
     assert finished.completed_at is not None
+
+
+def test_memory_store_retries_transient_duckdb_lock(monkeypatch):
+    calls = []
+    real_connect = duckdb.connect
+
+    def flaky_connect(path):
+        calls.append(path)
+        if len(calls) == 1:
+            raise duckdb.IOException(
+                'IO Error: Cannot open file "memory.duckdb": '
+                "The process cannot access the file because it is being used by another process."
+            )
+        return real_connect(":memory:")
+
+    monkeypatch.setattr(memory_module.duckdb, "connect", flaky_connect)
+    monkeypatch.setattr(memory_module.time, "sleep", lambda _: None)
+
+    store = DuckDbMemoryStore("memory.duckdb")
+    try:
+        store.initialize_schema()
+    finally:
+        store.close()
+    assert calls == ["memory.duckdb", "memory.duckdb"]
+
+
+def test_memory_store_does_not_retry_non_lock_errors(monkeypatch):
+    calls = []
+
+    def broken_connect(path):
+        calls.append(path)
+        raise duckdb.IOException("IO Error: database file is corrupt")
+
+    monkeypatch.setattr(memory_module.duckdb, "connect", broken_connect)
+    monkeypatch.setattr(memory_module.time, "sleep", lambda _: None)
+
+    with pytest.raises(duckdb.IOException):
+        DuckDbMemoryStore("memory.duckdb")
+    assert calls == ["memory.duckdb"]
 
 
 def test_returns_latest_run(memory_store):
