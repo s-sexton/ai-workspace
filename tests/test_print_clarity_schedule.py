@@ -213,6 +213,28 @@ def test_build_windows_task_scheduler_script_can_schedule_reply_poll(tmp_path):
     assert "--execute" in script
 
 
+def test_build_windows_task_scheduler_script_can_schedule_teams_relay_worker(tmp_path):
+    script = build_windows_task_scheduler_script(
+        root=tmp_path,
+        workflow="teams-relay-worker",
+        task_name="Clarity Teams Relay",
+        at="08:05",
+        memory_path="logs/clarity-memory.duckdb",
+        manifest_path="reports/teams-gmail-manifest.json",
+        daily_brief_limit=5,
+        cycle_report_path=None,
+        post_reply=True,
+    )
+
+    assert '-TaskName "Clarity Teams Relay"' in script
+    assert "python -m assistant.src.process_teams_relay --azure" in script
+    assert "--post-reply" in script
+    assert "--memory 'logs/clarity-memory.duckdb'" in script
+    assert "--teams-manifest 'reports/teams-gmail-manifest.json'" in script
+    assert "--limit 5" in script
+    assert "Poll Azure Storage Queue for Teams relay commands." in script
+
+
 def test_build_windows_task_scheduler_script_rejects_invalid_flags(tmp_path):
     with pytest.raises(ValueError):
         build_windows_task_scheduler_script(root=tmp_path, use_graph_bearer=True)
@@ -264,6 +286,16 @@ def test_build_windows_task_scheduler_script_rejects_invalid_flags(tmp_path):
             refresh_calendar=True,
             use_google_calendar=True,
             calendar="family",
+        )
+
+    with pytest.raises(ValueError):
+        build_windows_task_scheduler_script(root=tmp_path, post_reply=True)
+
+    with pytest.raises(ValueError):
+        build_windows_task_scheduler_script(
+            root=tmp_path,
+            workflow="teams-relay-worker",
+            use_graph=True,
         )
 
 
@@ -456,6 +488,38 @@ def test_main_prints_reply_poll_schedule(tmp_path, monkeypatch, capsys):
     assert "--execute" in output
 
 
+def test_main_prints_teams_relay_worker_schedule(tmp_path, monkeypatch, capsys):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "--workflow",
+            "teams-relay-worker",
+            "--task-name",
+            "Clarity Teams Relay",
+            "--at",
+            "08:05",
+            "--memory",
+            "logs/clarity-memory.duckdb",
+            "--manifest",
+            "reports/teams-gmail-manifest.json",
+            "--limit",
+            "5",
+            "--post-reply",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert '-TaskName "Clarity Teams Relay"' in output
+    assert "python -m assistant.src.process_teams_relay --azure" in output
+    assert "--post-reply" in output
+    assert "--teams-manifest 'reports/teams-gmail-manifest.json'" in output
+    assert "--limit 5" in output
+
+
 def test_main_can_disable_schedule_log(tmp_path, monkeypatch, capsys):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
@@ -497,3 +561,8 @@ def test_main_rejects_reply_poll_without_graph():
 def test_main_rejects_daily_brief_send_execute_without_graph():
     with pytest.raises(SystemExit):
         main(["--workflow", "daily-brief-send", "--execute"])
+
+
+def test_main_rejects_post_reply_without_teams_relay_worker():
+    with pytest.raises(SystemExit):
+        main(["--post-reply"])

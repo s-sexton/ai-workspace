@@ -313,6 +313,12 @@ To print a scheduled task for authenticated daily brief reply polling:
 python -m assistant.src.print_clarity_schedule --workflow daily-brief-reply-poll --task-name "Clarity Reply Poll" --mailbox clarity@sendthisfile.ai --graph --at 08:00
 ```
 
+To print a scheduled task for the Teams relay worker:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --workflow teams-relay-worker --task-name "Clarity Teams Relay" --post-reply --limit 5 --at 08:05
+```
+
 Review the printed script before running it. The generated task appends console
 output to `logs/clarity-cycle.log` by default. See `docs/scheduling.md` for the
 local scheduling workflow.

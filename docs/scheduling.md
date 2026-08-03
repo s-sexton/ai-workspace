@@ -263,6 +263,19 @@ Add `--execute` to the printed reply poll schedule only after dry-run output is
 reviewed. Execution applies supported local-memory reply commands; it still
 does not move or delete email.
 
+To print a Windows scheduled task for the Teams relay worker:
+
+``` powershell
+python -m assistant.src.print_clarity_schedule --workflow teams-relay-worker --task-name "Clarity Teams Relay" --post-reply --limit 5 --at 08:05
+```
+
+The generated task runs
+`python -m assistant.src.process_teams_relay --azure --post-reply --limit 5`.
+It polls the configured Azure Storage Queue, validates Teams sender identity,
+executes supported read-only commands, records supported manifest-backed email
+actions as local approvals only, and posts a Teams reply. Provider writes still
+remain separate through the email move executor.
+
 To choose a different cycle report path:
 
 ``` powershell

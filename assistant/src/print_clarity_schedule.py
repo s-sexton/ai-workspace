@@ -16,10 +16,12 @@ DEFAULT_TASK_LOG_PATH = "logs/clarity-cycle.log"
 WORKFLOW_CYCLE = "cycle"
 WORKFLOW_DAILY_BRIEF_SEND = "daily-brief-send"
 WORKFLOW_DAILY_BRIEF_REPLY_POLL = "daily-brief-reply-poll"
+WORKFLOW_TEAMS_RELAY_WORKER = "teams-relay-worker"
 WORKFLOWS = (
     WORKFLOW_CYCLE,
     WORKFLOW_DAILY_BRIEF_SEND,
     WORKFLOW_DAILY_BRIEF_REPLY_POLL,
+    WORKFLOW_TEAMS_RELAY_WORKER,
 )
 
 
@@ -54,11 +56,14 @@ def build_windows_task_scheduler_script(
     cycle_report_path: Path | str | None = None,
     log_path: Path | str | None = DEFAULT_TASK_LOG_PATH,
     execute: bool = False,
+    post_reply: bool = False,
 ) -> str:
     """Return PowerShell commands that register one local scheduled task."""
 
     if workflow not in WORKFLOWS:
         raise ValueError(f"workflow must be one of: {', '.join(WORKFLOWS)}.")
+    if workflow != WORKFLOW_TEAMS_RELAY_WORKER and post_reply:
+        raise ValueError("post_reply requires workflow='teams-relay-worker'.")
     if use_graph_bearer and not (use_graph or use_graph_calendar):
         raise ValueError("use_graph_bearer requires use_graph or use_graph_calendar.")
     if use_google_bearer and not use_google_calendar:
@@ -121,6 +126,28 @@ def build_windows_task_scheduler_script(
         or cycle_report_path
     ):
         raise ValueError("cycle-only options require workflow='cycle'.")
+    if workflow == WORKFLOW_TEAMS_RELAY_WORKER and (
+        mailbox
+        or use_graph
+        or use_graph_bearer
+        or refresh_email
+        or use_gmail
+        or use_gmail_bearer
+        or use_sample_graph
+        or refresh_calendar
+        or calendar
+        or calendar_date
+        or use_graph_calendar
+        or use_google_calendar
+        or use_google_bearer
+        or refresh_jira
+        or jira_bearer
+        or jira_report_path
+        or brief_path
+        or cycle_report_path
+        or execute
+    ):
+        raise ValueError("source refresh options are not supported for teams-relay-worker.")
     if refresh_calendar and not (use_graph_calendar or use_google_calendar):
         raise ValueError("refresh_calendar requires a calendar provider.")
     if workflow == WORKFLOW_DAILY_BRIEF_SEND and execute != use_graph:
@@ -155,6 +182,7 @@ def build_windows_task_scheduler_script(
         manifest_path=manifest_path,
         cycle_report_path=cycle_report_path,
         execute=execute,
+        post_reply=post_reply,
     )
     scheduled_command = (
         "Set-Location -LiteralPath "
@@ -232,6 +260,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             cycle_report_path=args.cycle_report,
             log_path=args.log,
             execute=args.execute,
+            post_reply=args.post_reply,
         ),
         end="",
     )
@@ -264,6 +293,7 @@ def _workflow_command(
     manifest_path: Path | str | None,
     cycle_report_path: Path | str | None,
     execute: bool,
+    post_reply: bool,
 ) -> str:
     if workflow == WORKFLOW_CYCLE:
         return _cycle_command(
@@ -304,14 +334,40 @@ def _workflow_command(
             jira_report_path=jira_report_path,
             execute=execute,
         )
-    return _daily_brief_reply_poll_command(
-        mailbox=mailbox,
-        use_graph_bearer=use_graph_bearer,
+    if workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL:
+        return _daily_brief_reply_poll_command(
+            mailbox=mailbox,
+            use_graph_bearer=use_graph_bearer,
+            memory_path=memory_path,
+            manifest_path=manifest_path,
+            daily_brief_limit=daily_brief_limit,
+            execute=execute,
+        )
+    return _teams_relay_worker_command(
         memory_path=memory_path,
         manifest_path=manifest_path,
-        daily_brief_limit=daily_brief_limit,
-        execute=execute,
+        limit=daily_brief_limit,
+        post_reply=post_reply,
     )
+
+
+def _teams_relay_worker_command(
+    *,
+    memory_path: Path | str | None,
+    manifest_path: Path | str | None,
+    limit: int | None,
+    post_reply: bool,
+) -> str:
+    parts = ["python", "-m", "assistant.src.process_teams_relay", "--azure"]
+    if post_reply:
+        parts.append("--post-reply")
+    if memory_path is not None:
+        parts.extend(("--memory", _ps_single_quote(str(memory_path))))
+    if manifest_path is not None:
+        parts.extend(("--teams-manifest", _ps_single_quote(str(manifest_path))))
+    if limit is not None:
+        parts.extend(("--limit", str(limit)))
+    return " ".join(parts)
 
 
 def _cycle_command(
@@ -459,6 +515,8 @@ def _workflow_description(workflow: str) -> str:
         return "Generate and optionally send Clarity's daily brief email."
     if workflow == WORKFLOW_DAILY_BRIEF_REPLY_POLL:
         return "Poll Clarity's mailbox for authenticated daily brief replies."
+    if workflow == WORKFLOW_TEAMS_RELAY_WORKER:
+        return "Poll Azure Storage Queue for Teams relay commands."
     return "Run one local Clarity refresh cycle."
 
 
@@ -555,7 +613,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--limit",
         type=int,
         default=None,
-        help="Daily brief item limit or reply poll limit.",
+        help="Daily brief item limit, reply poll limit, or Teams relay batch limit.",
     )
     parser.add_argument(
         "--days",
@@ -588,6 +646,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--execute",
         action="store_true",
         help="Include the workflow's explicit execution flag where supported.",
+    )
+    parser.add_argument(
+        "--post-reply",
+        action="store_true",
+        help="For teams-relay-worker, post command results back to Teams.",
     )
     parser.add_argument(
         "--log",
@@ -648,6 +711,29 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         or args.jira_report
     ):
         parser.error("cycle-only options require --workflow cycle.")
+    if args.workflow == WORKFLOW_TEAMS_RELAY_WORKER and (
+        args.mailbox
+        or args.sample_graph
+        or args.graph
+        or args.graph_bearer
+        or args.refresh_email
+        or args.gmail
+        or args.gmail_bearer
+        or args.refresh_calendar
+        or args.calendar
+        or args.calendar_date
+        or args.graph_calendar
+        or args.google_calendar
+        or args.google_bearer
+        or args.refresh_jira
+        or args.jira_bearer
+        or args.jira_report
+        or args.brief
+        or args.execute
+    ):
+        parser.error("source refresh options are not supported for teams-relay-worker.")
+    if args.workflow != WORKFLOW_TEAMS_RELAY_WORKER and args.post_reply:
+        parser.error("--post-reply requires --workflow teams-relay-worker.")
     if args.refresh_calendar and not (args.graph_calendar or args.google_calendar):
         parser.error("--refresh-calendar requires --graph-calendar or --google-calendar.")
     if args.workflow == WORKFLOW_DAILY_BRIEF_SEND and args.execute != args.graph:
@@ -658,6 +744,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         args.date = None
         args.limit = None
         args.manifest = None
+        args.post_reply = False
     else:
         args.cycle_report = None
     if args.no_log:
