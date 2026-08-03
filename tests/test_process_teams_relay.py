@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Mapping
 
 from common.memory import DuckDbMemoryStore
 from common.teams import TeamsWebhookResponse
+from common.teams_manifest import TeamsManifestItem, create_teams_manifest, write_teams_manifest
 from common.teams_relay import InMemoryTeamsRelayQueue
 from assistant.src.process_teams_relay import (
     process_teams_relay_queue,
@@ -123,7 +125,75 @@ def test_process_teams_relay_action_is_recorded_but_not_executed(tmp_path):
     )
 
     assert result.status == "unsupported_action"
-    assert "not enabled yet" in result.response_text
+    assert "not supported yet" in result.response_text
+
+
+def test_process_teams_relay_action_records_approved_email_action(tmp_path):
+    root = tmp_path
+    memory_path = root / "memory.duckdb"
+    manifest_path = root / "reports" / "teams-gmail-manifest.json"
+    _write_email_config(root)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="test")
+        source = store.record_source(
+            source_type="email",
+            display_name="Gmail",
+            scope_label="sesexton@gmail.com",
+            access_mode="read_write",
+        )
+        store.record_item_seen(
+            source_id=source.source_id,
+            external_id="gmail-message-1",
+            item_type="email_message",
+            subject="Test message",
+            first_seen_run_id=run.run_id,
+        )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+    manifest = create_teams_manifest(
+        created_at="2026-08-03T15:30:00Z",
+        manifest_id="manifest-1",
+        items=(
+            TeamsManifestItem(
+                number=1,
+                source_type="gmail",
+                mailbox="sesexton@gmail.com",
+                external_id="gmail-message-1",
+                subject="Test message",
+                allowed_actions=("trash", "move_review", "move_noise"),
+            ),
+        ),
+    )
+    write_teams_manifest(manifest_path, manifest)
+
+    result = process_teams_relay_payload(
+        _payload(
+            text=None,
+            action={
+                "type": "trash",
+                "manifestId": "manifest-1",
+                "itemNumbers": [1],
+            },
+        ),
+        allowed_senders=("scott@example.com",),
+        root=root,
+        memory_path=memory_path,
+        action_manifest_path=manifest_path,
+    )
+
+    assert result.status == "completed"
+    assert "Run the email move executor" in result.response_text
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        approved = store.actions_by_approval_status("approved", limit=10)
+    finally:
+        store.close()
+    assert approved[0].action_type == "propose_email_move_trash"
+    assert approved[0].action_target == "Deleted Items"
 
 
 def _recent_action_result(memory_path):
@@ -152,6 +222,36 @@ def _payload(*, text="show pending approvals", sender="scott@example.com", actio
         "text": text,
         "action": action,
     }
+
+
+def _write_email_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "assistant": {
+                    "email": {
+                        "approvedMailboxes": [
+                            {
+                                "address": "sesexton@gmail.com",
+                                "accessMode": "read_write",
+                            }
+                        ],
+                        "defaultMailbox": "sesexton@gmail.com",
+                        "folderNamespace": "Clarity",
+                        "folderPolicy": {
+                            "review": "Clarity/Review",
+                            "noise": "Clarity/Noise",
+                            "trash": "Deleted Items",
+                        },
+                        "maxMessages": 25,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 class RecordingTeamsTransport:

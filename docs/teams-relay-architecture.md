@@ -195,10 +195,14 @@ The currently supported live commands are read-only:
 Unsupported commands and unapproved senders are moved to
 `clarity-deadletter`.
 
+Supported manifest-backed Teams card actions can record approved local email
+cleanup actions for `trash`, `move_review`, and `move_noise`. These actions do
+not perform provider writes; Gmail or Graph execution still happens through the
+existing email move executor.
+
 ## Future Slices
 
 -   Teams Workflow setup guide
--   Teams manifest writer
 -   Card action IDs
--   Pending-action command support
+-   Pending-action execution support
 -   Optional outbound queue

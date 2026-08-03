@@ -19,6 +19,7 @@ from common.email import EmailClient
 from common.jira import JiraClient, UrllibJiraTransport
 from common.memory import DuckDbMemoryStore
 from common.teams import TeamsWebhookTransport, post_lightweight_card_to_teams
+from common.teams_manifest import read_teams_manifest, resolve_manifest_items
 from common.teams_relay import (
     InMemoryTeamsRelayQueue,
     TeamsRelayError,
@@ -57,6 +58,7 @@ def process_next_teams_relay_message(
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     root: Path | str | None = None,
     handlers: Mapping[str, CommandHandler] | None = None,
+    action_manifest_path: Path | str | None = None,
 ) -> TeamsCommandResult | None:
     """Process one visible Teams relay queue message."""
 
@@ -71,6 +73,7 @@ def process_next_teams_relay_message(
             memory_path=memory_path,
             root=root,
             handlers=handlers,
+            action_manifest_path=action_manifest_path,
         )
     except Exception as exc:
         queue.dead_letter(queue_message.queue_message_id, reason=str(exc))
@@ -91,6 +94,7 @@ def process_teams_relay_queue(
     post_replies: bool = False,
     webhook_url: str | None = None,
     reply_transport: TeamsWebhookTransport | None = None,
+    action_manifest_path: Path | str | None = None,
 ) -> TeamsRelayQueueRunResult:
     """Process visible Teams relay queue messages with live-worker semantics."""
 
@@ -109,6 +113,7 @@ def process_teams_relay_queue(
                 memory_path=memory_path,
                 root=root,
                 handlers=handlers,
+                action_manifest_path=action_manifest_path,
             )
             results.append(result)
             if post_replies:
@@ -145,6 +150,7 @@ def process_teams_relay_payload(
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     root: Path | str | None = None,
     handlers: Mapping[str, CommandHandler] | None = None,
+    action_manifest_path: Path | str | None = None,
 ) -> TeamsCommandResult:
     """Validate and process one Teams relay payload."""
 
@@ -164,17 +170,11 @@ def process_teams_relay_payload(
         )
 
     if message.action is not None:
-        response = "Teams card actions are not enabled yet; command was recorded only."
-        _record_teams_command_audit(
+        return _process_teams_action_request(
+            message,
+            root=root,
             memory_path=memory_path,
-            command_id=message.command_id,
-            status="unsupported_action",
-            response=response,
-        )
-        return TeamsCommandResult(
-            command_id=message.command_id,
-            status="unsupported_action",
-            response_text=response,
+            manifest_path=action_manifest_path,
         )
 
     route = route_teams_text_command(message.text or "")
@@ -307,6 +307,112 @@ def build_azure_teams_relay_queue_from_config(
     )
 
 
+def _process_teams_action_request(
+    message: TeamsRelayMessage,
+    *,
+    root: Path | str | None,
+    memory_path: Path | str,
+    manifest_path: Path | str | None,
+) -> TeamsCommandResult:
+    if message.action is None:
+        raise TeamsRelayError("Teams action is required.")
+    action_type = message.action.action_type
+    action_label = _email_action_label(action_type)
+    if action_label is None:
+        response = "Teams card action is not supported yet."
+        _record_teams_command_audit(
+            memory_path=memory_path,
+            command_id=message.command_id,
+            status="unsupported_action",
+            response=response,
+        )
+        return TeamsCommandResult(
+            command_id=message.command_id,
+            status="unsupported_action",
+            response_text=response,
+        )
+    if message.action.manifest_id is None:
+        raise TeamsRelayError("Teams action manifestId is required.")
+    if not message.action.item_numbers:
+        raise TeamsRelayError("Teams action itemNumbers are required.")
+
+    config = load_workspace_config(root, include_process_env=True)
+    resolved_manifest_path = _resolve_path(
+        config.root,
+        Path(manifest_path or Path("reports") / "teams-gmail-manifest.json"),
+    )
+    manifest = read_teams_manifest(resolved_manifest_path)
+    if manifest.manifest_id != message.action.manifest_id:
+        raise TeamsRelayError("Teams action manifestId does not match local manifest.")
+    items = resolve_manifest_items(
+        manifest,
+        item_numbers=message.action.item_numbers,
+        required_action=action_type,
+    )
+    email_settings = config.email_settings
+    target_folder = email_settings.folder_for_label(action_label)
+    if target_folder is None:
+        raise TeamsRelayError(f"No email folder policy for action: {action_type}.")
+
+    memory = DuckDbMemoryStore(_resolve_path(config.root, Path(memory_path)))
+    try:
+        memory.initialize_schema()
+        run = memory.start_run(workflow="teams-relay-action")
+        recorded = 0
+        for item in items:
+            if item.source_type not in ("email", "gmail"):
+                raise TeamsRelayError("Teams email actions only support email items.")
+            if item.mailbox is None:
+                raise TeamsRelayError("Teams email action item must include a mailbox.")
+            if item.mailbox not in email_settings.approved_mailboxes:
+                raise TeamsRelayError(f"Email mailbox is not approved: {item.mailbox}")
+            if email_settings.access_mode_for(item.mailbox) != "read_write":
+                raise TeamsRelayError(
+                    f"Email mailbox is not approved for writes: {item.mailbox}"
+                )
+            remembered_item = memory.find_item_seen(item.external_id)
+            memory.record_assistant_action(
+                run_id=run.run_id,
+                item_id=remembered_item.item_id if remembered_item else None,
+                action_type=f"propose_email_move_{action_label}",
+                approval_status="approved",
+                action_target=target_folder,
+                result=(
+                    "Teams action approved moving "
+                    f"{item.external_id} from {item.mailbox} to {target_folder}. "
+                    "No provider write was performed."
+                ),
+            )
+            recorded += 1
+        response = (
+            f"Recorded {recorded} approved local email action(s) for "
+            f"{target_folder}. Run the email move executor to apply provider writes."
+        )
+        memory.record_assistant_action(
+            run_id=run.run_id,
+            action_type="process_teams_relay_action",
+            approval_status="not_required",
+            action_target=message.command_id,
+            result=response,
+        )
+        memory.finish_run(run.run_id, status="completed", summary=response)
+    finally:
+        memory.close()
+    return TeamsCommandResult(
+        command_id=message.command_id,
+        status="completed",
+        response_text=response,
+    )
+
+
+def _email_action_label(action_type: str) -> str | None:
+    return {
+        "trash": "trash",
+        "move_review": "review",
+        "move_noise": "noise",
+    }.get(action_type)
+
+
 def _record_teams_command_audit(
     *,
     memory_path: Path | str,
@@ -380,6 +486,12 @@ def _required_webhook_url(webhook_url: str | None, *, root: Path | str | None) -
     )
 
 
+def _resolve_path(workspace_root: Path, path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return workspace_root / path
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the local or Azure Teams relay command worker."""
 
@@ -391,6 +503,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             memory_path=args.memory,
             limit=args.limit,
             post_replies=args.post_reply,
+            action_manifest_path=args.teams_manifest,
         )
         print(f"Processed: {result.processed_count}")
         print(f"Completed: {result.completed_count}")
@@ -426,6 +539,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         queue=queue,
         allowed_senders=args.allowed_sender,
         memory_path=args.memory,
+        action_manifest_path=args.teams_manifest,
     )
     if result is None:
         print("No Teams relay messages found.")
@@ -463,6 +577,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Approved Teams sender email. Repeat for multiple senders.",
     )
     parser.add_argument("--memory", default=str(DEFAULT_MEMORY_PATH))
+    parser.add_argument(
+        "--teams-manifest",
+        default=str(Path("reports") / "teams-gmail-manifest.json"),
+        help="Teams action manifest path for card action item resolution.",
+    )
     args = parser.parse_args(argv)
     if not args.azure and not args.text:
         parser.error("text is required unless --azure is supplied")

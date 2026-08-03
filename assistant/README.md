@@ -682,6 +682,13 @@ through `TEAMS_CLARITY_WEBHOOK_URL`, completes successful queue messages, and
 dead-letters rejected or failed messages. Treat all queue URLs and webhook URLs
 as secrets.
 
+Supported Teams card actions resolve numbered items through the local Teams
+message manifest, which defaults to `reports/teams-gmail-manifest.json`.
+Supported email actions can record approved local cleanup actions for
+`trash`, `move_review`, and `move_noise`, but they do not move or delete email
+directly. Run the existing email move executor afterward to apply approved
+provider writes.
+
 To run the first local email metadata review:
 
 ``` powershell

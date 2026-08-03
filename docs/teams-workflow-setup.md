@@ -73,8 +73,17 @@ For card actions, send `text` as `null` and include an `action` object:
 }
 ```
 
-Card actions are intentionally not executable yet. The current local worker
-records and dead-letters unsupported actions instead of applying them.
+Supported card actions are intentionally limited to recording local approval
+state. They do not move, delete, archive, or modify provider data directly.
+The current supported email action types are:
+
+-   `trash`
+-   `move_review`
+-   `move_noise`
+
+Each action must include a `manifestId` and `itemNumbers`. Local Clarity
+resolves those numbers through the matching Teams message manifest before
+recording an approved local action.
 
 ## Message Encoding
 
@@ -100,9 +109,9 @@ Supported commands are read-only:
 -   `show Gmail inbox`
 -   `show pending approvals`
 
-Successful commands are completed in `clarity-inbound`. Rejected senders,
-unsupported commands, unsupported actions, and failed commands are moved to
-`clarity-deadletter`.
+Successful commands and supported manifest-backed card actions are completed in
+`clarity-inbound`. Rejected senders, unsupported commands, unsupported actions,
+and failed commands are moved to `clarity-deadletter`.
 
 ## Security Checks
 
@@ -112,6 +121,14 @@ Future hardening should add object ID validation before Teams becomes an
 approval or write surface.
 
 Do not place secrets, raw email bodies, message attachments, calendar details,
-or Jira descriptions into queue messages. Put only the command and enough
+or Jira descriptions into queue messages. Put only the command/action and enough
 metadata to audit where it came from.
 
+Provider writes remain separate. After a Teams action records an approved local
+cleanup action, local Clarity must still run the existing provider executor,
+such as:
+
+``` powershell
+python -m assistant.src.execute_email_moves --gmail --execute
+python -m assistant.src.execute_email_moves --graph --execute
+```
