@@ -79,6 +79,26 @@ can be selected explicitly with `--bearer` when `JIRA_ACCESS_TOKEN` is present.
 Raw Jira field data is retained as `raw_fields` for future extension, but report
 code should prefer the normalized attributes.
 
+## Ticket Links
+
+When Jira tickets are sent to the human operator through Teams, email, or any
+other notification surface, render each ticket key as a hyperlink to the actual
+Jira ticket. Do not send plain, unlinked issue keys when the target format
+supports links.
+
+Use the human-facing Jira site URL for links, not the Atlassian API gateway
+URL. The API route uses:
+
+``` text
+https://api.atlassian.com/ex/jira/{JIRA_CLOUD_ID}/rest/api/3/...
+```
+
+Notification links should point to the browser ticket view, such as:
+
+``` text
+{JIRA_SITE_URL}/browse/{ISSUE_KEY}
+```
+
 ## Security
 
 Jira credentials are passed in through `JiraCredentials`.

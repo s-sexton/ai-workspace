@@ -8,7 +8,8 @@
     "jira": {
       "projects": [
         "STF",
-        "ACCT"
+        "ACCT",
+        "COMP"
       ],
       "maxResults": 10,
       "sortOrder": "updated DESC",

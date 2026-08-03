@@ -624,6 +624,19 @@ Daily brief replies can reference email items with `outlook`, `inbox`, or
 local pending Jira requests only; Clarity does not write Jira from the reply
 poller.
 
+## Teams Notifications
+
+Clarity's initial Teams surface is the `AI Workspace` team and `Clarity`
+channel. Store the Teams Workflows incoming webhook URL in `config/.env`:
+
+``` powershell
+TEAMS_CLARITY_WEBHOOK_URL=...
+```
+
+The webhook is outbound only. Clarity can post short notifications to Teams,
+but Teams messages are not yet a command or approval surface. Do not print or
+commit the webhook URL.
+
 To run the first local email metadata review:
 
 ``` powershell

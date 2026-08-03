@@ -71,6 +71,14 @@ OpenAI LLM summarization uses these local values:
 generation. `OPENAI_BASE_URL` is optional and defaults to the OpenAI API base
 URL. The API key is a local secret and must not be committed.
 
+Microsoft Teams notification wiring uses this local value:
+
+-   `TEAMS_CLARITY_WEBHOOK_URL`
+
+`TEAMS_CLARITY_WEBHOOK_URL` is the Teams Workflows incoming webhook URL for the
+`AI Workspace` / `Clarity` channel. It is a local secret and must not be
+committed or printed in diagnostics.
+
 ## Shared Settings
 
 `config/config.json` (committed)
@@ -94,6 +102,7 @@ The loader:
 -   Keeps Graph access tokens out of object representations
 -   Keeps Google client secrets out of object representations
 -   Keeps Google refresh and access tokens out of object representations
+-   Keeps Teams webhook URLs out of object representations
 
 ## Public API
 
