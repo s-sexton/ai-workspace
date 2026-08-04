@@ -92,6 +92,7 @@ def execute_email_moves(
     gmail_spam_cleanup_transport: GmailSpamCleanupTransport | None = None,
     include_gmail_spam_cleanup: bool = False,
     mailboxes: Sequence[str] | None = None,
+    action_ids: Sequence[str] | None = None,
     limit: int = 25,
 ) -> str:
     """Dry-run approved email move actions from local Clarity memory."""
@@ -126,6 +127,7 @@ def execute_email_moves(
             store,
             limit=limit,
             mailboxes=mailboxes,
+            action_ids=action_ids,
         )
         if not approved_plan and not gmail_spam_mailboxes:
             return "No approved email moves found."
@@ -346,11 +348,17 @@ def _approved_email_move_plan(
     *,
     limit: int,
     mailboxes: Sequence[str] | None = None,
+    action_ids: Sequence[str] | None = None,
 ) -> tuple[EmailMovePlanItem, ...]:
     mailbox_filter = {
         mailbox.strip().lower()
         for mailbox in mailboxes or ()
         if mailbox.strip()
+    }
+    action_id_filter = {
+        action_id.strip().lower()
+        for action_id in action_ids or ()
+        if action_id.strip()
     }
     approved_actions = store.actions_by_approval_status("approved", limit=limit)
     return tuple(
@@ -371,6 +379,7 @@ def _approved_email_move_plan(
             not mailbox_filter
             or (action.source_scope_label or "").strip().lower() in mailbox_filter
         )
+        and (not action_id_filter or action.action_id.lower() in action_id_filter)
     )
 
 

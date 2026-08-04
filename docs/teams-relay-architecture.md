@@ -198,6 +198,8 @@ The currently supported live commands are read-only:
 -   `Clarity trash 1 2`
 -   `Clarity review 3`
 -   `Clarity noise 4 5`
+-   `Clarity delete 1 and execute`
+-   `Clarity move 2 to review and execute`
 -   `Clarity execute Gmail email moves`
 -   `Clarity execute Outlook email moves`
 
@@ -216,6 +218,8 @@ existing email move executor.
 Plain text action replies use the same manifest-backed safety model. For
 example, `Clarity trash 1 2` approves the current manifest items numbered 1 and
 2 for the configured trash destination.
+When a numbered action includes explicit execute wording, Clarity executes only
+the action IDs created by that command.
 
 `Clarity show email move plan` renders the existing email move dry-run through
 Teams so remote approvals can be inspected before provider writes are executed.

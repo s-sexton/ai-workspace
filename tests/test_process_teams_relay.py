@@ -18,6 +18,7 @@ from assistant.src.process_teams_relay import (
     MAX_TEAMS_RELAY_REPLY_CHARS,
     TeamsCommandResult,
     _format_teams_relay_result,
+    _text_action_requests_execution,
     default_teams_command_handlers,
     extract_learning_request,
     process_teams_relay_queue,
@@ -75,6 +76,13 @@ def test_parse_teams_text_action_supports_numbered_email_actions():
     assert parse_teams_text_action("Clarity noise 5").action_type == "move_noise"
     assert parse_teams_text_action("Clarity trash") is None
     assert parse_teams_text_action("show pending approvals") is None
+
+
+def test_text_action_requests_execution_only_for_explicit_phrasing():
+    assert _text_action_requests_execution("Clarity delete 1 and execute")
+    assert _text_action_requests_execution("Clarity review 2 then apply")
+    assert not _text_action_requests_execution("Clarity delete 1")
+    assert not _text_action_requests_execution("Clarity show email move plan")
 
 
 def test_process_teams_relay_payload_rejects_unapproved_sender(tmp_path):
@@ -472,6 +480,102 @@ def test_process_teams_relay_text_action_uses_latest_manifest(tmp_path):
         "propose_email_move_trash",
         "propose_email_move_trash",
     ]
+
+
+def test_process_teams_relay_text_action_can_execute_new_action_only(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path
+    memory_path = root / "memory.duckdb"
+    manifest_path = root / "reports" / "teams-gmail-manifest.json"
+    _write_multi_mailbox_config(root)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="test")
+        source = store.record_source(
+            source_type="email",
+            display_name="Gmail",
+            scope_label="sesexton@gmail.com",
+            access_mode="read_write",
+        )
+        old_item = store.record_item_seen(
+            source_id=source.source_id,
+            external_id="old-gmail-message",
+            item_type="email_message",
+            subject="Old approved message",
+            first_seen_run_id=run.run_id,
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            item_id=old_item.item_id,
+            action_type="propose_email_move_review",
+            approval_status="approved",
+            action_target="Clarity/Review",
+            result="Previously approved.",
+        )
+        store.record_item_seen(
+            source_id=source.source_id,
+            external_id="new-gmail-message",
+            item_type="email_message",
+            subject="New message",
+            first_seen_run_id=run.run_id,
+        )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+    manifest = create_teams_manifest(
+        created_at="2026-08-03T15:30:00Z",
+        manifest_id="manifest-1",
+        items=(
+            TeamsManifestItem(
+                number=1,
+                source_type="gmail",
+                mailbox="sesexton@gmail.com",
+                external_id="new-gmail-message",
+                subject="New message",
+                allowed_actions=("trash", "move_review", "move_noise"),
+            ),
+        ),
+    )
+    write_teams_manifest(manifest_path, manifest)
+    transport = object()
+    build_calls = []
+    execute_calls = []
+
+    def fake_build_gmail_move_transport_from_config(**kwargs):
+        build_calls.append(kwargs)
+        return transport
+
+    def fake_execute_email_moves(**kwargs):
+        execute_calls.append(kwargs)
+        return "# Email Move Execution\n\nMoved one message"
+
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.build_gmail_move_transport_from_config",
+        fake_build_gmail_move_transport_from_config,
+    )
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.execute_email_moves",
+        fake_execute_email_moves,
+    )
+
+    result = process_teams_relay_payload(
+        _payload(text="Clarity delete 1 and execute"),
+        allowed_senders=("scott@example.com",),
+        root=root,
+        memory_path=memory_path,
+        action_manifest_path=manifest_path,
+    )
+
+    assert result.status == "completed"
+    assert "Recorded 1 approved local email action" in result.response_text
+    assert "Moved one message" in result.response_text
+    assert build_calls == [{"root": root}]
+    assert execute_calls[0]["mailboxes"] == ("sesexton@gmail.com",)
+    assert execute_calls[0]["include_gmail_spam_cleanup"] is False
+    assert len(execute_calls[0]["action_ids"]) == 1
 
 
 def test_process_teams_relay_email_move_plan_returns_dry_run(tmp_path):

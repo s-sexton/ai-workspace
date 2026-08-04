@@ -190,6 +190,30 @@ def test_execute_email_moves_can_filter_by_mailbox(tmp_path):
     assert "graph-message-1" not in result
 
 
+def test_execute_email_moves_can_filter_by_action_id(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_multi_mailbox_config(tmp_path)
+    selected_action_id = _seed_approved_email_move(
+        memory_path,
+        source_scope_label="sesexton@gmail.com",
+        message_id="gmail-message-1",
+    )
+    _seed_approved_email_move(
+        memory_path,
+        source_scope_label="sesexton@gmail.com",
+        message_id="gmail-message-2",
+    )
+
+    result = execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        action_ids=(selected_action_id,),
+    )
+
+    assert "Would move message gmail-message-1" in result
+    assert "gmail-message-2" not in result
+
+
 def test_execute_email_moves_filter_without_matches_reports_no_plan(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_multi_mailbox_config(tmp_path)

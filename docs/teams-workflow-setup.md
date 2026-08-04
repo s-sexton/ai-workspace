@@ -256,6 +256,8 @@ Supported commands are read-only:
 -   `Clarity trash 1 2`
 -   `Clarity review 3`
 -   `Clarity noise 4 5`
+-   `Clarity delete 1 and execute`
+-   `Clarity move 2 to review and execute`
 -   `Clarity execute Gmail email moves`
 -   `Clarity execute Outlook email moves`
 -   `Clarity add this to your learning list: [request]`
@@ -268,6 +270,9 @@ The numbered action commands operate on the latest local Teams manifest, which
 is normally written when Clarity sends a Gmail inbox summary to Teams. They
 record approved local email actions only. Provider moves/deletes still require
 the email move executor.
+Adding `and execute`, `then execute`, `execute now`, `and apply`, or
+`then apply` to a numbered action records the approval and immediately runs the
+provider executor for only the newly recorded action IDs.
 
 Use `Clarity show email move plan` to preview the currently approved provider
 move/delete plan from Teams before executing provider writes locally.

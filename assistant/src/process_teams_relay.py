@@ -373,6 +373,9 @@ def process_teams_relay_payload(
             memory_path=memory_path,
             manifest_path=action_manifest_path,
             require_manifest_id=False,
+            execute_after_approval=_text_action_requests_execution(
+                message.text or ""
+            ),
         )
 
     route = route_teams_text_command(message.text or "")
@@ -611,6 +614,13 @@ def parse_teams_text_action(text: str) -> TeamsRelayAction | None:
     return TeamsRelayAction(action_type=action_type, item_numbers=item_numbers)
 
 
+def _text_action_requests_execution(text: str) -> bool:
+    clean_text = " ".join(text.strip().lower().split())
+    return bool(
+        re.search(r"\b(and execute|then execute|execute now|and apply|then apply)\b", clean_text)
+    )
+
+
 def _gmail_mailboxes_from_config(config) -> tuple[str, ...]:
     email_settings = config.email_settings
     return tuple(
@@ -637,6 +647,49 @@ def _provider_writes_disabled_response() -> str:
         "assistant.teamsRelay.allowProviderWrites to true to allow explicit "
         "Teams execute commands."
     )
+
+
+def _execute_provider_writes_for_action_ids(
+    *,
+    config,
+    memory_path: Path | str,
+    mailboxes: Sequence[str],
+    action_ids: Sequence[str],
+) -> str:
+    if not config.teams_relay_settings.allow_provider_writes:
+        return _provider_writes_disabled_response()
+
+    gmail_mailboxes = tuple(mailbox for mailbox in mailboxes if mailbox.endswith("@gmail.com"))
+    graph_mailboxes = tuple(mailbox for mailbox in mailboxes if not mailbox.endswith("@gmail.com"))
+    outputs: list[str] = []
+    if gmail_mailboxes:
+        move_transport = build_gmail_move_transport_from_config(root=config.root)
+        outputs.append(
+            execute_email_moves(
+                root=config.root,
+                memory_path=memory_path,
+                dry_run=False,
+                move_transport=move_transport,
+                gmail_spam_cleanup_transport=None,
+                include_gmail_spam_cleanup=False,
+                mailboxes=gmail_mailboxes,
+                action_ids=action_ids,
+                limit=max(25, len(action_ids)),
+            )
+        )
+    if graph_mailboxes:
+        outputs.append(
+            execute_email_moves(
+                root=config.root,
+                memory_path=memory_path,
+                dry_run=False,
+                move_transport=build_graph_move_transport_from_config(root=config.root),
+                mailboxes=graph_mailboxes,
+                action_ids=action_ids,
+                limit=max(25, len(action_ids)),
+            )
+        )
+    return "\n\n".join(outputs) if outputs else "No provider write actions were eligible."
 
 
 def render_teams_relay_health(
@@ -745,6 +798,7 @@ def _process_teams_action_request(
     memory_path: Path | str,
     manifest_path: Path | str | None,
     require_manifest_id: bool = True,
+    execute_after_approval: bool = False,
 ) -> TeamsCommandResult:
     selected_action = action or message.action
     if selected_action is None:
@@ -791,6 +845,8 @@ def _process_teams_action_request(
         raise TeamsRelayError(f"No email folder policy for action: {action_type}.")
 
     memory = DuckDbMemoryStore(_resolve_path(config.root, Path(memory_path)))
+    recorded_action_ids: list[str] = []
+    action_mailboxes: list[str] = []
     try:
         memory.initialize_schema()
         run = memory.start_run(workflow="teams-relay-action")
@@ -807,7 +863,7 @@ def _process_teams_action_request(
                     f"Email mailbox is not approved for writes: {item.mailbox}"
                 )
             remembered_item = memory.find_item_seen(item.external_id)
-            memory.record_assistant_action(
+            action_record = memory.record_assistant_action(
                 run_id=run.run_id,
                 item_id=remembered_item.item_id if remembered_item else None,
                 action_type=f"propose_email_move_{action_label}",
@@ -819,11 +875,12 @@ def _process_teams_action_request(
                     "No provider write was performed."
                 ),
             )
+            recorded_action_ids.append(action_record.action_id)
+            action_mailboxes.append(item.mailbox)
             recorded += 1
-        response = (
-            f"Recorded {recorded} approved local email action(s) for "
-            f"{target_folder}. Run the email move executor to apply provider writes."
-        )
+        response = f"Recorded {recorded} approved local email action(s) for {target_folder}."
+        if not execute_after_approval:
+            response += " Run the email move executor to apply provider writes."
         memory.record_assistant_action(
             run_id=run.run_id,
             action_type="process_teams_relay_action",
@@ -834,6 +891,14 @@ def _process_teams_action_request(
         memory.finish_run(run.run_id, status="completed", summary=response)
     finally:
         memory.close()
+    if execute_after_approval:
+        execution_response = _execute_provider_writes_for_action_ids(
+            config=config,
+            memory_path=memory_path,
+            mailboxes=tuple(dict.fromkeys(action_mailboxes)),
+            action_ids=tuple(recorded_action_ids),
+        )
+        response = "\n\n".join((response, execution_response))
     return TeamsCommandResult(
         command_id=message.command_id,
         status="completed",
