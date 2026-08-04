@@ -505,6 +505,7 @@ To dry-run approved email moves and record a local audit action:
 
 ``` powershell
 python -m assistant.src.execute_email_moves
+python -m assistant.src.execute_email_moves --mailbox sesexton@gmail.com
 ```
 
 Dry-run move planning re-checks current configuration. The source mailbox must
@@ -518,6 +519,7 @@ To execute approved moves through Microsoft Graph:
 
 ``` powershell
 python -m assistant.src.execute_email_moves --graph --execute
+python -m assistant.src.execute_email_moves --graph --execute --mailbox scott.sexton@sendthisfile.com
 ```
 
 For Microsoft Graph moves, missing `Clarity/...` destination paths are created
@@ -529,6 +531,7 @@ To execute approved Gmail cleanup actions:
 
 ``` powershell
 python -m assistant.src.execute_email_moves --gmail --execute
+python -m assistant.src.execute_email_moves --gmail --execute --mailbox sesexton@gmail.com
 ```
 
 Execution still requires an approved local action, an email source item, a

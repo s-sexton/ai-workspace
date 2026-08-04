@@ -90,6 +90,7 @@ def execute_email_moves(
     move_transport: EmailMoveTransport | None = None,
     gmail_spam_cleanup_transport: GmailSpamCleanupTransport | None = None,
     include_gmail_spam_cleanup: bool = False,
+    mailboxes: Sequence[str] | None = None,
     limit: int = 25,
 ) -> str:
     """Dry-run approved email move actions from local Clarity memory."""
@@ -120,7 +121,11 @@ def execute_email_moves(
     try:
         if not resolved_memory_path.is_file():
             store.initialize_schema()
-        approved_plan = _approved_email_move_plan(store, limit=limit)
+        approved_plan = _approved_email_move_plan(
+            store,
+            limit=limit,
+            mailboxes=mailboxes,
+        )
         if not approved_plan and not gmail_spam_mailboxes:
             return "No approved email moves found."
         if email_settings is None:
@@ -267,6 +272,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             if args.gmail and args.execute
             else None,
             include_gmail_spam_cleanup=args.gmail and args.execute,
+            mailboxes=tuple(args.mailbox),
             limit=args.limit,
         )
     )
@@ -321,7 +327,13 @@ def _approved_email_move_plan(
     store: DuckDbMemoryStore,
     *,
     limit: int,
+    mailboxes: Sequence[str] | None = None,
 ) -> tuple[EmailMovePlanItem, ...]:
+    mailbox_filter = {
+        mailbox.strip().lower()
+        for mailbox in mailboxes or ()
+        if mailbox.strip()
+    }
     approved_actions = store.actions_by_approval_status("approved", limit=limit)
     return tuple(
         EmailMovePlanItem(
@@ -337,6 +349,10 @@ def _approved_email_move_plan(
         if action.action_type.startswith("propose_email_move_")
         and action.item_external_id
         and action.action_target
+        and (
+            not mailbox_filter
+            or (action.source_scope_label or "").strip().lower() in mailbox_filter
+        )
     )
 
 
@@ -658,6 +674,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Use GOOGLE_ACCESS_TOKEN instead of refresh-token credentials.",
     )
     parser.add_argument("--limit", type=int, default=25)
+    parser.add_argument(
+        "--mailbox",
+        action="append",
+        default=[],
+        help=(
+            "Limit approved move execution or dry-run output to this mailbox. "
+            "Repeat for multiple mailboxes."
+        ),
+    )
     parser.add_argument(
         "--memory",
         default=str(DEFAULT_MEMORY_PATH),

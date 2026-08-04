@@ -164,6 +164,48 @@ def test_execute_email_moves_allows_specific_clarity_target_folder(tmp_path):
     assert "- Destination Clarity/Authorize.net: 1 move(s)" in result
 
 
+def test_execute_email_moves_can_filter_by_mailbox(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_multi_mailbox_config(tmp_path)
+    _seed_approved_email_move(
+        memory_path,
+        source_scope_label="sesexton@gmail.com",
+        message_id="gmail-message-1",
+    )
+    _seed_approved_email_move(
+        memory_path,
+        source_scope_label="scott.sexton@sendthisfile.com",
+        message_id="graph-message-1",
+    )
+
+    result = execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        mailboxes=("sesexton@gmail.com",),
+    )
+
+    assert "Would move message gmail-message-1" in result
+    assert "graph-message-1" not in result
+
+
+def test_execute_email_moves_filter_without_matches_reports_no_plan(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_multi_mailbox_config(tmp_path)
+    _seed_approved_email_move(
+        memory_path,
+        source_scope_label="sesexton@gmail.com",
+        message_id="gmail-message-1",
+    )
+
+    result = execute_email_moves(
+        root=tmp_path,
+        memory_path=memory_path,
+        mailboxes=("missing@example.invalid",),
+    )
+
+    assert result == "No approved email moves found."
+
+
 def test_execute_email_moves_blocks_target_folder_outside_namespace(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
@@ -428,6 +470,35 @@ def test_main_prints_dry_run(tmp_path, monkeypatch, capsys):
     ) in output
 
 
+def test_main_can_filter_dry_run_by_mailbox(tmp_path, monkeypatch, capsys):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    _write_multi_mailbox_config(tmp_path)
+    _seed_approved_email_move(
+        memory_path,
+        source_scope_label="sesexton@gmail.com",
+        message_id="gmail-message-1",
+    )
+    _seed_approved_email_move(
+        memory_path,
+        source_scope_label="scott.sexton@sendthisfile.com",
+        message_id="graph-message-1",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    main(
+        [
+            "--memory",
+            str(memory_path),
+            "--mailbox",
+            "sesexton@gmail.com",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert "gmail-message-1" in output
+    assert "graph-message-1" not in output
+
+
 def test_main_execute_without_graph_still_fails_closed(tmp_path, monkeypatch, capsys):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     _write_config(tmp_path, "scott.sexton@sendthisfile.com", "read_write")
@@ -589,6 +660,37 @@ def _write_config(root, mailbox, access_mode, *, gmail_spam_cleanup=False):
             }}
           }}
         }}
+        """,
+        encoding="utf-8",
+    )
+
+
+def _write_multi_mailbox_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "email": {
+              "approvedMailboxes": [
+                {"address": "sesexton@gmail.com", "accessMode": "read_write"},
+                {
+                  "address": "scott.sexton@sendthisfile.com",
+                  "accessMode": "read_write"
+                }
+              ],
+              "defaultMailbox": "sesexton@gmail.com",
+              "folderNamespace": "Clarity",
+              "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items"
+              },
+              "maxMessages": 25
+            }
+          }
+        }
         """,
         encoding="utf-8",
     )
