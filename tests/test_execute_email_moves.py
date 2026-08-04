@@ -6,6 +6,8 @@ from typing import Any, Mapping
 import pytest
 
 from assistant.src.execute_email_moves import (
+    _console_safe_text,
+    _print_console_safe,
     build_gmail_move_transport_from_config,
     build_graph_move_transport_from_config,
     execute_email_moves,
@@ -497,6 +499,14 @@ def test_main_can_filter_dry_run_by_mailbox(tmp_path, monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "gmail-message-1" in output
     assert "graph-message-1" not in output
+
+
+def test_print_console_safe_replaces_unencodable_text(capsys):
+    assert _console_safe_text("Company\u2120", encoding="cp1252") == "Company?"
+
+    _print_console_safe("Company\u2120")
+
+    assert "Company" in capsys.readouterr().out
 
 
 def test_main_execute_without_graph_still_fails_closed(tmp_path, monkeypatch, capsys):

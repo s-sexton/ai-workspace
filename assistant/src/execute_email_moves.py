@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, Sequence
@@ -263,7 +264,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if args.gmail and args.execute
         else None
     )
-    print(
+    _print_console_safe(
         execute_email_moves(
             memory_path=args.memory,
             dry_run=not args.execute,
@@ -276,6 +277,23 @@ def main(argv: Sequence[str] | None = None) -> None:
             limit=args.limit,
         )
     )
+
+
+def _print_console_safe(text: str) -> None:
+    """Print text without crashing on narrow Windows console encodings."""
+
+    print(_console_safe_text(text, encoding=sys.stdout.encoding))
+
+
+def _console_safe_text(text: str, *, encoding: str | None = None) -> str:
+    """Return text representable by a console encoding."""
+
+    encoding = encoding or "utf-8"
+    safe_text = text.encode(encoding, errors="replace").decode(
+        encoding,
+        errors="replace",
+    )
+    return safe_text
 
 
 def build_graph_move_transport_from_config(
