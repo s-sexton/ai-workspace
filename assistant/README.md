@@ -671,6 +671,7 @@ python -m assistant.src.process_teams_relay "show pending approvals"
 python -m assistant.src.process_teams_relay "show open COMP tickets"
 python -m assistant.src.process_teams_relay "show Gmail inbox"
 python -m assistant.src.process_teams_relay "Clarity health"
+python -m assistant.src.process_teams_relay "Clarity trash 1 2"
 python -m assistant.src.process_teams_relay "Clarity add this to your learning list: remember this pattern"
 ```
 
@@ -697,6 +698,9 @@ Supported email actions can record approved local cleanup actions for
 `trash`, `move_review`, and `move_noise`, but they do not move or delete email
 directly. Run the existing email move executor afterward to apply approved
 provider writes.
+
+Plain Teams replies can also approve latest-manifest items by number:
+`Clarity trash 1 2`, `Clarity review 3`, or `Clarity noise 4 5`.
 
 For an always-running local relay watcher, use:
 

@@ -194,6 +194,9 @@ The currently supported live commands are read-only:
 -   `show Gmail inbox`
 -   `show pending approvals`
 -   `Clarity health`
+-   `Clarity trash 1 2`
+-   `Clarity review 3`
+-   `Clarity noise 4 5`
 
 Unsupported commands and unapproved senders are moved to
 `clarity-deadletter`.
@@ -206,6 +209,10 @@ Supported manifest-backed Teams card actions can record approved local email
 cleanup actions for `trash`, `move_review`, and `move_noise`. These actions do
 not perform provider writes; Gmail or Graph execution still happens through the
 existing email move executor.
+
+Plain text action replies use the same manifest-backed safety model. For
+example, `Clarity trash 1 2` approves the current manifest items numbered 1 and
+2 for the configured trash destination.
 
 ## Future Slices
 

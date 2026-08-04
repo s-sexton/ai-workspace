@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ from common.teams import (
 from common.teams_manifest import read_teams_manifest, resolve_manifest_items
 from common.teams_relay import (
     InMemoryTeamsRelayQueue,
+    TeamsRelayAction,
     TeamsRelayError,
     TeamsRelayMessage,
     TeamsRelayQueue,
@@ -357,6 +359,16 @@ def process_teams_relay_payload(
             memory_path=memory_path,
             manifest_path=action_manifest_path,
         )
+    text_action = parse_teams_text_action(message.text or "")
+    if text_action is not None:
+        return _process_teams_action_request(
+            message,
+            action=text_action,
+            root=root,
+            memory_path=memory_path,
+            manifest_path=action_manifest_path,
+            require_manifest_id=False,
+        )
 
     route = route_teams_text_command(message.text or "")
     if route is None:
@@ -508,6 +520,32 @@ def extract_learning_request(text: str) -> str | None:
     return None
 
 
+def parse_teams_text_action(text: str) -> TeamsRelayAction | None:
+    """Parse a small approved-action command from Teams message text."""
+
+    clean_text = " ".join(text.strip().lower().split())
+    if clean_text.startswith("clarity "):
+        clean_text = clean_text.removeprefix("clarity ").strip()
+    elif clean_text.startswith("@clarity "):
+        clean_text = clean_text.removeprefix("@clarity ").strip()
+
+    action_type: str | None = None
+    if re.search(r"\b(trash|delete|deleted)\b", clean_text):
+        action_type = "trash"
+    elif re.search(r"\b(review)\b", clean_text):
+        action_type = "move_review"
+    elif re.search(r"\b(noise|noisy)\b", clean_text):
+        action_type = "move_noise"
+
+    if action_type is None:
+        return None
+
+    item_numbers = tuple(int(value) for value in re.findall(r"\b\d+\b", clean_text))
+    if not item_numbers:
+        return None
+    return TeamsRelayAction(action_type=action_type, item_numbers=item_numbers)
+
+
 def render_teams_relay_health(
     *,
     root: Path | str | None = None,
@@ -609,13 +647,16 @@ def remove_watcher_pid_file_if_current(path: Path | str, *, pid: int | None = No
 def _process_teams_action_request(
     message: TeamsRelayMessage,
     *,
+    action: TeamsRelayAction | None = None,
     root: Path | str | None,
     memory_path: Path | str,
     manifest_path: Path | str | None,
+    require_manifest_id: bool = True,
 ) -> TeamsCommandResult:
-    if message.action is None:
+    selected_action = action or message.action
+    if selected_action is None:
         raise TeamsRelayError("Teams action is required.")
-    action_type = message.action.action_type
+    action_type = selected_action.action_type
     action_label = _email_action_label(action_type)
     if action_label is None:
         response = "Teams card action is not supported yet."
@@ -630,9 +671,9 @@ def _process_teams_action_request(
             status="unsupported_action",
             response_text=response,
         )
-    if message.action.manifest_id is None:
+    if require_manifest_id and selected_action.manifest_id is None:
         raise TeamsRelayError("Teams action manifestId is required.")
-    if not message.action.item_numbers:
+    if not selected_action.item_numbers:
         raise TeamsRelayError("Teams action itemNumbers are required.")
 
     config = load_workspace_config(root, include_process_env=True)
@@ -641,11 +682,14 @@ def _process_teams_action_request(
         Path(manifest_path or Path("reports") / "teams-gmail-manifest.json"),
     )
     manifest = read_teams_manifest(resolved_manifest_path)
-    if manifest.manifest_id != message.action.manifest_id:
+    if (
+        selected_action.manifest_id is not None
+        and manifest.manifest_id != selected_action.manifest_id
+    ):
         raise TeamsRelayError("Teams action manifestId does not match local manifest.")
     items = resolve_manifest_items(
         manifest,
-        item_numbers=message.action.item_numbers,
+        item_numbers=selected_action.item_numbers,
         required_action=action_type,
     )
     email_settings = config.email_settings

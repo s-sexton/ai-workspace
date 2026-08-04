@@ -18,6 +18,7 @@ from assistant.src.process_teams_relay import (
     process_teams_relay_queue,
     process_next_teams_relay_message,
     process_teams_relay_payload,
+    parse_teams_text_action,
     remove_watcher_pid_file_if_current,
     render_teams_relay_health,
     route_teams_text_command,
@@ -48,6 +49,18 @@ def test_extract_learning_request_returns_requested_content():
         == "summarize noisy vendors"
     )
     assert extract_learning_request("Clarity add this to your learning list:") is None
+
+
+def test_parse_teams_text_action_supports_numbered_email_actions():
+    action = parse_teams_text_action("Clarity trash 1 2, 3")
+
+    assert action is not None
+    assert action.action_type == "trash"
+    assert action.item_numbers == (1, 2, 3)
+    assert parse_teams_text_action("Clarity move 4 to review").action_type == "move_review"
+    assert parse_teams_text_action("Clarity noise 5").action_type == "move_noise"
+    assert parse_teams_text_action("Clarity trash") is None
+    assert parse_teams_text_action("show pending approvals") is None
 
 
 def test_process_teams_relay_payload_rejects_unapproved_sender(tmp_path):
@@ -370,6 +383,81 @@ def test_process_teams_relay_action_records_approved_email_action(tmp_path):
         store.close()
     assert approved[0].action_type == "propose_email_move_trash"
     assert approved[0].action_target == "Deleted Items"
+
+
+def test_process_teams_relay_text_action_uses_latest_manifest(tmp_path):
+    root = tmp_path
+    memory_path = root / "memory.duckdb"
+    manifest_path = root / "reports" / "teams-gmail-manifest.json"
+    _write_email_config(root)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="test")
+        source = store.record_source(
+            source_type="email",
+            display_name="Gmail",
+            scope_label="sesexton@gmail.com",
+            access_mode="read_write",
+        )
+        for external_id, subject in (
+            ("gmail-message-1", "First message"),
+            ("gmail-message-2", "Second message"),
+        ):
+            store.record_item_seen(
+                source_id=source.source_id,
+                external_id=external_id,
+                item_type="email_message",
+                subject=subject,
+                first_seen_run_id=run.run_id,
+            )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+    manifest = create_teams_manifest(
+        created_at="2026-08-03T15:30:00Z",
+        manifest_id="manifest-1",
+        items=(
+            TeamsManifestItem(
+                number=1,
+                source_type="gmail",
+                mailbox="sesexton@gmail.com",
+                external_id="gmail-message-1",
+                subject="First message",
+                allowed_actions=("trash", "move_review", "move_noise"),
+            ),
+            TeamsManifestItem(
+                number=2,
+                source_type="gmail",
+                mailbox="sesexton@gmail.com",
+                external_id="gmail-message-2",
+                subject="Second message",
+                allowed_actions=("trash", "move_review", "move_noise"),
+            ),
+        ),
+    )
+    write_teams_manifest(manifest_path, manifest)
+
+    result = process_teams_relay_payload(
+        _payload(text="Clarity trash 1 2"),
+        allowed_senders=("scott@example.com",),
+        root=root,
+        memory_path=memory_path,
+        action_manifest_path=manifest_path,
+    )
+
+    assert result.status == "completed"
+    assert "Recorded 2 approved local email action(s)" in result.response_text
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        approved = store.actions_by_approval_status("approved", limit=10)
+    finally:
+        store.close()
+    assert [action.action_type for action in approved[:2]] == [
+        "propose_email_move_trash",
+        "propose_email_move_trash",
+    ]
 
 
 def test_teams_relay_poll_interval_uses_active_weekday_window():

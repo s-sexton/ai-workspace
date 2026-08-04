@@ -250,11 +250,19 @@ Supported commands are read-only:
 -   `show Gmail inbox`
 -   `show pending approvals`
 -   `Clarity health`
+-   `Clarity trash 1 2`
+-   `Clarity review 3`
+-   `Clarity noise 4 5`
 -   `Clarity add this to your learning list: [request]`
 
 Successful commands and supported manifest-backed card actions are completed in
 `clarity-inbound`. Rejected senders, unsupported commands, unsupported actions,
 and failed commands are moved to `clarity-deadletter`.
+
+The numbered action commands operate on the latest local Teams manifest, which
+is normally written when Clarity sends a Gmail inbox summary to Teams. They
+record approved local email actions only. Provider moves/deletes still require
+the email move executor.
 
 When `--post-reply` is enabled, Clarity records a `post_teams_relay_reply` audit
 entry with the Teams webhook status code after a successful reply post.
