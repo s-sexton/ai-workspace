@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from assistant.src.ask_memory import answer_memory_question
 from assistant.src.delegate_task import delegate_task
+from assistant.src.execute_email_moves import execute_email_moves
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from assistant.src.send_gmail_teams_summary import render_gmail_teams_summary
 from assistant.src.send_jira_teams_summary import render_jira_teams_summary
@@ -418,6 +419,8 @@ def route_teams_text_command(text: str) -> str | None:
         return "health"
     if "pending" in clean_text or "approval" in clean_text:
         return "pending_approvals"
+    if "email" in clean_text and "move" in clean_text and "plan" in clean_text:
+        return "email_move_plan"
     if "comp" in clean_text and "ticket" in clean_text:
         return "open_comp_tickets"
     if "gmail" in clean_text and ("inbox" in clean_text or "email" in clean_text):
@@ -470,6 +473,14 @@ def default_teams_command_handlers(
             mention=None,
         )
 
+    def email_move_plan(_: TeamsRelayMessage) -> str:
+        return execute_email_moves(
+            root=root,
+            memory_path=memory_path,
+            dry_run=True,
+            limit=25,
+        )
+
     def learning_request(message: TeamsRelayMessage) -> str:
         request = extract_learning_request(message.text or "")
         if request is None:
@@ -498,6 +509,7 @@ def default_teams_command_handlers(
         "pending_approvals": pending_approvals,
         "open_comp_tickets": open_comp_tickets,
         "gmail_inbox": gmail_inbox,
+        "email_move_plan": email_move_plan,
         "learning_request": learning_request,
         "health": health,
     }
@@ -836,8 +848,8 @@ def _unsupported_command_response() -> str:
     return (
         "I don't understand what you are asking yet. I can process these Teams "
         "commands locally right now: show open COMP tickets, show Gmail inbox, "
-        "show pending approvals, Clarity health, or Clarity add this to your "
-        "learning list: [request]."
+        "show pending approvals, Clarity show email move plan, Clarity health, "
+        "or Clarity add this to your learning list: [request]."
     )
 
 

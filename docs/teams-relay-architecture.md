@@ -193,6 +193,7 @@ The currently supported live commands are read-only:
 -   `show open COMP tickets`
 -   `show Gmail inbox`
 -   `show pending approvals`
+-   `Clarity show email move plan`
 -   `Clarity health`
 -   `Clarity trash 1 2`
 -   `Clarity review 3`
@@ -213,6 +214,9 @@ existing email move executor.
 Plain text action replies use the same manifest-backed safety model. For
 example, `Clarity trash 1 2` approves the current manifest items numbered 1 and
 2 for the configured trash destination.
+
+`Clarity show email move plan` renders the existing email move dry-run through
+Teams so remote approvals can be inspected before provider writes are executed.
 
 ## Future Slices
 

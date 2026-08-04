@@ -32,6 +32,7 @@ def test_route_teams_text_command_supports_read_only_commands():
     assert route_teams_text_command("show open COMP tickets") == "open_comp_tickets"
     assert route_teams_text_command("show Gmail inbox") == "gmail_inbox"
     assert route_teams_text_command("what needs approval?") == "pending_approvals"
+    assert route_teams_text_command("Clarity show email move plan") == "email_move_plan"
     assert route_teams_text_command("Clarity health") == "health"
     assert (
         route_teams_text_command(
@@ -458,6 +459,51 @@ def test_process_teams_relay_text_action_uses_latest_manifest(tmp_path):
         "propose_email_move_trash",
         "propose_email_move_trash",
     ]
+
+
+def test_process_teams_relay_email_move_plan_returns_dry_run(tmp_path):
+    root = tmp_path
+    memory_path = root / "memory.duckdb"
+    _write_email_config(root)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="test")
+        source = store.record_source(
+            source_type="email",
+            display_name="Gmail",
+            scope_label="sesexton@gmail.com",
+            access_mode="read_write",
+        )
+        item = store.record_item_seen(
+            source_id=source.source_id,
+            external_id="gmail-message-1",
+            item_type="email_message",
+            subject="Move me",
+            first_seen_run_id=run.run_id,
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            item_id=item.item_id,
+            action_type="propose_email_move_review",
+            approval_status="approved",
+            action_target="Clarity/Review",
+            result="Approved from Teams.",
+        )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+
+    result = process_teams_relay_payload(
+        _payload(text="Clarity show email move plan"),
+        allowed_senders=("scott@example.com",),
+        root=root,
+        memory_path=memory_path,
+    )
+
+    assert result.status == "completed"
+    assert "# Email Move Dry Run" in result.response_text
+    assert "Would move message gmail-message-1" in result.response_text
 
 
 def test_teams_relay_poll_interval_uses_active_weekday_window():

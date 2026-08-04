@@ -670,6 +670,7 @@ To exercise the local Teams Workflow relay processor without Azure:
 python -m assistant.src.process_teams_relay "show pending approvals"
 python -m assistant.src.process_teams_relay "show open COMP tickets"
 python -m assistant.src.process_teams_relay "show Gmail inbox"
+python -m assistant.src.process_teams_relay "Clarity show email move plan"
 python -m assistant.src.process_teams_relay "Clarity health"
 python -m assistant.src.process_teams_relay "Clarity trash 1 2"
 python -m assistant.src.process_teams_relay "Clarity add this to your learning list: remember this pattern"

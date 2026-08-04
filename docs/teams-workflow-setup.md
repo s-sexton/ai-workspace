@@ -249,6 +249,7 @@ Supported commands are read-only:
 -   `show open COMP tickets`
 -   `show Gmail inbox`
 -   `show pending approvals`
+-   `Clarity show email move plan`
 -   `Clarity health`
 -   `Clarity trash 1 2`
 -   `Clarity review 3`
@@ -263,6 +264,9 @@ The numbered action commands operate on the latest local Teams manifest, which
 is normally written when Clarity sends a Gmail inbox summary to Teams. They
 record approved local email actions only. Provider moves/deletes still require
 the email move executor.
+
+Use `Clarity show email move plan` to preview the currently approved provider
+move/delete plan from Teams before executing provider writes locally.
 
 When `--post-reply` is enabled, Clarity records a `post_teams_relay_reply` audit
 entry with the Teams webhook status code after a successful reply post.
