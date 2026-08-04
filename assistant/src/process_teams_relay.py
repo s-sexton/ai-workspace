@@ -15,7 +15,11 @@ from zoneinfo import ZoneInfo
 
 from assistant.src.ask_memory import answer_memory_question
 from assistant.src.delegate_task import delegate_task
-from assistant.src.execute_email_moves import execute_email_moves
+from assistant.src.execute_email_moves import (
+    build_gmail_move_transport_from_config,
+    build_graph_move_transport_from_config,
+    execute_email_moves,
+)
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from assistant.src.send_gmail_teams_summary import render_gmail_teams_summary
 from assistant.src.send_jira_teams_summary import render_jira_teams_summary
@@ -421,6 +425,18 @@ def route_teams_text_command(text: str) -> str | None:
         return "pending_approvals"
     if "email" in clean_text and "move" in clean_text and "plan" in clean_text:
         return "email_move_plan"
+    if (
+        ("execute" in clean_text or "apply" in clean_text)
+        and "gmail" in clean_text
+        and ("email" in clean_text or "move" in clean_text)
+    ):
+        return "execute_gmail_email_moves"
+    if (
+        ("execute" in clean_text or "apply" in clean_text)
+        and ("outlook" in clean_text or "graph" in clean_text)
+        and ("email" in clean_text or "move" in clean_text)
+    ):
+        return "execute_graph_email_moves"
     if "comp" in clean_text and "ticket" in clean_text:
         return "open_comp_tickets"
     if "gmail" in clean_text and ("inbox" in clean_text or "email" in clean_text):
@@ -481,6 +497,37 @@ def default_teams_command_handlers(
             limit=25,
         )
 
+    def execute_gmail_email_moves(_: TeamsRelayMessage) -> str:
+        config = load_workspace_config(root, include_process_env=True)
+        gmail_mailboxes = _gmail_mailboxes_from_config(config)
+        if not gmail_mailboxes:
+            return "No configured Gmail mailboxes are approved for write access."
+        move_transport = build_gmail_move_transport_from_config(root=config.root)
+        return execute_email_moves(
+            root=config.root,
+            memory_path=memory_path,
+            dry_run=False,
+            move_transport=move_transport,
+            gmail_spam_cleanup_transport=move_transport,
+            include_gmail_spam_cleanup=True,
+            mailboxes=gmail_mailboxes,
+            limit=25,
+        )
+
+    def execute_graph_email_moves(_: TeamsRelayMessage) -> str:
+        config = load_workspace_config(root, include_process_env=True)
+        graph_mailboxes = _graph_mailboxes_from_config(config)
+        if not graph_mailboxes:
+            return "No configured Outlook/Graph mailboxes are approved for write access."
+        return execute_email_moves(
+            root=config.root,
+            memory_path=memory_path,
+            dry_run=False,
+            move_transport=build_graph_move_transport_from_config(root=config.root),
+            mailboxes=graph_mailboxes,
+            limit=25,
+        )
+
     def learning_request(message: TeamsRelayMessage) -> str:
         request = extract_learning_request(message.text or "")
         if request is None:
@@ -510,6 +557,8 @@ def default_teams_command_handlers(
         "open_comp_tickets": open_comp_tickets,
         "gmail_inbox": gmail_inbox,
         "email_move_plan": email_move_plan,
+        "execute_gmail_email_moves": execute_gmail_email_moves,
+        "execute_graph_email_moves": execute_graph_email_moves,
         "learning_request": learning_request,
         "health": health,
     }
@@ -556,6 +605,26 @@ def parse_teams_text_action(text: str) -> TeamsRelayAction | None:
     if not item_numbers:
         return None
     return TeamsRelayAction(action_type=action_type, item_numbers=item_numbers)
+
+
+def _gmail_mailboxes_from_config(config) -> tuple[str, ...]:
+    email_settings = config.email_settings
+    return tuple(
+        mailbox
+        for mailbox in email_settings.approved_mailboxes
+        if mailbox.endswith("@gmail.com")
+        and email_settings.access_mode_for(mailbox) == "read_write"
+    )
+
+
+def _graph_mailboxes_from_config(config) -> tuple[str, ...]:
+    email_settings = config.email_settings
+    return tuple(
+        mailbox
+        for mailbox in email_settings.approved_mailboxes
+        if not mailbox.endswith("@gmail.com")
+        and email_settings.access_mode_for(mailbox) == "read_write"
+    )
 
 
 def render_teams_relay_health(
@@ -849,6 +918,7 @@ def _unsupported_command_response() -> str:
         "I don't understand what you are asking yet. I can process these Teams "
         "commands locally right now: show open COMP tickets, show Gmail inbox, "
         "show pending approvals, Clarity show email move plan, Clarity health, "
+        "Clarity execute Gmail email moves, Clarity execute Outlook email moves, "
         "or Clarity add this to your learning list: [request]."
     )
 

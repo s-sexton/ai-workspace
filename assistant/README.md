@@ -676,6 +676,8 @@ python -m assistant.src.process_teams_relay "show Gmail inbox"
 python -m assistant.src.process_teams_relay "Clarity show email move plan"
 python -m assistant.src.process_teams_relay "Clarity health"
 python -m assistant.src.process_teams_relay "Clarity trash 1 2"
+python -m assistant.src.process_teams_relay "Clarity execute Gmail email moves"
+python -m assistant.src.process_teams_relay "Clarity execute Outlook email moves"
 python -m assistant.src.process_teams_relay "Clarity add this to your learning list: remember this pattern"
 ```
 
@@ -705,6 +707,9 @@ provider writes.
 
 Plain Teams replies can also approve latest-manifest items by number:
 `Clarity trash 1 2`, `Clarity review 3`, or `Clarity noise 4 5`.
+After reviewing `Clarity show email move plan`, explicit provider-scoped
+commands can apply approved actions: `Clarity execute Gmail email moves` or
+`Clarity execute Outlook email moves`.
 
 For an always-running local relay watcher, use:
 

@@ -8,12 +8,17 @@ from zoneinfo import ZoneInfo
 from common.memory import DuckDbMemoryStore
 from common.azure_storage_queue import RELAY_PAYLOAD_ERROR_KEY
 from common.teams import TeamsWebhookResponse
-from common.teams_manifest import TeamsManifestItem, create_teams_manifest, write_teams_manifest
-from common.teams_relay import InMemoryTeamsRelayQueue
+from common.teams_manifest import (
+    TeamsManifestItem,
+    create_teams_manifest,
+    write_teams_manifest,
+)
+from common.teams_relay import InMemoryTeamsRelayQueue, TeamsRelayMessage
 from assistant.src.process_teams_relay import (
     MAX_TEAMS_RELAY_REPLY_CHARS,
     TeamsCommandResult,
     _format_teams_relay_result,
+    default_teams_command_handlers,
     extract_learning_request,
     process_teams_relay_queue,
     process_next_teams_relay_message,
@@ -33,6 +38,14 @@ def test_route_teams_text_command_supports_read_only_commands():
     assert route_teams_text_command("show Gmail inbox") == "gmail_inbox"
     assert route_teams_text_command("what needs approval?") == "pending_approvals"
     assert route_teams_text_command("Clarity show email move plan") == "email_move_plan"
+    assert (
+        route_teams_text_command("Clarity execute Gmail email moves")
+        == "execute_gmail_email_moves"
+    )
+    assert (
+        route_teams_text_command("Clarity apply Outlook email moves")
+        == "execute_graph_email_moves"
+    )
     assert route_teams_text_command("Clarity health") == "health"
     assert (
         route_teams_text_command(
@@ -506,6 +519,75 @@ def test_process_teams_relay_email_move_plan_returns_dry_run(tmp_path):
     assert "Would move message gmail-message-1" in result.response_text
 
 
+def test_execute_gmail_email_moves_handler_filters_to_gmail_mailboxes(
+    tmp_path,
+    monkeypatch,
+):
+    _write_multi_mailbox_config(tmp_path)
+    calls = []
+
+    def fake_build_gmail_move_transport_from_config(**kwargs):
+        calls.append(("build_gmail", kwargs))
+        return object()
+
+    def fake_execute_email_moves(**kwargs):
+        calls.append(("execute", kwargs))
+        return "Executed Gmail moves"
+
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.build_gmail_move_transport_from_config",
+        fake_build_gmail_move_transport_from_config,
+    )
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.execute_email_moves",
+        fake_execute_email_moves,
+    )
+
+    response = default_teams_command_handlers(root=tmp_path)[
+        "execute_gmail_email_moves"
+    ](_message())
+
+    assert response == "Executed Gmail moves"
+    assert calls[0] == ("build_gmail", {"root": tmp_path})
+    assert calls[1][1]["dry_run"] is False
+    assert calls[1][1]["mailboxes"] == ("sesexton@gmail.com",)
+    assert calls[1][1]["include_gmail_spam_cleanup"] is True
+
+
+def test_execute_graph_email_moves_handler_filters_to_non_gmail_mailboxes(
+    tmp_path,
+    monkeypatch,
+):
+    _write_multi_mailbox_config(tmp_path)
+    calls = []
+
+    def fake_build_graph_move_transport_from_config(**kwargs):
+        calls.append(("build_graph", kwargs))
+        return object()
+
+    def fake_execute_email_moves(**kwargs):
+        calls.append(("execute", kwargs))
+        return "Executed Graph moves"
+
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.build_graph_move_transport_from_config",
+        fake_build_graph_move_transport_from_config,
+    )
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.execute_email_moves",
+        fake_execute_email_moves,
+    )
+
+    response = default_teams_command_handlers(root=tmp_path)[
+        "execute_graph_email_moves"
+    ](_message())
+
+    assert response == "Executed Graph moves"
+    assert calls[0] == ("build_graph", {"root": tmp_path})
+    assert calls[1][1]["dry_run"] is False
+    assert calls[1][1]["mailboxes"] == ("scott.sexton@sendthisfile.com",)
+
+
 def test_teams_relay_poll_interval_uses_active_weekday_window():
     central = ZoneInfo("America/Chicago")
 
@@ -659,6 +741,10 @@ def _payload(
     }
 
 
+def _message():
+    return TeamsRelayMessage.from_mapping(_payload())
+
+
 def _write_email_config(root):
     config_dir = root / "config"
     config_dir.mkdir()
@@ -679,6 +765,48 @@ def _write_email_config(root):
                             "review": "Clarity/Review",
                             "noise": "Clarity/Noise",
                             "trash": "Deleted Items",
+                        },
+                        "maxMessages": 25,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_multi_mailbox_config(root):
+    config_dir = root / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "assistant": {
+                    "email": {
+                        "approvedMailboxes": [
+                            {
+                                "address": "sesexton@gmail.com",
+                                "accessMode": "read_write",
+                            },
+                            {
+                                "address": "scott.sexton@sendthisfile.com",
+                                "accessMode": "read_write",
+                            },
+                            {
+                                "address": "read-only@example.invalid",
+                                "accessMode": "read",
+                            },
+                        ],
+                        "defaultMailbox": "sesexton@gmail.com",
+                        "folderNamespace": "Clarity",
+                        "folderPolicy": {
+                            "review": "Clarity/Review",
+                            "noise": "Clarity/Noise",
+                            "trash": "Deleted Items",
+                        },
+                        "gmailCleanupPolicy": {
+                            "trashSpam": True,
+                            "mailboxes": ["sesexton@gmail.com"],
                         },
                         "maxMessages": 25,
                     }

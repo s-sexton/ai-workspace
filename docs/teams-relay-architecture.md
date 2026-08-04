@@ -198,6 +198,8 @@ The currently supported live commands are read-only:
 -   `Clarity trash 1 2`
 -   `Clarity review 3`
 -   `Clarity noise 4 5`
+-   `Clarity execute Gmail email moves`
+-   `Clarity execute Outlook email moves`
 
 Unsupported commands and unapproved senders are moved to
 `clarity-deadletter`.
@@ -217,6 +219,9 @@ example, `Clarity trash 1 2` approves the current manifest items numbered 1 and
 
 `Clarity show email move plan` renders the existing email move dry-run through
 Teams so remote approvals can be inspected before provider writes are executed.
+The explicit execute commands call the existing email move executor with a
+provider-scoped mailbox filter, so Gmail and Outlook actions are not mixed into
+one provider transport.
 
 ## Future Slices
 

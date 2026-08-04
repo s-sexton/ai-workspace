@@ -254,6 +254,8 @@ Supported commands are read-only:
 -   `Clarity trash 1 2`
 -   `Clarity review 3`
 -   `Clarity noise 4 5`
+-   `Clarity execute Gmail email moves`
+-   `Clarity execute Outlook email moves`
 -   `Clarity add this to your learning list: [request]`
 
 Successful commands and supported manifest-backed card actions are completed in
@@ -267,6 +269,12 @@ the email move executor.
 
 Use `Clarity show email move plan` to preview the currently approved provider
 move/delete plan from Teams before executing provider writes locally.
+
+Use the explicit execute commands only after reviewing the move plan. They run
+the existing provider move executor against approved local actions, scoped by
+provider mailbox: Gmail commands only operate on approved `@gmail.com`
+mailboxes, and Outlook commands only operate on approved non-Gmail Graph
+mailboxes.
 
 When `--post-reply` is enabled, Clarity records a `post_teams_relay_reply` audit
 entry with the Teams webhook status code after a successful reply post.
