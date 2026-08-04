@@ -40,6 +40,7 @@ def enqueue_teams_relay_message(
     root: Path | str | None = None,
     sender_email: str = "scott.sexton@sendthisfile.com",
     sender_name: str = "Scott Sexton",
+    sender_object_id: str | None = None,
     team: str = "AI Workspace",
     channel: str = "Clarity",
     command_id: str | None = None,
@@ -75,6 +76,7 @@ def enqueue_teams_relay_message(
         manifest_id=manifest_id,
         sender_email=sender_email,
         sender_name=sender_name,
+        sender_object_id=sender_object_id,
         team=team,
         channel=channel,
     )
@@ -97,6 +99,7 @@ def _payload(
     manifest_id: str | None,
     sender_email: str,
     sender_name: str,
+    sender_object_id: str | None,
     team: str,
     channel: str,
 ) -> Mapping[str, Any]:
@@ -108,6 +111,7 @@ def _payload(
         "from": {
             "displayName": sender_name,
             "email": sender_email,
+            "aadObjectId": sender_object_id,
         },
         "conversation": {
             "team": team,
@@ -144,6 +148,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         manifest_path=args.manifest,
         sender_email=args.sender,
         sender_name=args.sender_name,
+        sender_object_id=args.sender_object_id,
         team=args.team,
         channel=args.channel,
     )
@@ -175,6 +180,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--sender", default="scott.sexton@sendthisfile.com")
     parser.add_argument("--sender-name", default="Scott Sexton")
+    parser.add_argument("--sender-object-id")
     parser.add_argument("--team", default="AI Workspace")
     parser.add_argument("--channel", default="Clarity")
     args = parser.parse_args(argv)

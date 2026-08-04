@@ -201,6 +201,38 @@ class DailyBriefSettings:
 
 
 @dataclass(frozen=True)
+class TeamsRelaySender:
+    """One approved Teams relay sender identity."""
+
+    email: str
+    aad_object_id: str | None = None
+
+
+@dataclass(frozen=True)
+class TeamsRelaySettings:
+    """Teams relay identity settings loaded from committed configuration."""
+
+    approved_senders: tuple[TeamsRelaySender, ...] = ()
+    require_aad_object_id: bool = False
+
+    @property
+    def approved_sender_emails(self) -> tuple[str, ...]:
+        """Return approved Teams sender emails."""
+
+        return tuple(sender.email for sender in self.approved_senders)
+
+    @property
+    def approved_sender_object_ids(self) -> tuple[str, ...]:
+        """Return configured approved Teams sender Entra object IDs."""
+
+        return tuple(
+            sender.aad_object_id
+            for sender in self.approved_senders
+            if sender.aad_object_id is not None
+        )
+
+
+@dataclass(frozen=True)
 class WorkspaceConfig:
     """Loaded workspace configuration and local environment values."""
 
@@ -328,6 +360,15 @@ class WorkspaceConfig:
             recipients=recipients,
             subject_prefix=_require_non_empty_string(settings, "subjectPrefix"),
         )
+
+    @property
+    def teams_relay_settings(self) -> TeamsRelaySettings:
+        """Return validated Teams relay identity settings."""
+
+        settings = _get_optional_mapping(self.settings, ("assistant", "teamsRelay"))
+        if settings is None:
+            return TeamsRelaySettings()
+        return _require_teams_relay_settings(settings)
 
     def require_jira_credentials(
         self,
@@ -534,6 +575,22 @@ def _get_mapping(settings: Mapping[str, Any], path: tuple[str, ...]) -> Mapping[
     for part in path:
         if not isinstance(current, Mapping) or part not in current:
             raise ConfigurationError(f"Missing configuration section: {'.'.join(path)}")
+        current = current[part]
+
+    if not isinstance(current, Mapping):
+        raise ConfigurationError(f"Configuration section must be an object: {'.'.join(path)}")
+
+    return current
+
+
+def _get_optional_mapping(
+    settings: Mapping[str, Any],
+    path: tuple[str, ...],
+) -> Mapping[str, Any] | None:
+    current: Any = settings
+    for part in path:
+        if not isinstance(current, Mapping) or part not in current:
+            return None
         current = current[part]
 
     if not isinstance(current, Mapping):
@@ -827,3 +884,65 @@ def _require_gmail_cleanup_policy(
             )
 
     return GmailCleanupPolicy(trash_spam=trash_spam, mailboxes=mailboxes)
+
+
+def _require_teams_relay_settings(settings: Mapping[str, Any]) -> TeamsRelaySettings:
+    require_aad_object_id = settings.get("requireAadObjectId", False)
+    if not isinstance(require_aad_object_id, bool):
+        raise ConfigurationError(
+            "Configuration value must be a boolean: teamsRelay.requireAadObjectId"
+        )
+
+    raw_senders = settings.get("approvedSenders", [])
+    if raw_senders is None:
+        raw_senders = []
+    if not isinstance(raw_senders, list):
+        raise ConfigurationError(
+            "Configuration value must be a list of sender objects: teamsRelay.approvedSenders"
+        )
+
+    senders: list[TeamsRelaySender] = []
+    seen_emails: set[str] = set()
+    for index, item in enumerate(raw_senders, 1):
+        if not isinstance(item, Mapping):
+            raise ConfigurationError(
+                f"Teams relay sender entry must be an object: approvedSenders[{index}]"
+            )
+        email = item.get("email")
+        if not isinstance(email, str) or not email.strip():
+            raise ConfigurationError(
+                f"Teams relay sender email must be a non-empty string: approvedSenders[{index}]"
+            )
+        aad_object_id = item.get("aadObjectId")
+        if aad_object_id is not None and (
+            not isinstance(aad_object_id, str) or not aad_object_id.strip()
+        ):
+            raise ConfigurationError(
+                "Teams relay sender aadObjectId must be a non-empty string: "
+                f"approvedSenders[{index}]"
+            )
+        clean_email = email.strip().lower()
+        if clean_email in seen_emails:
+            raise ConfigurationError(f"Duplicate Teams relay sender: {clean_email}")
+        seen_emails.add(clean_email)
+        senders.append(
+            TeamsRelaySender(
+                email=clean_email,
+                aad_object_id=aad_object_id.strip().lower() if aad_object_id else None,
+            )
+        )
+
+    if require_aad_object_id and not senders:
+        raise ConfigurationError(
+            "Teams relay requires approvedSenders when requireAadObjectId is true."
+        )
+    if require_aad_object_id and any(sender.aad_object_id is None for sender in senders):
+        raise ConfigurationError(
+            "Teams relay approvedSenders must include aadObjectId when "
+            "requireAadObjectId is true."
+        )
+
+    return TeamsRelaySettings(
+        approved_senders=tuple(senders),
+        require_aad_object_id=require_aad_object_id,
+    )

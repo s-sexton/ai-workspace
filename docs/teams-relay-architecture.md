@@ -125,6 +125,8 @@ The relay is not trusted just because it came from Teams.
 The local worker must:
 
 -   Allow commands only from approved sender identities
+-   Validate the Teams/Entra object ID for approved senders when the relay is an
+    approval or write surface
 -   Validate Teams Workflow messages against a shared secret, SAS permission,
     managed identity, or equivalent queue access policy
 -   Resolve item numbers only through a local Teams message manifest
@@ -191,9 +193,14 @@ The currently supported live commands are read-only:
 -   `show open COMP tickets`
 -   `show Gmail inbox`
 -   `show pending approvals`
+-   `Clarity health`
 
 Unsupported commands and unapproved senders are moved to
 `clarity-deadletter`.
+When configured, an unapproved sender object ID is rejected the same way.
+
+`Clarity health` is the preferred relay smoke test because it validates the
+Teams-to-queue-to-local-to-Teams path and returns only local relay diagnostics.
 
 Supported manifest-backed Teams card actions can record approved local email
 cleanup actions for `trash`, `move_review`, and `move_noise`. These actions do

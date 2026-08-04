@@ -7,6 +7,7 @@ from typing import Mapping
 from common.azure_storage_queue import (
     AzureQueueHttpResponse,
     AzureStorageTeamsRelayQueue,
+    RELAY_PAYLOAD_ERROR_KEY,
 )
 
 
@@ -93,6 +94,33 @@ def test_azure_queue_receive_accepts_plain_json_messages():
     messages = queue.receive(limit=1)
 
     assert messages[0].payload["commandId"] == "plain-json"
+
+
+def test_azure_queue_receive_wraps_invalid_json_as_relay_error():
+    body = b"""
+    <QueueMessagesList>
+      <QueueMessage>
+        <MessageId>message-1</MessageId>
+        <PopReceipt>receipt-1</PopReceipt>
+        <MessageText>{"schemaVersion": 1 "missingComma": true}</MessageText>
+      </QueueMessage>
+    </QueueMessagesList>
+    """
+    transport = RecordingAzureTransport(
+        responses=[AzureQueueHttpResponse(status_code=200, body=body)]
+    )
+    queue = AzureStorageTeamsRelayQueue(
+        inbound_queue_url="https://acct.queue.core.windows.net/clarity-inbound?sas=1",
+        deadletter_queue_url="https://acct.queue.core.windows.net/clarity-deadletter?sas=1",
+        transport=transport,
+    )
+
+    messages = queue.receive(limit=1)
+
+    assert messages[0].queue_message_id == "message-1|receipt-1"
+    assert messages[0].payload[RELAY_PAYLOAD_ERROR_KEY] == (
+        "Azure Queue message payload must be JSON."
+    )
 
 
 def test_azure_queue_complete_deletes_message_with_pop_receipt():

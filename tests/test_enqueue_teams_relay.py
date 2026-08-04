@@ -14,6 +14,7 @@ def test_enqueue_teams_relay_message_enqueues_text_command():
         queue=queue,
         text="show pending approvals",
         sender_email="scott@example.com",
+        sender_object_id="object-1",
         command_id="cmd-1",
     )
 
@@ -22,6 +23,7 @@ def test_enqueue_teams_relay_message_enqueues_text_command():
     assert messages[0].payload["text"] == "show pending approvals"
     assert messages[0].payload["action"] is None
     assert messages[0].payload["from"]["email"] == "scott@example.com"
+    assert messages[0].payload["from"]["aadObjectId"] == "object-1"
 
 
 def test_enqueue_teams_relay_message_enqueues_manifest_action(tmp_path):

@@ -15,6 +15,9 @@ from xml.etree import ElementTree
 from common.teams_relay import TeamsQueueMessage, TeamsRelayError, TeamsRelayQueue
 
 
+RELAY_PAYLOAD_ERROR_KEY = "__relayError"
+
+
 class AzureQueueError(RuntimeError):
     """Raised when Azure Storage Queue operations fail."""
 
@@ -182,13 +185,19 @@ def _parse_received_messages(body: bytes) -> tuple[TeamsQueueMessage, ...]:
         pop_receipt = _xml_text(raw_message, "PopReceipt")
         message_text = _xml_text(raw_message, "MessageText")
         dequeue_count = _optional_xml_int(raw_message, "DequeueCount") or 1
-        payload = _decode_message_payload(message_text)
-        if not isinstance(payload, Mapping):
-            raise AzureQueueError("Azure Queue message payload must be a JSON object.")
+        try:
+            payload = _decode_message_payload(message_text)
+            if not isinstance(payload, Mapping):
+                raise AzureQueueError(
+                    "Azure Queue message payload must be a JSON object."
+                )
+            clean_payload = dict(payload)
+        except AzureQueueError as exc:
+            clean_payload = {RELAY_PAYLOAD_ERROR_KEY: str(exc)}
         messages.append(
             TeamsQueueMessage(
                 queue_message_id=f"{message_id}|{pop_receipt}",
-                payload=dict(payload),
+                payload=clean_payload,
                 dequeue_count=dequeue_count,
             )
         )

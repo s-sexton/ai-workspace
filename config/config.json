@@ -104,6 +104,15 @@
         "scott.sexton@sendthisfile.com"
       ],
       "subjectPrefix": "Clarity Day in a Glance"
+    },
+    "teamsRelay": {
+      "requireAadObjectId": true,
+      "approvedSenders": [
+        {
+          "email": "scott.sexton@sendthisfile.com",
+          "aadObjectId": "5cbaaa27-3557-4853-bbbe-3cff6f0bc81b"
+        }
+      ]
     }
   }
 }

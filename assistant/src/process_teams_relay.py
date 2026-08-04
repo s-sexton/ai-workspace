@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -12,16 +13,22 @@ from typing import Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from assistant.src.ask_memory import answer_memory_question
+from assistant.src.delegate_task import delegate_task
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from assistant.src.send_gmail_teams_summary import render_gmail_teams_summary
 from assistant.src.send_jira_teams_summary import render_jira_teams_summary
 from assistant.src.run_email_review import build_gmail_read_transport_from_config
 from common.azure_storage_queue import AzureStorageTeamsRelayQueue
+from common.azure_storage_queue import RELAY_PAYLOAD_ERROR_KEY
 from common.configuration import ConfigurationError, load_workspace_config
 from common.email import EmailClient
 from common.jira import JiraClient, UrllibJiraTransport
 from common.memory import DuckDbMemoryStore
-from common.teams import TeamsWebhookTransport, post_lightweight_card_to_teams
+from common.teams import (
+    TeamsWebhookResponse,
+    TeamsWebhookTransport,
+    post_lightweight_card_to_teams,
+)
 from common.teams_manifest import read_teams_manifest, resolve_manifest_items
 from common.teams_relay import (
     InMemoryTeamsRelayQueue,
@@ -35,6 +42,8 @@ CommandHandler = Callable[[TeamsRelayMessage], str]
 SleepFn = Callable[[float], None]
 NowFn = Callable[[], datetime]
 CENTRAL_TIME = ZoneInfo("America/Chicago")
+DEFAULT_WATCHER_PID_PATH = Path("logs") / "clarity-teams-relay.pid"
+MAX_TEAMS_RELAY_REPLY_CHARS = 3500
 
 
 @dataclass(frozen=True)
@@ -72,6 +81,8 @@ def process_next_teams_relay_message(
     *,
     queue: TeamsRelayQueue,
     allowed_senders: Sequence[str],
+    allowed_sender_object_ids: Sequence[str] = (),
+    require_sender_object_id: bool = False,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     root: Path | str | None = None,
     handlers: Mapping[str, CommandHandler] | None = None,
@@ -87,6 +98,8 @@ def process_next_teams_relay_message(
         result = process_teams_relay_payload(
             queue_message.payload,
             allowed_senders=allowed_senders,
+            allowed_sender_object_ids=allowed_sender_object_ids,
+            require_sender_object_id=require_sender_object_id,
             memory_path=memory_path,
             root=root,
             handlers=handlers,
@@ -104,6 +117,8 @@ def process_teams_relay_queue(
     *,
     queue: TeamsRelayQueue,
     allowed_senders: Sequence[str],
+    allowed_sender_object_ids: Sequence[str] = (),
+    require_sender_object_id: bool = False,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     root: Path | str | None = None,
     handlers: Mapping[str, CommandHandler] | None = None,
@@ -112,6 +127,7 @@ def process_teams_relay_queue(
     webhook_url: str | None = None,
     reply_transport: TeamsWebhookTransport | None = None,
     action_manifest_path: Path | str | None = None,
+    raise_on_error: bool = True,
 ) -> TeamsRelayQueueRunResult:
     """Process visible Teams relay queue messages with live-worker semantics."""
 
@@ -127,6 +143,8 @@ def process_teams_relay_queue(
             result = process_teams_relay_payload(
                 queue_message.payload,
                 allowed_senders=allowed_senders,
+                allowed_sender_object_ids=allowed_sender_object_ids,
+                require_sender_object_id=require_sender_object_id,
                 memory_path=memory_path,
                 root=root,
                 handlers=handlers,
@@ -134,10 +152,15 @@ def process_teams_relay_queue(
             )
             results.append(result)
             if post_replies:
-                _post_teams_relay_result(
+                response = _post_teams_relay_result(
                     result,
                     webhook_url=_required_webhook_url(webhook_url, root=root),
                     transport=reply_transport,
+                )
+                _record_teams_reply_audit(
+                    memory_path=memory_path,
+                    command_id=result.command_id,
+                    status_code=response.status_code,
                 )
                 posted_count += 1
             if result.status == "completed":
@@ -149,7 +172,8 @@ def process_teams_relay_queue(
         except Exception as exc:
             queue.dead_letter(queue_message.queue_message_id, reason=str(exc))
             deadletter_count += 1
-            raise
+            if raise_on_error:
+                raise
 
     return TeamsRelayQueueRunResult(
         processed_count=len(messages),
@@ -164,6 +188,8 @@ def watch_teams_relay_queue(
     *,
     queue: TeamsRelayQueue,
     allowed_senders: Sequence[str],
+    allowed_sender_object_ids: Sequence[str] = (),
+    require_sender_object_id: bool = False,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     root: Path | str | None = None,
     handlers: Mapping[str, CommandHandler] | None = None,
@@ -203,6 +229,8 @@ def watch_teams_relay_queue(
         run_result = process_teams_relay_queue(
             queue=queue,
             allowed_senders=allowed_senders,
+            allowed_sender_object_ids=allowed_sender_object_ids,
+            require_sender_object_id=require_sender_object_id,
             memory_path=memory_path,
             root=root,
             handlers=handlers,
@@ -211,6 +239,7 @@ def watch_teams_relay_queue(
             webhook_url=webhook_url,
             reply_transport=reply_transport,
             action_manifest_path=action_manifest_path,
+            raise_on_error=False,
         )
         iterations += 1
         processed_count += run_result.processed_count
@@ -276,6 +305,8 @@ def process_teams_relay_payload(
     payload: Mapping[str, object],
     *,
     allowed_senders: Sequence[str],
+    allowed_sender_object_ids: Sequence[str] = (),
+    require_sender_object_id: bool = False,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     root: Path | str | None = None,
     handlers: Mapping[str, CommandHandler] | None = None,
@@ -283,9 +314,30 @@ def process_teams_relay_payload(
 ) -> TeamsCommandResult:
     """Validate and process one Teams relay payload."""
 
+    payload_error = payload.get(RELAY_PAYLOAD_ERROR_KEY)
+    if isinstance(payload_error, str) and payload_error.strip():
+        raise TeamsRelayError(payload_error.strip())
+
     message = TeamsRelayMessage.from_mapping(payload)
     if not _sender_allowed(message.sender.email, allowed_senders):
         response = "Rejected Teams command: sender is not approved."
+        _record_teams_command_audit(
+            memory_path=memory_path,
+            command_id=message.command_id,
+            status="rejected",
+            response=response,
+        )
+        return TeamsCommandResult(
+            command_id=message.command_id,
+            status="rejected",
+            response_text=response,
+        )
+    if not _sender_object_id_allowed(
+        message.sender.aad_object_id,
+        allowed_sender_object_ids,
+        require_sender_object_id=require_sender_object_id,
+    ):
+        response = "Rejected Teams command: sender object ID is not approved."
         _record_teams_command_audit(
             memory_path=memory_path,
             command_id=message.command_id,
@@ -348,6 +400,10 @@ def route_teams_text_command(text: str) -> str | None:
     clean_text = " ".join(text.strip().lower().split())
     if not clean_text:
         return None
+    if extract_learning_request(text) is not None:
+        return "learning_request"
+    if "health" in clean_text or "status" in clean_text:
+        return "health"
     if "pending" in clean_text or "approval" in clean_text:
         return "pending_approvals"
     if "comp" in clean_text and "ticket" in clean_text:
@@ -364,8 +420,6 @@ def default_teams_command_handlers(
 ) -> Mapping[str, CommandHandler]:
     """Return local read-only Teams command handlers."""
 
-    config = load_workspace_config(root, include_process_env=True)
-
     def pending_approvals(_: TeamsRelayMessage) -> str:
         return answer_memory_question(
             "pending-actions",
@@ -375,6 +429,7 @@ def default_teams_command_handlers(
         )
 
     def open_comp_tickets(_: TeamsRelayMessage) -> str:
+        config = load_workspace_config(root, include_process_env=True)
         credentials = config.require_jira_credentials(use_cloud_route=True)
         client = JiraClient(
             settings=config.jira_settings,
@@ -392,6 +447,7 @@ def default_teams_command_handlers(
         )
 
     def gmail_inbox(_: TeamsRelayMessage) -> str:
+        config = load_workspace_config(root, include_process_env=True)
         mailbox = "sesexton@gmail.com"
         messages = EmailClient(
             transport=build_gmail_read_transport_from_config(root=config.root)
@@ -402,11 +458,96 @@ def default_teams_command_handlers(
             mention=None,
         )
 
+    def learning_request(message: TeamsRelayMessage) -> str:
+        request = extract_learning_request(message.text or "")
+        if request is None:
+            raise TeamsRelayError("Learning request command is missing content.")
+        return delegate_task(
+            title="Clarity learning request",
+            request=request,
+            next_step="Review and decide whether to turn this into a supported Clarity behavior.",
+            approval_required=True,
+            root=root,
+            memory_path=memory_path,
+        )
+
+    def health(_: TeamsRelayMessage) -> str:
+        config = load_workspace_config(root, include_process_env=True)
+        settings = config.teams_relay_settings
+        return render_teams_relay_health(
+            root=config.root,
+            memory_path=memory_path,
+            require_sender_object_id=settings.require_aad_object_id,
+            approved_sender_count=len(settings.approved_sender_emails),
+            approved_sender_object_id_count=len(settings.approved_sender_object_ids),
+        )
+
     return {
         "pending_approvals": pending_approvals,
         "open_comp_tickets": open_comp_tickets,
         "gmail_inbox": gmail_inbox,
+        "learning_request": learning_request,
+        "health": health,
     }
+
+
+def extract_learning_request(text: str) -> str | None:
+    """Return requested learning-list content from a Teams command."""
+
+    normalized = text.strip()
+    lower_normalized = normalized.lower()
+    prefixes = (
+        "clarity add this to your learning list:",
+        "clarity, add this to your learning list:",
+        "clarity to add this to your learning list:",
+    )
+    for prefix in prefixes:
+        if lower_normalized.startswith(prefix):
+            request = normalized[len(prefix) :].strip()
+            return request or None
+    return None
+
+
+def render_teams_relay_health(
+    *,
+    root: Path | str | None = None,
+    memory_path: Path | str = DEFAULT_MEMORY_PATH,
+    pid_file: Path | str = DEFAULT_WATCHER_PID_PATH,
+    require_sender_object_id: bool = False,
+    approved_sender_count: int = 0,
+    approved_sender_object_id_count: int = 0,
+) -> str:
+    """Render a small read-only health summary for Teams relay diagnostics."""
+
+    resolved_root = Path(root) if root is not None else Path.cwd()
+    resolved_pid_file = _resolve_path(resolved_root, Path(pid_file))
+    pid_text = "missing"
+    if resolved_pid_file.exists():
+        pid_text = resolved_pid_file.read_text(encoding="utf-8").strip() or "empty"
+
+    last_reply = "none recorded"
+    memory = DuckDbMemoryStore(_resolve_path(resolved_root, Path(memory_path)))
+    try:
+        memory.initialize_schema()
+        for action in memory.recent_actions(limit=25):
+            if action.action_type == "post_teams_relay_reply":
+                last_reply = action.result or action.created_at
+                break
+    finally:
+        memory.close()
+
+    return "\n".join(
+        (
+            "# Clarity Teams Relay Health",
+            "",
+            f"- Current processor PID: {os.getpid()}",
+            f"- Watcher PID file: {pid_text}",
+            f"- Sender object ID required: {require_sender_object_id}",
+            f"- Approved sender emails: {approved_sender_count}",
+            f"- Approved sender object IDs: {approved_sender_object_id_count}",
+            f"- Last Teams reply: {last_reply}",
+        )
+    )
 
 
 def build_azure_teams_relay_queue_from_config(
@@ -434,6 +575,35 @@ def build_azure_teams_relay_queue_from_config(
         inbound_queue_url=inbound_url,
         deadletter_queue_url=deadletter_url,
     )
+
+
+def write_watcher_pid_file(path: Path | str, *, pid: int | None = None) -> Path:
+    """Write the current watcher PID to a small generated file."""
+
+    resolved_path = Path(path)
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_path.write_text(f"{pid or os.getpid()}\n", encoding="utf-8")
+    return resolved_path
+
+
+def remove_watcher_pid_file_if_current(path: Path | str, *, pid: int | None = None) -> bool:
+    """Remove a watcher PID file only when it still belongs to this process."""
+
+    resolved_path = Path(path)
+    if not resolved_path.exists():
+        return False
+    current_pid = str(pid or os.getpid())
+    try:
+        recorded_pid = resolved_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
+    if recorded_pid != current_pid:
+        return False
+    try:
+        resolved_path.unlink()
+    except OSError:
+        return False
+    return True
 
 
 def _process_teams_action_request(
@@ -569,15 +739,61 @@ def _record_teams_command_audit(
         memory.close()
 
 
+def _record_teams_reply_audit(
+    *,
+    memory_path: Path | str,
+    command_id: str,
+    status_code: int,
+) -> None:
+    memory = DuckDbMemoryStore(memory_path)
+    try:
+        memory.initialize_schema()
+        run = memory.start_run(workflow="teams-relay-reply")
+        memory.record_assistant_action(
+            run_id=run.run_id,
+            action_type="post_teams_relay_reply",
+            approval_status="not_required",
+            action_target=command_id,
+            result=f"Teams relay reply posted with status {status_code}.",
+        )
+        memory.finish_run(
+            run.run_id,
+            status="completed",
+            summary=f"Teams relay reply for {command_id}: {status_code}.",
+        )
+    finally:
+        memory.close()
+
+
 def _sender_allowed(sender_email: str, allowed_senders: Sequence[str]) -> bool:
     allowed = {sender.strip().lower() for sender in allowed_senders if sender.strip()}
     return sender_email.strip().lower() in allowed
 
 
+def _sender_object_id_allowed(
+    sender_object_id: str | None,
+    allowed_sender_object_ids: Sequence[str],
+    *,
+    require_sender_object_id: bool,
+) -> bool:
+    allowed = {
+        object_id.strip().lower()
+        for object_id in allowed_sender_object_ids
+        if object_id.strip()
+    }
+    if not allowed:
+        return not require_sender_object_id
+    if sender_object_id is None:
+        return False
+    return sender_object_id.strip().lower() in allowed
+
+
 def _unsupported_command_response() -> str:
     return (
-        "I can only process these Teams relay commands locally right now: "
-        "show open COMP tickets, show Gmail inbox, or show pending approvals."
+        "I don't understand what you are asking yet. I can process these Teams "
+        "commands locally right now: show open COMP tickets, show Gmail inbox, "
+        "show pending approvals, Clarity health, or Clarity add this to your "
+        "learning list: [request]."
     )
 
 
@@ -586,8 +802,8 @@ def _post_teams_relay_result(
     *,
     webhook_url: str,
     transport: TeamsWebhookTransport | None = None,
-) -> None:
-    post_lightweight_card_to_teams(
+) -> TeamsWebhookResponse:
+    return post_lightweight_card_to_teams(
         webhook_url=webhook_url,
         text=_format_teams_relay_result(result),
         transport=transport,
@@ -595,16 +811,48 @@ def _post_teams_relay_result(
 
 
 def _format_teams_relay_result(result: TeamsCommandResult) -> str:
-    return "\n".join(
-        (
-            "**Clarity Reply**",
-            "",
-            f"Command: `{result.command_id}`",
-            f"Status: **{result.status}**",
-            "",
-            result.response_text,
+    return _limit_teams_reply_text(
+        "\n".join(
+            (
+                "**Clarity Reply**",
+                "",
+                f"Command: `{result.command_id}`",
+                f"Status: **{result.status}**",
+                "",
+                result.response_text,
+            )
         )
     )
+
+
+def _limit_teams_reply_text(text: str) -> str:
+    if len(text) <= MAX_TEAMS_RELAY_REPLY_CHARS:
+        return text
+    suffix = "\n\n_Response truncated for Teams. Ask Clarity for a narrower view._"
+    return text[: MAX_TEAMS_RELAY_REPLY_CHARS - len(suffix)].rstrip() + suffix
+
+
+def _console_safe(text: str) -> str:
+    """Return text that can be printed on legacy Windows consoles."""
+
+    encoding = sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, errors="replace").decode(encoding)
+
+
+def _print(*values: object) -> None:
+    print(*values, flush=True)
+
+
+def _print_queue_run_result(result: TeamsRelayQueueRunResult) -> None:
+    _print(f"Processed: {result.processed_count}")
+    _print(f"Completed: {result.completed_count}")
+    _print(f"Dead-lettered: {result.deadletter_count}")
+    _print(f"Teams replies: {result.posted_count}")
+    for command_result in result.results:
+        _print("")
+        _print(f"Command: {command_result.command_id}")
+        _print(f"Status: {command_result.status}")
+        _print(_console_safe(command_result.response_text))
 
 
 def _required_webhook_url(webhook_url: str | None, *, root: Path | str | None) -> str:
@@ -631,30 +879,55 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = _parse_args(argv)
     if args.azure:
-        queue = build_azure_teams_relay_queue_from_config()
+        config = load_workspace_config(include_process_env=True)
+        queue = build_azure_teams_relay_queue_from_config(root=config.root)
+        relay_settings = config.teams_relay_settings
+        allowed_senders = (
+            relay_settings.approved_sender_emails
+            if relay_settings.approved_sender_emails
+            else tuple(args.allowed_sender)
+        )
+        allowed_sender_object_ids = (
+            relay_settings.approved_sender_object_ids
+            if relay_settings.approved_sender_object_ids
+            else tuple(args.allowed_sender_object_id)
+        )
+        require_sender_object_id = (
+            relay_settings.require_aad_object_id or args.require_sender_object_id
+        )
         if args.watch:
-            result = watch_teams_relay_queue(
-                queue=queue,
-                allowed_senders=args.allowed_sender,
-                memory_path=args.memory,
-                limit=args.limit,
-                post_replies=args.post_reply,
-                action_manifest_path=args.teams_manifest,
-                active_interval_seconds=args.active_interval_seconds,
-                idle_interval_seconds=args.idle_interval_seconds,
-                active_start_hour=args.active_start_hour,
-                active_end_hour=args.active_end_hour,
-            )
-            print("")
-            print(f"Watch iterations: {result.iterations}")
-            print(f"Total processed: {result.processed_count}")
-            print(f"Total completed: {result.completed_count}")
-            print(f"Total dead-lettered: {result.deadletter_count}")
-            print(f"Total Teams replies: {result.posted_count}")
+            write_watcher_pid_file(args.pid_file)
+            _print(f"Watcher PID: {os.getpid()}")
+            _print(f"PID file: {args.pid_file}")
+            try:
+                result = watch_teams_relay_queue(
+                    queue=queue,
+                    allowed_senders=allowed_senders,
+                    allowed_sender_object_ids=allowed_sender_object_ids,
+                    require_sender_object_id=require_sender_object_id,
+                    memory_path=args.memory,
+                    limit=args.limit,
+                    post_replies=args.post_reply,
+                    action_manifest_path=args.teams_manifest,
+                    active_interval_seconds=args.active_interval_seconds,
+                    idle_interval_seconds=args.idle_interval_seconds,
+                    active_start_hour=args.active_start_hour,
+                    active_end_hour=args.active_end_hour,
+                )
+            finally:
+                remove_watcher_pid_file_if_current(args.pid_file)
+            _print("")
+            _print(f"Watch iterations: {result.iterations}")
+            _print(f"Total processed: {result.processed_count}")
+            _print(f"Total completed: {result.completed_count}")
+            _print(f"Total dead-lettered: {result.deadletter_count}")
+            _print(f"Total Teams replies: {result.posted_count}")
             return
         result = process_teams_relay_queue(
             queue=queue,
-            allowed_senders=args.allowed_sender,
+            allowed_senders=allowed_senders,
+            allowed_sender_object_ids=allowed_sender_object_ids,
+            require_sender_object_id=require_sender_object_id,
             memory_path=args.memory,
             limit=args.limit,
             post_replies=args.post_reply,
@@ -685,15 +958,17 @@ def main(argv: Sequence[str] | None = None) -> None:
     result = process_next_teams_relay_message(
         queue=queue,
         allowed_senders=args.allowed_sender,
+        allowed_sender_object_ids=args.allowed_sender_object_id,
+        require_sender_object_id=args.require_sender_object_id,
         memory_path=args.memory,
         action_manifest_path=args.teams_manifest,
     )
     if result is None:
-        print("No Teams relay messages found.")
+        _print("No Teams relay messages found.")
         return
-    print(f"Command: {result.command_id}")
-    print(f"Status: {result.status}")
-    print(_console_safe(result.response_text))
+    _print(f"Command: {result.command_id}")
+    _print(f"Status: {result.status}")
+    _print(_console_safe(result.response_text))
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -752,11 +1027,27 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=["scott.sexton@sendthisfile.com"],
         help="Approved Teams sender email. Repeat for multiple senders.",
     )
+    parser.add_argument(
+        "--allowed-sender-object-id",
+        action="append",
+        default=[],
+        help="Approved Teams sender Entra object ID. Repeat for multiple senders.",
+    )
+    parser.add_argument(
+        "--require-sender-object-id",
+        action="store_true",
+        help="Require the Teams sender Entra object ID to be approved.",
+    )
     parser.add_argument("--memory", default=str(DEFAULT_MEMORY_PATH))
     parser.add_argument(
         "--teams-manifest",
         default=str(Path("reports") / "teams-gmail-manifest.json"),
         help="Teams action manifest path for card action item resolution.",
+    )
+    parser.add_argument(
+        "--pid-file",
+        default=str(DEFAULT_WATCHER_PID_PATH),
+        help="Path where --watch records the running process ID.",
     )
     args = parser.parse_args(argv)
     if not args.azure and not args.text:
@@ -764,25 +1055,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     if args.watch and not args.azure:
         parser.error("--watch requires --azure")
     return args
-
-
-def _print_queue_run_result(result: TeamsRelayQueueRunResult) -> None:
-    print(f"Processed: {result.processed_count}")
-    print(f"Completed: {result.completed_count}")
-    print(f"Dead-lettered: {result.deadletter_count}")
-    print(f"Teams replies: {result.posted_count}")
-    for command_result in result.results:
-        print("")
-        print(f"Command: {command_result.command_id}")
-        print(f"Status: {command_result.status}")
-        print(_console_safe(command_result.response_text))
-
-
-def _console_safe(text: str) -> str:
-    """Return text that can be printed on legacy Windows consoles."""
-
-    encoding = sys.stdout.encoding or "utf-8"
-    return text.encode(encoding, errors="replace").decode(encoding)
 
 
 if __name__ == "__main__":

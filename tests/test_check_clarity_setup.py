@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from assistant.src.check_clarity_setup import check_clarity_setup, main
@@ -71,6 +73,49 @@ def test_check_clarity_setup_accepts_graph_client_credentials(tmp_path):
     assert "Graph credentials: present (client credentials)" in result.format()
 
 
+def test_check_clarity_setup_accepts_teams_relay_config(tmp_path):
+    _write_config(tmp_path, include_teams_relay=True)
+    _write_env(
+        tmp_path,
+        "\n".join(
+            (
+                "AZURE_TEAMS_RELAY_INBOUND_QUEUE_URL=https://example.queue/inbound",
+                "AZURE_TEAMS_RELAY_DEADLETTER_QUEUE_URL=https://example.queue/deadletter",
+                "TEAMS_CLARITY_WEBHOOK_URL=https://example.webhook.office.com/test",
+            )
+        ),
+    )
+
+    result = check_clarity_setup(
+        root=tmp_path,
+        mailbox="clarity@sendthisfile.ai",
+        use_teams_relay=True,
+    )
+
+    output = result.format()
+    assert result.ok
+    assert "Teams relay approved senders: 1" in output
+    assert "Teams relay sender object ID required: True" in output
+    assert "TEAMS_CLARITY_WEBHOOK_URL: present" in output
+    assert "example.webhook" not in output
+
+
+def test_check_clarity_setup_reports_missing_teams_relay_values(tmp_path):
+    _write_config(tmp_path)
+
+    result = check_clarity_setup(
+        root=tmp_path,
+        mailbox="clarity@sendthisfile.ai",
+        use_teams_relay=True,
+    )
+
+    output = result.format()
+    assert not result.ok
+    assert "Teams relay has no approved senders configured" in output
+    assert "AZURE_TEAMS_RELAY_INBOUND_QUEUE_URL" in output
+    assert "TEAMS_CLARITY_WEBHOOK_URL" in output
+
+
 def test_main_prints_preflight_result(tmp_path, monkeypatch, capsys):
     _write_config(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -93,37 +138,44 @@ def test_main_exits_nonzero_on_failed_preflight(tmp_path, monkeypatch, capsys):
     assert "Mailbox is not approved" in capsys.readouterr().out
 
 
-def _write_config(root):
+def _write_config(root, *, include_teams_relay=False):
+    assistant = {
+        "email": {
+            "approvedMailboxes": [
+                {
+                    "address": "clarity@sendthisfile.ai",
+                    "accessMode": "read_write",
+                    "allowedSenders": [
+                        "scott.sexton@sendthisfile.com",
+                        "sesexton@gmail.com",
+                    ],
+                },
+                {"address": "legal@example.invalid", "accessMode": "read"},
+            ],
+            "defaultMailbox": "clarity@sendthisfile.ai",
+            "folderNamespace": "Clarity",
+            "folderPolicy": {
+                "review": "Clarity/Review",
+                "noise": "Clarity/Noise",
+                "trash": "Deleted Items",
+            },
+            "maxMessages": 25,
+        }
+    }
+    if include_teams_relay:
+        assistant["teamsRelay"] = {
+            "requireAadObjectId": True,
+            "approvedSenders": [
+                {
+                    "email": "scott.sexton@sendthisfile.com",
+                    "aadObjectId": "approved-object-id",
+                }
+            ],
+        }
     config_dir = root / "config"
     config_dir.mkdir()
     (config_dir / "config.json").write_text(
-        """
-        {
-          "assistant": {
-            "email": {
-              "approvedMailboxes": [
-                {
-                  "address": "clarity@sendthisfile.ai",
-                  "accessMode": "read_write",
-                  "allowedSenders": [
-                    "scott.sexton@sendthisfile.com",
-                    "sesexton@gmail.com"
-                  ]
-                },
-                {"address": "legal@example.invalid", "accessMode": "read"}
-              ],
-              "defaultMailbox": "clarity@sendthisfile.ai",
-              "folderNamespace": "Clarity",
-              "folderPolicy": {
-                "review": "Clarity/Review",
-                "noise": "Clarity/Noise",
-                "trash": "Deleted Items"
-              },
-              "maxMessages": 25
-            }
-          }
-        }
-        """,
+        json.dumps({"assistant": assistant}),
         encoding="utf-8",
     )
 

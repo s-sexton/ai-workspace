@@ -32,6 +32,7 @@ def check_clarity_setup(
     mailbox: str | None = None,
     use_graph: bool = False,
     use_graph_bearer: bool = False,
+    use_teams_relay: bool = False,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
     brief_path: Path | str | None = None,
     cycle_report_path: Path | str = DEFAULT_CYCLE_REPORT_PATH,
@@ -101,6 +102,40 @@ def check_clarity_setup(
     else:
         lines.append("- Graph credentials: not required for this check")
 
+    if use_teams_relay:
+        teams_relay_settings = config.teams_relay_settings
+        lines.append(
+            f"- Teams relay approved senders: {len(teams_relay_settings.approved_sender_emails)}"
+        )
+        lines.append(
+            "- Teams relay sender object ID required: "
+            f"{teams_relay_settings.require_aad_object_id}"
+        )
+        lines.append(
+            "- Teams relay approved sender object IDs: "
+            f"{len(teams_relay_settings.approved_sender_object_ids)}"
+        )
+        if not teams_relay_settings.approved_sender_emails:
+            errors.append("Teams relay has no approved senders configured")
+        if (
+            teams_relay_settings.require_aad_object_id
+            and not teams_relay_settings.approved_sender_object_ids
+        ):
+            errors.append(
+                "Teams relay requires sender object IDs but none are configured"
+            )
+        for name in (
+            "AZURE_TEAMS_RELAY_INBOUND_QUEUE_URL",
+            "AZURE_TEAMS_RELAY_DEADLETTER_QUEUE_URL",
+            "TEAMS_CLARITY_WEBHOOK_URL",
+        ):
+            if config.env.get(name, "").strip():
+                lines.append(f"- {name}: present")
+            else:
+                errors.append(f"Missing Teams relay environment value: {name}")
+    else:
+        lines.append("- Teams relay: not required for this check")
+
     lines.append(f"- Memory path: {_resolve_path(config.root, Path(memory_path))}")
     if brief_path is not None:
         lines.append(f"- Brief path: {_resolve_path(config.root, Path(brief_path))}")
@@ -126,6 +161,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         mailbox=args.mailbox,
         use_graph=args.graph,
         use_graph_bearer=args.graph_bearer,
+        use_teams_relay=args.teams_relay,
         memory_path=args.memory,
         brief_path=args.brief,
         cycle_report_path=args.cycle_report,
@@ -147,6 +183,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--graph", action="store_true")
     parser.add_argument("--graph-bearer", action="store_true")
+    parser.add_argument(
+        "--teams-relay",
+        action="store_true",
+        help="Check Teams relay queues, webhook, and approved sender identity config.",
+    )
     parser.add_argument("--memory", default=str(DEFAULT_MEMORY_PATH))
     parser.add_argument("--brief", default=None)
     parser.add_argument("--cycle-report", default=str(DEFAULT_CYCLE_REPORT_PATH))

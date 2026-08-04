@@ -321,6 +321,74 @@ def test_daily_brief_settings_are_validated_and_typed(tmp_path):
     assert settings.subject_prefix == "Clarity Day in a Glance"
 
 
+def test_teams_relay_settings_are_validated_and_typed(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "teamsRelay": {
+              "requireAadObjectId": true,
+              "approvedSenders": [
+                {
+                  "email": "Scott.Example@Example.Invalid",
+                  "aadObjectId": "AADBEEF-123"
+                }
+              ]
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+    settings = config.teams_relay_settings
+
+    assert settings.require_aad_object_id is True
+    assert settings.approved_sender_emails == ("scott.example@example.invalid",)
+    assert settings.approved_sender_object_ids == ("aadbeef-123",)
+
+
+def test_teams_relay_settings_default_to_email_only(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.teams_relay_settings.approved_senders == ()
+    assert config.teams_relay_settings.require_aad_object_id is False
+
+
+def test_teams_relay_requires_object_ids_when_enabled(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "teamsRelay": {
+              "requireAadObjectId": true,
+              "approvedSenders": [
+                {"email": "scott@example.invalid"}
+              ]
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.teams_relay_settings
+
+    assert "aadObjectId" in str(exc_info.value)
+
+
 def test_daily_brief_recipients_must_be_non_empty(tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()

@@ -278,6 +278,7 @@ To check local setup before scheduling:
 
 ``` powershell
 python -m assistant.src.check_clarity_setup --mailbox clarity@sendthisfile.ai --graph
+python -m assistant.src.check_clarity_setup --mailbox clarity@sendthisfile.ai --teams-relay
 ```
 
 This validates local configuration and required Graph credential keys without
@@ -669,6 +670,8 @@ To exercise the local Teams Workflow relay processor without Azure:
 python -m assistant.src.process_teams_relay "show pending approvals"
 python -m assistant.src.process_teams_relay "show open COMP tickets"
 python -m assistant.src.process_teams_relay "show Gmail inbox"
+python -m assistant.src.process_teams_relay "Clarity health"
+python -m assistant.src.process_teams_relay "Clarity add this to your learning list: remember this pattern"
 ```
 
 This uses an in-memory fake queue, validates the sender, records a local audit
@@ -683,10 +686,10 @@ python -m assistant.src.process_teams_relay --azure --post-reply --limit 5
 
 This reads `AZURE_TEAMS_RELAY_INBOUND_QUEUE_URL` and
 `AZURE_TEAMS_RELAY_DEADLETTER_QUEUE_URL` from `config/.env`, validates the
-sender, runs only supported read-only commands, posts the result to Teams
-through `TEAMS_CLARITY_WEBHOOK_URL`, completes successful queue messages, and
-dead-letters rejected or failed messages. Treat all queue URLs and webhook URLs
-as secrets.
+sender email and configured Teams/Entra object ID, runs only supported read-only
+commands, posts the result to Teams through `TEAMS_CLARITY_WEBHOOK_URL`,
+completes successful queue messages, and dead-letters rejected or failed
+messages. Treat all queue URLs and webhook URLs as secrets.
 
 Supported Teams card actions resolve numbered items through the local Teams
 message manifest, which defaults to `reports/teams-gmail-manifest.json`.
@@ -704,6 +707,19 @@ python -m assistant.src.process_teams_relay --azure --post-reply --watch --activ
 The default active window is Monday-Friday, 5:00 AM through 6:59 PM Central.
 During that window the worker sleeps 30 seconds between polls. Outside that
 window it sleeps one hour between polls.
+
+Watch mode records the running process ID in `logs/clarity-teams-relay.pid` and
+removes that file when the watcher exits normally. Use `--pid-file <path>` if a
+second watcher needs a separate status file.
+
+Teams relay replies are capped to a Teams-safe length and successful reply
+posts are recorded in memory as `post_teams_relay_reply` audit entries with the
+webhook status code.
+Unsupported Teams commands receive an `I don't understand what you are asking
+yet` reply. The learning-list command records a local delegated task for later
+review; it does not change Clarity's behavior automatically.
+Use `Clarity health` after workflow, queue, webhook, or watcher changes to
+confirm the relay is alive without touching provider data.
 
 To enqueue Teams-style relay test messages into the configured Azure queue:
 
