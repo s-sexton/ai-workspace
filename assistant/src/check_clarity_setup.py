@@ -115,6 +115,10 @@ def check_clarity_setup(
             "- Teams relay approved sender object IDs: "
             f"{len(teams_relay_settings.approved_sender_object_ids)}"
         )
+        lines.append(
+            "- Teams relay provider writes allowed: "
+            f"{teams_relay_settings.allow_provider_writes}"
+        )
         if not teams_relay_settings.approved_sender_emails:
             errors.append("Teams relay has no approved senders configured")
         if (

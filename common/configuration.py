@@ -214,6 +214,7 @@ class TeamsRelaySettings:
 
     approved_senders: tuple[TeamsRelaySender, ...] = ()
     require_aad_object_id: bool = False
+    allow_provider_writes: bool = False
 
     @property
     def approved_sender_emails(self) -> tuple[str, ...]:
@@ -892,6 +893,11 @@ def _require_teams_relay_settings(settings: Mapping[str, Any]) -> TeamsRelaySett
         raise ConfigurationError(
             "Configuration value must be a boolean: teamsRelay.requireAadObjectId"
         )
+    allow_provider_writes = settings.get("allowProviderWrites", False)
+    if not isinstance(allow_provider_writes, bool):
+        raise ConfigurationError(
+            "Configuration value must be a boolean: teamsRelay.allowProviderWrites"
+        )
 
     raw_senders = settings.get("approvedSenders", [])
     if raw_senders is None:
@@ -945,4 +951,5 @@ def _require_teams_relay_settings(settings: Mapping[str, Any]) -> TeamsRelaySett
     return TeamsRelaySettings(
         approved_senders=tuple(senders),
         require_aad_object_id=require_aad_object_id,
+        allow_provider_writes=allow_provider_writes,
     )

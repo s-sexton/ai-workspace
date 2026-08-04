@@ -710,6 +710,7 @@ Plain Teams replies can also approve latest-manifest items by number:
 After reviewing `Clarity show email move plan`, explicit provider-scoped
 commands can apply approved actions: `Clarity execute Gmail email moves` or
 `Clarity execute Outlook email moves`.
+Those commands require `assistant.teamsRelay.allowProviderWrites` to be true.
 
 For an always-running local relay watcher, use:
 
@@ -720,6 +721,8 @@ python -m assistant.src.process_teams_relay --azure --post-reply --watch --activ
 The default active window is Monday-Friday, 5:00 AM through 6:59 PM Central.
 During that window the worker sleeps 30 seconds between polls. Outside that
 window it sleeps one hour between polls.
+For faster hands-on testing, reduce the active interval, for example
+`--active-interval-seconds 10`.
 
 Watch mode records the running process ID in `logs/clarity-teams-relay.pid` and
 removes that file when the watcher exits normally. Use `--pid-file <path>` if a

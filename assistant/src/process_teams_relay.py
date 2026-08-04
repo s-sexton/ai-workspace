@@ -499,6 +499,8 @@ def default_teams_command_handlers(
 
     def execute_gmail_email_moves(_: TeamsRelayMessage) -> str:
         config = load_workspace_config(root, include_process_env=True)
+        if not config.teams_relay_settings.allow_provider_writes:
+            return _provider_writes_disabled_response()
         gmail_mailboxes = _gmail_mailboxes_from_config(config)
         if not gmail_mailboxes:
             return "No configured Gmail mailboxes are approved for write access."
@@ -516,6 +518,8 @@ def default_teams_command_handlers(
 
     def execute_graph_email_moves(_: TeamsRelayMessage) -> str:
         config = load_workspace_config(root, include_process_env=True)
+        if not config.teams_relay_settings.allow_provider_writes:
+            return _provider_writes_disabled_response()
         graph_mailboxes = _graph_mailboxes_from_config(config)
         if not graph_mailboxes:
             return "No configured Outlook/Graph mailboxes are approved for write access."
@@ -624,6 +628,14 @@ def _graph_mailboxes_from_config(config) -> tuple[str, ...]:
         for mailbox in email_settings.approved_mailboxes
         if not mailbox.endswith("@gmail.com")
         and email_settings.access_mode_for(mailbox) == "read_write"
+    )
+
+
+def _provider_writes_disabled_response() -> str:
+    return (
+        "Teams provider writes are disabled by configuration. Set "
+        "assistant.teamsRelay.allowProviderWrites to true to allow explicit "
+        "Teams execute commands."
     )
 
 
@@ -937,13 +949,15 @@ def _post_teams_relay_result(
 
 
 def _format_teams_relay_result(result: TeamsCommandResult) -> str:
+    timestamp = datetime.now(CENTRAL_TIME).strftime("%m/%d/%Y %I:%M:%S %p")
     return _limit_teams_reply_text(
         "\n".join(
             (
-                "**Clarity Reply**",
+                "**Clarity Response**",
                 "",
                 f"Command: `{result.command_id}`",
                 f"Status: **{result.status}**",
+                f"Time: {timestamp}",
                 "",
                 result.response_text,
             )

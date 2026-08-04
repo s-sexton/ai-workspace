@@ -106,6 +106,7 @@
       "subjectPrefix": "Clarity Day in a Glance"
     },
     "teamsRelay": {
+      "allowProviderWrites": true,
       "requireAadObjectId": true,
       "approvedSenders": [
         {

@@ -112,6 +112,8 @@ python -m assistant.src.process_teams_relay --azure --post-reply --watch --activ
 The default active window is Monday-Friday from 5:00 AM through 6:59 PM Central.
 During active hours, the watcher sleeps 30 seconds between polls. Outside that
 window, it sleeps one hour between polls.
+For faster hands-on testing, reduce the active interval, for example
+`--active-interval-seconds 10`.
 
 When watch mode starts, Clarity writes the running process ID to:
 
@@ -275,6 +277,8 @@ the existing provider move executor against approved local actions, scoped by
 provider mailbox: Gmail commands only operate on approved `@gmail.com`
 mailboxes, and Outlook commands only operate on approved non-Gmail Graph
 mailboxes.
+These commands require `assistant.teamsRelay.allowProviderWrites` to be true.
+Keep it false for approval-only operation.
 
 When `--post-reply` is enabled, Clarity records a `post_teams_relay_reply` audit
 entry with the Teams webhook status code after a successful reply post.

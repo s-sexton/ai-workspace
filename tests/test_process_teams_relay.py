@@ -554,6 +554,27 @@ def test_execute_gmail_email_moves_handler_filters_to_gmail_mailboxes(
     assert calls[1][1]["include_gmail_spam_cleanup"] is True
 
 
+def test_execute_gmail_email_moves_handler_requires_provider_write_opt_in(
+    tmp_path,
+    monkeypatch,
+):
+    _write_multi_mailbox_config(tmp_path, allow_provider_writes=False)
+
+    def fake_execute_email_moves(**_):
+        raise AssertionError("Provider execution should not be called.")
+
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.execute_email_moves",
+        fake_execute_email_moves,
+    )
+
+    response = default_teams_command_handlers(root=tmp_path)[
+        "execute_gmail_email_moves"
+    ](_message())
+
+    assert "Teams provider writes are disabled" in response
+
+
 def test_execute_graph_email_moves_handler_filters_to_non_gmail_mailboxes(
     tmp_path,
     monkeypatch,
@@ -693,6 +714,21 @@ def test_render_teams_relay_health_includes_pid_file_and_last_reply(tmp_path):
     assert "Last Teams reply: Teams relay reply posted with status 202." in result
 
 
+def test_format_teams_relay_result_includes_context_header():
+    result = _format_teams_relay_result(
+        TeamsCommandResult(
+            command_id="cmd-1",
+            status="completed",
+            response_text="Handled",
+        )
+    )
+
+    assert "**Clarity Response**" in result
+    assert "Command: `cmd-1`" in result
+    assert "Status: **completed**" in result
+    assert "Time:" in result
+
+
 def test_format_teams_relay_result_truncates_long_replies():
     result = _format_teams_relay_result(
         TeamsCommandResult(
@@ -775,13 +811,16 @@ def _write_email_config(root):
     )
 
 
-def _write_multi_mailbox_config(root):
+def _write_multi_mailbox_config(root, *, allow_provider_writes=True):
     config_dir = root / "config"
     config_dir.mkdir()
     (config_dir / "config.json").write_text(
         json.dumps(
             {
                 "assistant": {
+                    "teamsRelay": {
+                        "allowProviderWrites": allow_provider_writes,
+                    },
                     "email": {
                         "approvedMailboxes": [
                             {

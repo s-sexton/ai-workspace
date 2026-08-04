@@ -96,6 +96,7 @@ def test_check_clarity_setup_accepts_teams_relay_config(tmp_path):
     assert result.ok
     assert "Teams relay approved senders: 1" in output
     assert "Teams relay sender object ID required: True" in output
+    assert "Teams relay provider writes allowed: True" in output
     assert "TEAMS_CLARITY_WEBHOOK_URL: present" in output
     assert "example.webhook" not in output
 
@@ -164,6 +165,7 @@ def _write_config(root, *, include_teams_relay=False):
     }
     if include_teams_relay:
         assistant["teamsRelay"] = {
+            "allowProviderWrites": True,
             "requireAadObjectId": True,
             "approvedSenders": [
                 {

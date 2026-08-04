@@ -222,6 +222,7 @@ Teams so remote approvals can be inspected before provider writes are executed.
 The explicit execute commands call the existing email move executor with a
 provider-scoped mailbox filter, so Gmail and Outlook actions are not mixed into
 one provider transport.
+They are blocked unless `assistant.teamsRelay.allowProviderWrites` is true.
 
 ## Future Slices
 

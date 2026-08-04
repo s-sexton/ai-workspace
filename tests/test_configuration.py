@@ -329,6 +329,7 @@ def test_teams_relay_settings_are_validated_and_typed(tmp_path):
         {
           "assistant": {
             "teamsRelay": {
+              "allowProviderWrites": true,
               "requireAadObjectId": true,
               "approvedSenders": [
                 {
@@ -347,6 +348,7 @@ def test_teams_relay_settings_are_validated_and_typed(tmp_path):
     settings = config.teams_relay_settings
 
     assert settings.require_aad_object_id is True
+    assert settings.allow_provider_writes is True
     assert settings.approved_sender_emails == ("scott.example@example.invalid",)
     assert settings.approved_sender_object_ids == ("aadbeef-123",)
 
@@ -360,6 +362,31 @@ def test_teams_relay_settings_default_to_email_only(tmp_path):
 
     assert config.teams_relay_settings.approved_senders == ()
     assert config.teams_relay_settings.require_aad_object_id is False
+    assert config.teams_relay_settings.allow_provider_writes is False
+
+
+def test_teams_relay_rejects_invalid_provider_write_flag(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text(
+        """
+        {
+          "assistant": {
+            "teamsRelay": {
+              "allowProviderWrites": "yes"
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.teams_relay_settings
+
+    assert "allowProviderWrites" in str(exc_info.value)
 
 
 def test_teams_relay_requires_object_ids_when_enabled(tmp_path):

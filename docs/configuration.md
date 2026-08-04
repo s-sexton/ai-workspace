@@ -190,7 +190,9 @@ Clarity Jira, email, calendar, and Graph read paths:
 -   `assistant.teamsRelay`: optional Teams relay identity policy;
     `approvedSenders` is a list of sender objects with `email` and optional
     `aadObjectId`; `requireAadObjectId` requires every approved sender to have
-    an object ID and requires inbound Teams messages to match one
+    an object ID and requires inbound Teams messages to match one;
+    `allowProviderWrites` controls whether explicit Teams commands may execute
+    provider writes and defaults to `false` when omitted
 
 Email `accessMode` must be either `read` or `read_write`. Current email
 workflows only read fake metadata; `read_write` is reserved for future approved
