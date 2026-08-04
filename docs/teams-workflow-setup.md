@@ -114,6 +114,8 @@ During active hours, the watcher sleeps 30 seconds between polls. Outside that
 window, it sleeps one hour between polls.
 For faster hands-on testing, reduce the active interval, for example
 `--active-interval-seconds 10`.
+Transient queue receive failures are logged as `Queue receive failed` and the
+watcher continues polling on the normal interval.
 
 When watch mode starts, Clarity writes the running process ID to:
 

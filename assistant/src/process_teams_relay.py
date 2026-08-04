@@ -82,6 +82,7 @@ class TeamsRelayWatchResult:
     completed_count: int
     deadletter_count: int
     posted_count: int
+    receive_error_count: int
 
 
 def process_next_teams_relay_message(
@@ -231,23 +232,41 @@ def watch_teams_relay_queue(
     completed_count = 0
     deadletter_count = 0
     posted_count = 0
+    receive_error_count = 0
     clock = now_fn or (lambda: datetime.now(CENTRAL_TIME))
     while max_iterations is None or iterations < max_iterations:
-        run_result = process_teams_relay_queue(
-            queue=queue,
-            allowed_senders=allowed_senders,
-            allowed_sender_object_ids=allowed_sender_object_ids,
-            require_sender_object_id=require_sender_object_id,
-            memory_path=memory_path,
-            root=root,
-            handlers=handlers,
-            limit=limit,
-            post_replies=post_replies,
-            webhook_url=webhook_url,
-            reply_transport=reply_transport,
-            action_manifest_path=action_manifest_path,
-            raise_on_error=False,
-        )
+        try:
+            run_result = process_teams_relay_queue(
+                queue=queue,
+                allowed_senders=allowed_senders,
+                allowed_sender_object_ids=allowed_sender_object_ids,
+                require_sender_object_id=require_sender_object_id,
+                memory_path=memory_path,
+                root=root,
+                handlers=handlers,
+                limit=limit,
+                post_replies=post_replies,
+                webhook_url=webhook_url,
+                reply_transport=reply_transport,
+                action_manifest_path=action_manifest_path,
+                raise_on_error=False,
+            )
+        except Exception as exc:
+            receive_error_count += 1
+            iterations += 1
+            _print(f"Queue receive failed: {exc}")
+            if max_iterations is not None and iterations >= max_iterations:
+                break
+            sleep_fn(
+                teams_relay_poll_interval_seconds(
+                    now=clock(),
+                    active_interval_seconds=active_interval_seconds,
+                    idle_interval_seconds=idle_interval_seconds,
+                    active_start_hour=active_start_hour,
+                    active_end_hour=active_end_hour,
+                )
+            )
+            continue
         iterations += 1
         processed_count += run_result.processed_count
         completed_count += run_result.completed_count
@@ -272,6 +291,7 @@ def watch_teams_relay_queue(
         completed_count=completed_count,
         deadletter_count=deadletter_count,
         posted_count=posted_count,
+        receive_error_count=receive_error_count,
     )
 
 
@@ -1127,6 +1147,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             _print(f"Total completed: {result.completed_count}")
             _print(f"Total dead-lettered: {result.deadletter_count}")
             _print(f"Total Teams replies: {result.posted_count}")
+            _print(f"Total receive errors: {result.receive_error_count}")
             return
         result = process_teams_relay_queue(
             queue=queue,

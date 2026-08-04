@@ -177,7 +177,8 @@ The first local slice avoided Azure dependencies:
 7. Add Azure Storage Queue transport using SAS queue URLs. Implemented.
 8. Add a local Azure relay worker that polls inbound messages, posts replies to
    Teams, completes successful commands, and dead-letters rejected or failed
-   commands. Implemented.
+   commands. Implemented. Transient queue receive failures are logged and
+   retried by the watch loop.
 
 Run the live worker from the workspace root:
 

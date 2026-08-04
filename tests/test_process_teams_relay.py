@@ -773,6 +773,33 @@ def test_watch_teams_relay_queue_sleeps_between_bounded_iterations(tmp_path, cap
     assert "Processed: 0" in output
 
 
+def test_watch_teams_relay_queue_continues_after_receive_error(tmp_path, capsys):
+    queue = ReceiveFailsOnceQueue()
+    queue.enqueue(_payload(text="show Gmail inbox"))
+    sleep_values: list[float] = []
+
+    result = watch_teams_relay_queue(
+        queue=queue,
+        allowed_senders=("scott@example.com",),
+        memory_path=tmp_path / "memory.duckdb",
+        handlers={"gmail_inbox": lambda _: "Gmail handled"},
+        active_interval_seconds=30,
+        idle_interval_seconds=3600,
+        now_fn=lambda: datetime(2026, 8, 3, 9, 0, tzinfo=ZoneInfo("America/Chicago")),
+        sleep_fn=sleep_values.append,
+        max_iterations=2,
+    )
+
+    assert result.iterations == 2
+    assert result.receive_error_count == 1
+    assert result.processed_count == 1
+    assert result.completed_count == 1
+    assert sleep_values == [30]
+    output = capsys.readouterr().out
+    assert "Queue receive failed: temporary queue timeout" in output
+    assert "Processed: 1" in output
+
+
 def test_watcher_pid_file_is_removed_only_for_matching_pid(tmp_path):
     pid_path = tmp_path / "logs" / "clarity-teams-relay.pid"
 
@@ -995,3 +1022,15 @@ class RecordingTeamsTransport:
     ) -> TeamsWebhookResponse:
         self.calls.append((url, payload, headers))
         return TeamsWebhookResponse(status_code=202)
+
+
+class ReceiveFailsOnceQueue(InMemoryTeamsRelayQueue):
+    def __init__(self):
+        super().__init__()
+        self.fail_next_receive = True
+
+    def receive(self, *, limit: int = 1):
+        if self.fail_next_receive:
+            self.fail_next_receive = False
+            raise RuntimeError("temporary queue timeout")
+        return super().receive(limit=limit)

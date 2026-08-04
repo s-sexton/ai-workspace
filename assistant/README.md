@@ -726,6 +726,8 @@ During that window the worker sleeps 30 seconds between polls. Outside that
 window it sleeps one hour between polls.
 For faster hands-on testing, reduce the active interval, for example
 `--active-interval-seconds 10`.
+Transient queue receive failures are logged and counted without stopping the
+watcher.
 
 Watch mode records the running process ID in `logs/clarity-teams-relay.pid` and
 removes that file when the watcher exits normally. Use `--pid-file <path>` if a
