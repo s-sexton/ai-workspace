@@ -162,6 +162,15 @@ Schedule the send command only after the Graph `Mail.Send` permission and
 mailbox scoping have been reviewed. The command requires both `--graph` and
 `--execute` before it sends.
 
+To post the generated daily brief to the configured Teams channel:
+
+``` powershell
+python -m assistant.src.send_daily_brief --date 2026-07-16 --days 7 --teams --execute
+```
+
+The Teams post command requires both `--teams` and `--execute`, and reads the
+webhook from `TEAMS_CLARITY_WEBHOOK_URL` in the ignored local environment.
+
 To refresh approved Microsoft Graph and Google calendars before the email body
 is generated:
 
@@ -189,6 +198,15 @@ python -m assistant.src.send_daily_brief --days 7 --refresh-email --graph-email 
 
 All refresh steps are read-only. The only external write in this command is
 the final Graph `sendMail`, which still requires `--graph --execute`.
+
+For a scheduled Teams post instead of email, keep the refresh steps and use
+`--teams --execute`:
+
+``` powershell
+python -m assistant.src.send_daily_brief --days 7 --refresh-email --graph-email --gmail --refresh-calendars --graph-calendars --google-calendars --refresh-jira --teams --execute
+```
+
+The only external write in this variant is the final Teams webhook post.
 
 To print a Windows scheduled task for that email send workflow:
 

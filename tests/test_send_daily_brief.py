@@ -7,6 +7,7 @@ import pytest
 
 from assistant.src.send_daily_brief import main, render_daily_brief_html, send_daily_brief
 from common.memory import DuckDbMemoryStore
+from common.teams import TeamsWebhookResponse
 
 
 @dataclass
@@ -23,6 +24,15 @@ class FakeSendTransport:
         body_html: str | None = None,
     ) -> None:
         self.calls.append((sender, recipients, subject, body_text, body_html))
+
+
+@dataclass
+class FakeTeamsTransport:
+    calls: list[tuple[str, dict, dict]]
+
+    def post(self, url, payload, headers):
+        self.calls.append((url, dict(payload), dict(headers)))
+        return TeamsWebhookResponse(status_code=202)
 
 
 def test_send_daily_brief_dry_run_generates_without_sending(tmp_path):
@@ -88,6 +98,68 @@ def test_send_daily_brief_execute_sends_generated_body(tmp_path):
 
     assert latest_run is not None
     assert any(action.action_type == "send_daily_brief_email" for action in actions)
+
+
+def test_send_daily_brief_execute_can_post_to_teams_without_sending_email(tmp_path):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    output_path = tmp_path / "reports" / "daily.md"
+    _seed_memory(memory_path)
+    send_transport = FakeSendTransport(calls=[])
+    teams_transport = FakeTeamsTransport(calls=[])
+
+    result = send_daily_brief(
+        root=tmp_path,
+        memory_path=memory_path,
+        output_path=output_path,
+        brief_date="2026-07-16",
+        execute=True,
+        send_transport=send_transport,
+        post_to_teams=True,
+        teams_webhook_url="https://example.webhook.office.com/test",
+        teams_transport=teams_transport,
+    )
+
+    assert result.sent is True
+    assert result.teams_posted is True
+    assert len(send_transport.calls) == 1
+    assert len(teams_transport.calls) == 1
+    url, payload, headers = teams_transport.calls[0]
+    assert url == "https://example.webhook.office.com/test"
+    assert headers["Content-Type"] == "application/json"
+    body = payload["attachments"][0]["content"]["body"][0]["text"]
+    assert "# Clarity Daily Brief" in body
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        actions = store.recent_actions()
+    finally:
+        store.close()
+
+    assert any(action.action_type == "post_daily_brief_teams" for action in actions)
+
+
+def test_send_daily_brief_execute_can_post_only_to_teams(tmp_path):
+    _write_config(tmp_path)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    output_path = tmp_path / "reports" / "daily.md"
+    _seed_memory(memory_path)
+    teams_transport = FakeTeamsTransport(calls=[])
+
+    result = send_daily_brief(
+        root=tmp_path,
+        memory_path=memory_path,
+        output_path=output_path,
+        brief_date="2026-07-16",
+        execute=True,
+        post_to_teams=True,
+        teams_webhook_url="https://example.webhook.office.com/test",
+        teams_transport=teams_transport,
+    )
+
+    assert result.sent is False
+    assert result.teams_posted is True
+    assert len(teams_transport.calls) == 1
 
 
 def test_send_daily_brief_can_refresh_google_calendar_window(tmp_path, monkeypatch):
@@ -299,9 +371,10 @@ def test_main_prints_dry_run_summary(tmp_path, monkeypatch, capsys):
     )
 
     output = capsys.readouterr().out
-    assert "# Clarity Daily Brief Email" in output
+    assert "# Clarity Daily Brief" in output
     assert "HTML:" in output
     assert "Sent: no" in output
+    assert "Teams posted: no" in output
     assert "Dry run only" in output
 
 
@@ -313,6 +386,16 @@ def test_main_rejects_execute_without_graph():
 def test_main_rejects_graph_without_execute():
     with pytest.raises(SystemExit):
         main(["--graph"])
+
+
+def test_main_rejects_teams_without_execute():
+    with pytest.raises(SystemExit):
+        main(["--teams"])
+
+
+def test_main_rejects_execute_without_delivery_target():
+    with pytest.raises(SystemExit):
+        main(["--execute"])
 
 
 def test_main_rejects_refresh_calendars_without_provider():

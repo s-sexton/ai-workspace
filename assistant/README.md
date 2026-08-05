@@ -577,6 +577,15 @@ The send command uses `assistant.dailyBrief` configuration for sender,
 recipients, and subject prefix. It generates the local daily brief first, then
 requires both `--graph` and `--execute` before calling Graph `sendMail`.
 
+To post the generated daily brief to the configured Teams channel:
+
+``` powershell
+python -m assistant.src.send_daily_brief --date 2026-07-16 --days 7 --teams --execute
+```
+
+The Teams path uses `TEAMS_CLARITY_WEBHOOK_URL` from the ignored local
+environment. It requires both `--teams` and `--execute` before posting.
+
 To refresh approved calendars immediately before generating and sending the
 rolling seven-day brief:
 
@@ -599,6 +608,13 @@ This command reads approved inbox metadata, reads approved calendars for the
 rolling window, refreshes the live Jira report into local memory, generates the
 daily brief from that refreshed memory, and only then sends the email. The
 refresh phases remain read-only.
+
+For the normal scheduled Teams post, use the same refresh-first flow and change
+the delivery target:
+
+``` powershell
+python -m assistant.src.send_daily_brief --days 7 --refresh-email --graph-email --gmail --refresh-calendars --graph-calendars --google-calendars --refresh-jira --teams --execute
+```
 
 To process deterministic directions from a daily brief reply locally:
 

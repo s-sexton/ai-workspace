@@ -39,6 +39,10 @@ from common.graph_email import (
     build_graph_email_send_transport,
 )
 from common.memory import DuckDbMemoryStore
+from common.teams import (
+    TeamsWebhookTransport,
+    post_lightweight_card_to_teams,
+)
 
 
 class DailyBriefSendTransport(Protocol):
@@ -65,6 +69,7 @@ class SendDailyBriefResult:
     recipients: tuple[str, ...]
     subject: str
     sent: bool
+    teams_posted: bool
     html_path: Path
 
 
@@ -91,6 +96,9 @@ def send_daily_brief(
     use_jira_bearer_auth: bool = False,
     execute: bool = False,
     send_transport: DailyBriefSendTransport | None = None,
+    post_to_teams: bool = False,
+    teams_webhook_url: str | None = None,
+    teams_transport: TeamsWebhookTransport | None = None,
 ) -> SendDailyBriefResult:
     """Generate and optionally send Clarity's daily brief email."""
 
@@ -143,9 +151,9 @@ def send_daily_brief(
     body_html = render_daily_brief_html(body_text)
     html_path = brief.output_path.with_suffix(".html")
     html_path.write_text(body_html, encoding="utf-8")
-    if execute:
-        if send_transport is None:
-            raise RuntimeError("send_transport is required when execute=True.")
+    email_sent = False
+    if execute and send_transport is not None:
+        email_sent = True
         send_transport.send_mail(
             sender=settings.sender,
             recipients=settings.recipients,
@@ -160,12 +168,32 @@ def send_daily_brief(
             recipients=settings.recipients,
             subject=subject,
         )
+    elif execute and not post_to_teams:
+        if send_transport is None:
+            raise RuntimeError("send_transport is required when execute=True.")
+    teams_posted = False
+    if execute and post_to_teams:
+        response = post_lightweight_card_to_teams(
+            webhook_url=_required_teams_webhook_url(
+                teams_webhook_url,
+                root=workspace_root,
+            ),
+            text=body_text,
+            transport=teams_transport,
+        )
+        _record_teams_post_memory(
+            memory_path=brief.memory_path,
+            output_path=brief.output_path,
+            status_code=response.status_code,
+        )
+        teams_posted = True
     return SendDailyBriefResult(
         brief=brief,
         sender=settings.sender,
         recipients=settings.recipients,
         subject=subject,
-        sent=execute,
+        sent=email_sent,
+        teams_posted=teams_posted,
         html_path=html_path,
     )
 
@@ -243,8 +271,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         use_jira_bearer_auth=args.jira_bearer,
         execute=args.execute,
         send_transport=transport,
+        post_to_teams=args.teams,
     )
-    print("# Clarity Daily Brief Email")
+    print("# Clarity Daily Brief")
     print()
     print(f"Brief: {result.brief.output_path}")
     print(f"HTML: {result.html_path}")
@@ -252,9 +281,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Recipients: {', '.join(result.recipients)}")
     print(f"Subject: {result.subject}")
     print(f"Sent: {'yes' if result.sent else 'no'}")
-    if not result.sent:
+    print(f"Teams posted: {'yes' if result.teams_posted else 'no'}")
+    if not result.sent and not result.teams_posted:
         print()
-        print("Dry run only. Add --graph --execute to send through Microsoft Graph.")
+        print(
+            "Dry run only. Add --graph --execute for email or "
+            "--teams --execute for Teams."
+        )
 
 
 def _refresh_email_sources(
@@ -677,6 +710,42 @@ def _record_send_memory(
         store.close()
 
 
+def _record_teams_post_memory(
+    *,
+    memory_path: Path,
+    output_path: Path,
+    status_code: int,
+) -> None:
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="send-daily-brief")
+        result = (
+            f"Posted daily brief {output_path} to Teams with status {status_code}."
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            action_type="post_daily_brief_teams",
+            approval_status="not_required",
+            result=result,
+        )
+        store.finish_run(run.run_id, status="completed", summary=result)
+    finally:
+        store.close()
+
+
+def _required_teams_webhook_url(
+    webhook_url: str | None,
+    *,
+    root: Path,
+) -> str:
+    if webhook_url is not None:
+        return webhook_url
+    return load_workspace_config(root, include_process_env=True).env.get(
+        "TEAMS_CLARITY_WEBHOOK_URL", ""
+    )
+
+
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate and optionally send Clarity's daily brief email."
@@ -707,6 +776,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--graph",
         action="store_true",
         help="Send through Microsoft Graph. Requires --execute.",
+    )
+    parser.add_argument(
+        "--teams",
+        action="store_true",
+        help="Post the generated daily brief to the configured Teams webhook.",
     )
     parser.add_argument(
         "--graph-bearer",
@@ -776,10 +850,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.graph and not args.execute:
         parser.error("--graph requires --execute.")
+    if args.teams and not args.execute:
+        parser.error("--teams requires --execute.")
     if args.graph_bearer and not (args.graph or args.graph_calendars or args.graph_email):
         parser.error("--graph-bearer requires --graph, --graph-email, or --graph-calendars.")
-    if args.execute and not args.graph:
-        parser.error("--execute requires --graph.")
+    if args.execute and not (args.graph or args.teams):
+        parser.error("--execute requires --graph or --teams.")
     if (args.graph_email or args.gmail) and not args.refresh_email:
         parser.error("--graph-email and --gmail require --refresh-email.")
     if args.refresh_email and not (args.graph_email or args.gmail):

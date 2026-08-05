@@ -14,6 +14,14 @@ This channel is intended for short Clarity notifications, such as test posts,
 daily brief availability, pending approval counts, or attention summaries. It is
 not a general log sink.
 
+The scheduled "Day in a Glance" Teams post should refresh approved inboxes,
+approved calendars, and Jira first, then post the generated seven-day daily
+brief:
+
+``` powershell
+python -m assistant.src.send_daily_brief --days 7 --refresh-email --graph-email --gmail --refresh-calendars --graph-calendars --google-calendars --refresh-jira --teams --execute
+```
+
 When Jira tickets are posted to Teams, each ticket key must be a hyperlink to
 the actual Jira ticket. Use the browser-facing Jira ticket URL, not the
 Atlassian API gateway URL.
