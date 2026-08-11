@@ -149,6 +149,37 @@ def test_generate_email_cleanup_batch_groups_gmail_recommendations(tmp_path):
     assert manifest["items"][5]["recommendation"]["group"] == "review"
 
 
+def test_generate_email_cleanup_batch_uses_existing_gmail_clarity_labels(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    output_path = tmp_path / "reports" / "email-cleanup-batch.md"
+    _write_config(tmp_path)
+    _seed_single_gmail_item(
+        memory_path,
+        external_id="gmail-intrust",
+        subject="INTRUST account activity",
+        sender="alerts@intrustbank.com",
+    )
+
+    generate_email_cleanup_batch(
+        root=tmp_path,
+        memory_path=memory_path,
+        output_path=output_path,
+        mailbox="sesexton@gmail.com",
+        existing_folders=("Clarity/Review", "Clarity/Noise", "Clarity/INTRUST"),
+        generated_at=datetime(2026, 7, 18, 9, 30),
+    )
+
+    batch = output_path.read_text(encoding="utf-8")
+    manifest = json.loads(output_path.with_suffix(".json").read_text(encoding="utf-8"))
+    assert "Recommendation: Move to Clarity/INTRUST" in batch
+    assert "Why: Matched existing Gmail Clarity label." in batch
+    assert manifest["items"][0]["recommendation"] == {
+        "targetFolder": "Clarity/INTRUST",
+        "reason": "Matched existing Gmail Clarity label.",
+        "group": "specific_folder",
+    }
+
+
 def test_generate_email_cleanup_batch_handles_missing_memory(tmp_path):
     memory_path = tmp_path / "logs" / "missing.duckdb"
     output_path = tmp_path / "reports" / "email-cleanup-batch.md"
@@ -453,5 +484,35 @@ def _seed_gmail_cleanup_memory(memory_path):
                 label=label,
                 reason=reason,
             )
+    finally:
+        store.close()
+
+
+def _seed_single_gmail_item(memory_path, *, external_id, subject, sender):
+    memory_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="email-review")
+        source = store.record_source(
+            source_type="email",
+            display_name="sesexton@gmail.com",
+            scope_label="sesexton@gmail.com",
+        )
+        item = store.record_item_seen(
+            source_id=source.source_id,
+            external_id=external_id,
+            item_type="email_message",
+            subject=subject,
+            sender_or_owner=sender,
+            updated_at="2026-07-18T09:00:00-05:00",
+            first_seen_run_id=run.run_id,
+        )
+        store.record_classification(
+            item_id=item.item_id,
+            run_id=run.run_id,
+            label="review",
+            reason="Default review before folder routing.",
+        )
     finally:
         store.close()

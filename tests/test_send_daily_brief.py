@@ -286,6 +286,43 @@ def test_send_daily_brief_names_mailbox_when_email_refresh_fails(
     assert "provider denied" in str(exc_info.value)
 
 
+def test_send_daily_brief_can_continue_when_refresh_fails(
+    tmp_path,
+    monkeypatch,
+):
+    _write_config(tmp_path, include_email=True)
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    output_path = tmp_path / "reports" / "daily.md"
+    _seed_memory(memory_path)
+
+    def fake_run_email_review(**kwargs):
+        raise RuntimeError("provider denied")
+
+    monkeypatch.setattr(
+        "assistant.src.send_daily_brief.run_email_review",
+        fake_run_email_review,
+    )
+
+    result = send_daily_brief(
+        root=tmp_path,
+        memory_path=memory_path,
+        output_path=output_path,
+        brief_date="2026-07-20",
+        refresh_email=True,
+        use_graph_email=True,
+        use_gmail=True,
+        graph_email_transport=object(),
+        gmail_transport=object(),
+        continue_on_refresh_error=True,
+    )
+
+    body = result.brief.output_path.read_text(encoding="utf-8")
+    assert result.sent is False
+    assert "## Refresh Warnings" in body
+    assert "Email refresh failed for mailbox scott@example.invalid" in body
+    assert "Email refresh failed for mailbox sesexton@gmail.com" in body
+
+
 def test_render_daily_brief_html_escapes_content_and_formats_sections():
     html_body = render_daily_brief_html(
         "# Clarity Daily Brief\n"

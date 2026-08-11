@@ -102,6 +102,23 @@ class GoogleGmailReadTransport:
             )
         return tuple(messages)
 
+    def list_labels(self, mailbox: str) -> tuple[str, ...]:
+        """Return Gmail label names for the mailbox."""
+
+        clean_mailbox = _required_text(mailbox, "mailbox")
+        payload = self._get_json(self._labels_url(clean_mailbox))
+        raw_labels = payload.get("labels")
+        if not isinstance(raw_labels, list):
+            raise GoogleGmailClientError("Gmail labels response missing labels.")
+        labels: list[str] = []
+        for raw_label in raw_labels:
+            if not isinstance(raw_label, Mapping):
+                raise GoogleGmailClientError("Gmail label response item must be an object.")
+            raw_name = raw_label.get("name")
+            if isinstance(raw_name, str) and raw_name.strip():
+                labels.append(raw_name.strip())
+        return tuple(labels)
+
     def _message_metadata(
         self,
         mailbox: str,
@@ -150,6 +167,10 @@ class GoogleGmailReadTransport:
             f"{self._base_url()}/users/{encoded_mailbox}/messages/"
             f"{encoded_message_id}?{query}"
         )
+
+    def _labels_url(self, mailbox: str) -> str:
+        encoded_mailbox = quote(mailbox, safe="")
+        return f"{self._base_url()}/users/{encoded_mailbox}/labels"
 
     def _base_url(self) -> str:
         return self.base_url.rstrip("/")
@@ -260,6 +281,17 @@ class GoogleGmailMoveTransport:
                 if not isinstance(label_id, str) or not label_id.strip():
                     raise GoogleGmailClientError("Gmail label missing id.")
                 return label_id
+        normalized_label_name = label_name.casefold()
+        for raw_label in raw_labels:
+            raw_name = raw_label.get("name")
+            if (
+                isinstance(raw_name, str)
+                and raw_name.casefold() == normalized_label_name
+            ):
+                label_id = raw_label.get("id")
+                if not isinstance(label_id, str) or not label_id.strip():
+                    raise GoogleGmailClientError("Gmail label missing id.")
+                return label_id
         return None
 
     def _create_label(self, mailbox: str, label_name: str) -> str:
@@ -272,6 +304,10 @@ class GoogleGmailMoveTransport:
                 "messageListVisibility": "show",
             },
         )
+        if response.status_code == 409:
+            existing = self._find_label_id(mailbox, label_name)
+            if existing is not None:
+                return existing
         if response.status_code != 200:
             raise GoogleGmailClientError(
                 f"Gmail label create failed with status {response.status_code}"

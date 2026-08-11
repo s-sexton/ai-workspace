@@ -50,6 +50,19 @@ Each assistant should have a clear responsibility.
 
 Complexity should emerge through composition rather than large monolithic applications.
 
+## Role RREs
+
+When a role or agent is created or materially enhanced, maintain an RRE:
+roles, responsibilities, and expectations. RREs define the role's decision
+rights and escalation boundaries.
+
+RRE guidance lives in [`docs/rre-guidelines.md`](docs/rre-guidelines.md).
+Clarity's current RRE lives in [`docs/clarity-rre.md`](docs/clarity-rre.md).
+The Azure Engineer role workspace lives in [`azure-engineer/`](azure-engineer/),
+with its RRE in [`azure-engineer/docs/rre.md`](azure-engineer/docs/rre.md)
+and environment map in
+[`azure-engineer/docs/environment.md`](azure-engineer/docs/environment.md).
+
 ---
 
 # Repository Layout
@@ -58,6 +71,7 @@ Complexity should emerge through composition rather than large monolithic applic
 ai-workspace/
 â”‚
 â”œâ”€â”€ assistant/
+â”œâ”€â”€ azure-engineer/
 â”œâ”€â”€ developer/
 â”œâ”€â”€ analytics/
 â”œâ”€â”€ marketing/
@@ -82,6 +96,11 @@ ai-workspace/
 
 Clarity Assistant for work and personal decision support.
 
+Clarity's living roles, responsibilities, and expectations are maintained in
+[`docs/clarity-rre.md`](docs/clarity-rre.md). Update that document when
+Clarity's role, decision rights, scheduled work, communication surfaces, or
+operating expectations change.
+
 Initial responsibilities include:
 
 - Jira review
@@ -97,6 +116,28 @@ Future capabilities may include:
 - Household planning
 - Customer health monitoring
 - Daily briefings
+
+---
+
+## azure-engineer/
+
+Azure Engineer for SendThisFile infrastructure review.
+
+The Azure Engineer's living roles, responsibilities, and expectations are
+maintained in [`azure-engineer/docs/rre.md`](azure-engineer/docs/rre.md).
+The current Azure estate map is maintained in
+[`azure-engineer/docs/environment.md`](azure-engineer/docs/environment.md).
+
+Responsibilities include:
+
+- Azure subscription and resource inventory
+- Vulnerability and exposure review
+- Unused, stale, questionable, or poorly owned resource review
+- Pricing and cost analysis
+- Human-reviewed remediation recommendations
+
+The Azure Engineer is read-only by default and does not modify Azure
+infrastructure without explicit human approval.
 
 ---
 

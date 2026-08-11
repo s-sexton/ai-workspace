@@ -19,8 +19,29 @@ approved calendars, and Jira first, then post the generated seven-day daily
 brief:
 
 ``` powershell
-python -m assistant.src.send_daily_brief --days 7 --refresh-email --graph-email --gmail --refresh-calendars --graph-calendars --google-calendars --refresh-jira --teams --execute
+python -m assistant.src.send_day_at_glance_teams --execute
 ```
+
+This dedicated command wraps the daily brief pipeline. It refreshes approved
+Outlook, Gmail, Graph calendar, Google Calendar, and Jira sources before
+posting to Teams. It writes the normal daily brief Markdown and JSON manifest
+under `reports/`, so Teams replies can resolve numbered inbox, Jira, and
+pending approval items back to local Clarity memory.
+
+The post includes a compact `Recommendations` section. Supported Teams replies
+against the latest Day at a Glance manifest include:
+
+``` text
+Clarity delete inbox 1-3
+Clarity delete inbox 1-3 and execute
+Clarity move inbox item 4 to Review
+Clarity approve pending cleanup actions
+```
+
+Without `and execute`, Clarity records local pending actions only. With `and
+execute`, Clarity approves and applies only the new email move actions created
+from that Teams command, and only when `assistant.teamsRelay.allowProviderWrites`
+is true.
 
 When Jira tickets are posted to Teams, each ticket key must be a hyperlink to
 the actual Jira ticket. Use the browser-facing Jira ticket URL, not the

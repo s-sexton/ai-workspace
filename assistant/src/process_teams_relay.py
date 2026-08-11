@@ -20,6 +20,10 @@ from assistant.src.execute_email_moves import (
     build_graph_move_transport_from_config,
     execute_email_moves,
 )
+from assistant.src.process_daily_brief_reply import (
+    DEFAULT_DAILY_BRIEF_MANIFEST_PATH,
+    process_daily_brief_reply,
+)
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from assistant.src.send_gmail_teams_summary import render_gmail_teams_summary
 from assistant.src.send_jira_teams_summary import render_jira_teams_summary
@@ -384,6 +388,12 @@ def process_teams_relay_payload(
             memory_path=memory_path,
             manifest_path=action_manifest_path,
         )
+    if _looks_like_daily_brief_reply(message.text or ""):
+        return _process_teams_daily_brief_reply(
+            message,
+            root=root,
+            memory_path=memory_path,
+        )
     text_action = parse_teams_text_action(message.text or "")
     if text_action is not None:
         return _process_teams_action_request(
@@ -465,6 +475,31 @@ def route_teams_text_command(text: str) -> str | None:
     if "gmail" in clean_text and ("inbox" in clean_text or "email" in clean_text):
         return "gmail_inbox"
     return None
+
+
+def _looks_like_daily_brief_reply(text: str) -> bool:
+    clean_text = " ".join(text.strip().lower().split())
+    if clean_text.startswith("clarity "):
+        clean_text = clean_text.removeprefix("clarity ").strip()
+    elif clean_text.startswith("@clarity "):
+        clean_text = clean_text.removeprefix("@clarity ").strip()
+    if not clean_text:
+        return False
+    if "pending cleanup actions" in clean_text:
+        return True
+    if re.search(r"\b(?:approve|reject)\s+action\s+[a-z0-9]{8,}\b", clean_text):
+        return True
+    if re.search(
+        r"\b(?:delete|trash|move|file|mark sender)\s+(?:inbox|outlook|gmail|jira)\b",
+        clean_text,
+    ):
+        return True
+    if re.search(
+        r"\b(?:mark|set|move|transition)\s+jira\s+(?:item\s+)?\d+",
+        clean_text,
+    ):
+        return True
+    return False
 
 
 def default_teams_command_handlers(
@@ -710,6 +745,130 @@ def _execute_provider_writes_for_action_ids(
             )
         )
     return "\n\n".join(outputs) if outputs else "No provider write actions were eligible."
+
+
+def _process_teams_daily_brief_reply(
+    message: TeamsRelayMessage,
+    *,
+    root: Path | str | None,
+    memory_path: Path | str,
+) -> TeamsCommandResult:
+    config = load_workspace_config(root, include_process_env=True)
+    resolved_memory_path = _resolve_path(config.root, Path(memory_path))
+    before_required = _required_email_action_ids(resolved_memory_path)
+    reply_text = _strip_clarity_prefix(message.text or "")
+    response = process_daily_brief_reply(
+        reply_text,
+        root=config.root,
+        memory_path=resolved_memory_path,
+        manifest_path=DEFAULT_DAILY_BRIEF_MANIFEST_PATH,
+        execute=True,
+    )
+    if _text_action_requests_execution(message.text or ""):
+        if not config.teams_relay_settings.allow_provider_writes:
+            response = "\n\n".join((response, _provider_writes_disabled_response()))
+        else:
+            new_action_ids = _new_required_email_action_ids(
+                resolved_memory_path,
+                before_required=before_required,
+            )
+            if new_action_ids:
+                action_mailboxes = _approve_email_actions(
+                    resolved_memory_path,
+                    action_ids=new_action_ids,
+                )
+                execution_response = _execute_provider_writes_for_action_ids(
+                    config=config,
+                    memory_path=resolved_memory_path,
+                    mailboxes=action_mailboxes,
+                    action_ids=new_action_ids,
+                )
+                response = "\n\n".join((response, execution_response))
+            else:
+                response = "\n\n".join(
+                    (response, "No new email move actions were available to execute.")
+                )
+    _record_teams_command_audit(
+        memory_path=resolved_memory_path,
+        command_id=message.command_id,
+        status="completed",
+        response=response,
+    )
+    return TeamsCommandResult(
+        command_id=message.command_id,
+        status="completed",
+        response_text=response,
+    )
+
+
+def _required_email_action_ids(memory_path: Path | str) -> set[str]:
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        return {
+            action.action_id
+            for action in store.pending_actions(limit=500)
+            if action.action_type.startswith("propose_email_move_")
+        }
+    finally:
+        store.close()
+
+
+def _new_required_email_action_ids(
+    memory_path: Path | str,
+    *,
+    before_required: set[str],
+) -> tuple[str, ...]:
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        return tuple(
+            action.action_id
+            for action in store.pending_actions(limit=500)
+            if action.action_type.startswith("propose_email_move_")
+            and action.action_id not in before_required
+        )
+    finally:
+        store.close()
+
+
+def _approve_email_actions(
+    memory_path: Path | str,
+    *,
+    action_ids: Sequence[str],
+) -> tuple[str, ...]:
+    store = DuckDbMemoryStore(memory_path)
+    mailboxes: list[str] = []
+    try:
+        store.initialize_schema()
+        pending_by_id = {
+            action.action_id: action
+            for action in store.pending_actions(limit=500)
+            if action.action_type.startswith("propose_email_move_")
+        }
+        for action_id in action_ids:
+            action = pending_by_id.get(action_id)
+            if action is None:
+                continue
+            store.update_assistant_action_approval(
+                action_id=action_id,
+                approval_status="approved",
+            )
+            if action.source_scope_label:
+                mailboxes.append(action.source_scope_label)
+    finally:
+        store.close()
+    return tuple(dict.fromkeys(mailboxes))
+
+
+def _strip_clarity_prefix(text: str) -> str:
+    stripped = text.strip()
+    lower = stripped.lower()
+    if lower.startswith("clarity "):
+        return stripped[8:].strip()
+    if lower.startswith("@clarity "):
+        return stripped[9:].strip()
+    return stripped
 
 
 def render_teams_relay_health(

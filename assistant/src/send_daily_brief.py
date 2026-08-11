@@ -99,6 +99,7 @@ def send_daily_brief(
     post_to_teams: bool = False,
     teams_webhook_url: str | None = None,
     teams_transport: TeamsWebhookTransport | None = None,
+    continue_on_refresh_error: bool = False,
 ) -> SendDailyBriefResult:
     """Generate and optionally send Clarity's daily brief email."""
 
@@ -106,8 +107,9 @@ def send_daily_brief(
     config = load_workspace_config(workspace_root, include_process_env=False)
     settings = config.daily_brief_settings
     selected_date = brief_date or date.today().isoformat()
+    refresh_warnings: list[str] = []
     if refresh_email:
-        _refresh_email_sources(
+        refresh_warnings.extend(_refresh_email_sources(
             root=workspace_root,
             memory_path=memory_path,
             output_path=output_path,
@@ -116,9 +118,10 @@ def send_daily_brief(
             use_gmail=use_gmail,
             graph_email_transport=graph_email_transport,
             gmail_transport=gmail_transport,
-        )
+            continue_on_error=continue_on_refresh_error,
+        ))
     if refresh_calendars:
-        _refresh_calendar_window(
+        refresh_warnings.extend(_refresh_calendar_window(
             root=workspace_root,
             memory_path=memory_path,
             output_path=output_path,
@@ -129,15 +132,22 @@ def send_daily_brief(
             use_google_calendars=use_google_calendars,
             graph_calendar_transport=graph_calendar_transport,
             google_calendar_transport=google_calendar_transport,
-        )
+            continue_on_error=continue_on_refresh_error,
+        ))
     if refresh_jira:
-        generate_local_jira_report(
-            root=workspace_root,
-            output_path=jira_output_path,
-            use_live_jira=True,
-            use_bearer_auth=use_jira_bearer_auth,
-            memory_path=memory_path,
-        )
+        try:
+            generate_local_jira_report(
+                root=workspace_root,
+                output_path=jira_output_path,
+                use_live_jira=True,
+                use_bearer_auth=use_jira_bearer_auth,
+                memory_path=memory_path,
+            )
+        except Exception as exc:
+            warning = f"Jira refresh failed: {type(exc).__name__}: {exc}"
+            if not continue_on_refresh_error:
+                raise
+            refresh_warnings.append(warning)
     brief = generate_daily_brief(
         root=workspace_root,
         memory_path=memory_path,
@@ -146,6 +156,8 @@ def send_daily_brief(
         limit=limit,
         calendar_window_days=calendar_window_days,
     )
+    if refresh_warnings:
+        _append_refresh_warnings(brief.output_path, refresh_warnings=refresh_warnings)
     subject = f"{settings.subject_prefix} - {brief.brief_date}"
     body_text = brief.output_path.read_text(encoding="utf-8")
     body_html = render_daily_brief_html(body_text)
@@ -300,9 +312,11 @@ def _refresh_email_sources(
     use_gmail: bool,
     graph_email_transport: EmailTransport | None,
     gmail_transport: EmailTransport | None,
-) -> None:
+    continue_on_error: bool = False,
+) -> list[str]:
     config = load_workspace_config(root, include_process_env=False)
     refreshed_count = 0
+    warnings: list[str] = []
     for mailbox in config.email_settings.approved_mailboxes:
         if config.email_settings.access_mode_for(mailbox) not in ("read", "read_write"):
             continue
@@ -327,13 +341,21 @@ def _refresh_email_sources(
                 use_gmail=use_gmail_transport,
             )
         except Exception as exc:
-            raise RuntimeError(
+            warning = (
                 f"Email refresh failed for mailbox {mailbox}: "
                 f"{type(exc).__name__}: {exc}"
-            ) from exc
+            )
+            if not continue_on_error:
+                raise RuntimeError(warning) from exc
+            warnings.append(warning)
+            continue
         refreshed_count += 1
     if refreshed_count == 0:
-        raise RuntimeError("No approved email mailboxes matched the selected refresh providers.")
+        warning = "No approved email mailboxes matched the selected refresh providers."
+        if not continue_on_error:
+            raise RuntimeError(warning)
+        warnings.append(warning)
+    return warnings
 
 
 def _refresh_calendar_window(
@@ -348,8 +370,10 @@ def _refresh_calendar_window(
     use_google_calendars: bool,
     graph_calendar_transport: CalendarTransport | None,
     google_calendar_transport: CalendarTransport | None,
-) -> None:
+    continue_on_error: bool = False,
+) -> list[str]:
     config = load_workspace_config(root, include_process_env=False)
+    warnings: list[str] = []
     for calendar_scope in config.calendar_settings.approved_calendars.values():
         if calendar_scope.provider == "graph":
             if not use_graph_calendars:
@@ -366,17 +390,41 @@ def _refresh_calendar_window(
         else:
             continue
         for review_date in _date_window(brief_date, window_days):
-            run_calendar_review(
-                root=root,
-                calendar=calendar_scope.label,
-                review_date=review_date,
-                limit=limit,
-                memory_path=memory_path,
-                brief_output_path=output_path,
-                transport=transport,
-                use_graph=use_graph,
-                use_google=use_google,
-            )
+            try:
+                run_calendar_review(
+                    root=root,
+                    calendar=calendar_scope.label,
+                    review_date=review_date,
+                    limit=limit,
+                    memory_path=memory_path,
+                    brief_output_path=output_path,
+                    transport=transport,
+                    use_graph=use_graph,
+                    use_google=use_google,
+                )
+            except Exception as exc:
+                warning = (
+                    f"Calendar refresh failed for {calendar_scope.label} on "
+                    f"{review_date}: {type(exc).__name__}: {exc}"
+                )
+                if not continue_on_error:
+                    raise RuntimeError(warning) from exc
+                warnings.append(warning)
+    return warnings
+
+
+def _append_refresh_warnings(
+    path: Path,
+    *,
+    refresh_warnings: Sequence[str],
+) -> None:
+    if not refresh_warnings:
+        return
+    lines = ["", "## Refresh Warnings", ""]
+    for warning in dict.fromkeys(refresh_warnings):
+        lines.append(f"- {warning}")
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines).rstrip() + "\n")
 
 
 def _date_window(brief_date: str, window_days: int) -> tuple[str, ...]:

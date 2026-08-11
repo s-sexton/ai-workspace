@@ -12,6 +12,7 @@ from typing import Any, Sequence
 
 from assistant.src.run_jira_report import DEFAULT_MEMORY_PATH
 from common.configuration import find_workspace_root, load_workspace_config
+from common.google_gmail import build_google_gmail_read_transport
 from common.memory import DuckDbMemoryStore, SourceMemoryRecord
 
 
@@ -78,6 +79,8 @@ def generate_email_cleanup_batch(
     mailbox: str | None = None,
     limit: int = 25,
     generated_at: datetime | None = None,
+    existing_folders: Sequence[str] = (),
+    use_gmail_labels: bool = False,
 ) -> EmailCleanupBatchResult:
     """Generate a local numbered email cleanup batch for one mailbox."""
 
@@ -95,6 +98,13 @@ def generate_email_cleanup_batch(
     resolved_output_path = _resolve_path(workspace_root, Path(output_path))
     resolved_manifest_path = resolved_output_path.with_suffix(".json")
     resolved_generated_at = generated_at or datetime.now()
+    folder_candidates = tuple(existing_folders)
+    if use_gmail_labels and _is_gmail_mailbox(selected_mailbox):
+        folder_candidates = _gmail_clarity_labels(
+            mailbox=selected_mailbox,
+            folder_namespace=email_settings.folder_namespace,
+            root=workspace_root,
+        )
 
     records: tuple[SourceMemoryRecord, ...] = ()
     folder_recommendations: dict[str, FolderMemoryRecommendation] = {}
@@ -117,6 +127,7 @@ def generate_email_cleanup_batch(
         folder_namespace=email_settings.folder_namespace,
         folder_policy=email_settings.folder_policy,
         folder_recommendations=folder_recommendations,
+        existing_folders=folder_candidates,
         generated_at=resolved_generated_at,
     )
     resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +139,7 @@ def generate_email_cleanup_batch(
             records=records,
             folder_policy=email_settings.folder_policy,
             folder_recommendations=folder_recommendations,
+            existing_folders=folder_candidates,
             generated_at=resolved_generated_at,
         ),
     )
@@ -147,6 +159,7 @@ def render_email_cleanup_batch(
     folder_namespace: str,
     folder_policy: dict[str, str] | Any,
     folder_recommendations: dict[str, FolderMemoryRecommendation] | None = None,
+    existing_folders: Sequence[str] = (),
     generated_at: datetime,
 ) -> str:
     """Render a numbered email cleanup batch as compact Markdown."""
@@ -176,6 +189,7 @@ def render_email_cleanup_batch(
         records=records,
         folder_policy=folder_policy,
         folder_recommendations=folder_recommendations or {},
+        existing_folders=existing_folders,
     )
     if _is_gmail_mailbox(mailbox):
         lines.extend(
@@ -248,6 +262,7 @@ def _batch_recommendations(
     records: Sequence[SourceMemoryRecord],
     folder_policy: dict[str, str] | Any,
     folder_recommendations: dict[str, FolderMemoryRecommendation],
+    existing_folders: Sequence[str] = (),
 ) -> dict[str, BatchRecommendation]:
     return {
         record.item_id: _batch_recommendation(
@@ -255,6 +270,7 @@ def _batch_recommendations(
             record=record,
             folder_policy=folder_policy,
             folder_recommendation=folder_recommendations.get(record.item_id),
+            existing_folders=existing_folders,
         )
         for record in records
     }
@@ -266,18 +282,35 @@ def _batch_recommendation(
     record: SourceMemoryRecord,
     folder_policy: dict[str, str] | Any,
     folder_recommendation: FolderMemoryRecommendation | None,
+    existing_folders: Sequence[str] = (),
 ) -> BatchRecommendation:
     if _is_gmail_mailbox(mailbox):
         specific_folder = _gmail_specific_folder(record)
         if specific_folder is not None:
             return BatchRecommendation(
-                target_folder=specific_folder,
+                target_folder=_canonical_existing_folder(
+                    specific_folder,
+                    existing_folders=existing_folders,
+                ),
                 reason="Matched known Gmail cleanup folder.",
+                group="specific_folder",
+            )
+        existing_folder_recommendation = _existing_folder_recommendation(
+            record,
+            existing_folders=existing_folders,
+        )
+        if existing_folder_recommendation is not None:
+            return BatchRecommendation(
+                target_folder=existing_folder_recommendation.target_folder,
+                reason=existing_folder_recommendation.reason,
                 group="specific_folder",
             )
         if folder_recommendation is not None:
             return BatchRecommendation(
-                target_folder=folder_recommendation.target_folder,
+                target_folder=_canonical_existing_folder(
+                    folder_recommendation.target_folder,
+                    existing_folders=existing_folders,
+                ),
                 reason=folder_recommendation.reason,
                 group="specific_folder",
             )
@@ -334,8 +367,71 @@ def _gmail_specific_folder(record: SourceMemoryRecord) -> str | None:
     return None
 
 
+def _existing_folder_recommendation(
+    record: SourceMemoryRecord,
+    *,
+    existing_folders: Sequence[str],
+) -> FolderMemoryRecommendation | None:
+    haystack_terms = _subject_terms(
+        " ".join(
+            value
+            for value in (record.subject, record.sender_or_owner or "")
+            if value
+        )
+    )
+    for folder in _specific_existing_folders(existing_folders):
+        folder_terms = _folder_terms(folder)
+        if folder_terms and folder_terms.issubset(haystack_terms):
+            return FolderMemoryRecommendation(
+                target_folder=folder,
+                reason="Matched existing Gmail Clarity label.",
+            )
+    return None
+
+
+def _canonical_existing_folder(
+    target_folder: str,
+    *,
+    existing_folders: Sequence[str],
+) -> str:
+    normalized_target = target_folder.casefold()
+    for folder in existing_folders:
+        if folder.casefold() == normalized_target:
+            return folder
+    return target_folder
+
+
+def _specific_existing_folders(
+    existing_folders: Sequence[str],
+) -> tuple[str, ...]:
+    return tuple(
+        folder
+        for folder in existing_folders
+        if "/" in folder
+        and not folder.casefold().endswith("/review")
+        and not folder.casefold().endswith("/noise")
+    )
+
+
 def _is_gmail_mailbox(mailbox: str) -> bool:
     return mailbox.lower().endswith("@gmail.com")
+
+
+def _gmail_clarity_labels(
+    *,
+    mailbox: str,
+    folder_namespace: str,
+    root: Path,
+) -> tuple[str, ...]:
+    transport = build_google_gmail_read_transport(
+        load_workspace_config(root).require_google_credentials()
+    )
+    folder_prefix = f"{folder_namespace}/".casefold()
+    return tuple(
+        label
+        for label in transport.list_labels(mailbox)
+        if label.casefold().startswith(folder_prefix)
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -347,6 +443,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         output_path=args.output,
         mailbox=args.mailbox,
         limit=args.limit,
+        use_gmail_labels=args.gmail_labels,
     )
     print(f"Wrote {result.output_path}")
     print(f"Manifest: {result.manifest_path}")
@@ -587,6 +684,7 @@ def _batch_manifest(
     records: Sequence[SourceMemoryRecord],
     folder_policy: dict[str, str] | Any,
     folder_recommendations: dict[str, FolderMemoryRecommendation],
+    existing_folders: Sequence[str] = (),
     generated_at: datetime,
 ) -> dict[str, Any]:
     recommendations = _batch_recommendations(
@@ -594,6 +692,7 @@ def _batch_manifest(
         records=records,
         folder_policy=folder_policy,
         folder_recommendations=folder_recommendations,
+        existing_folders=existing_folders,
     )
     return {
         "mailbox": mailbox,
@@ -666,6 +765,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=25,
         type=int,
         help="Maximum current items to include.",
+    )
+    parser.add_argument(
+        "--gmail-labels",
+        action="store_true",
+        help=(
+            "For Gmail mailboxes, read existing Clarity/* labels and use them "
+            "as cleanup recommendation candidates."
+        ),
     )
     return parser.parse_args(argv)
 

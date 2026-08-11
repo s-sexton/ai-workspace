@@ -50,6 +50,26 @@ Travelers Insurance, VW, Garmin, K-State, Sedgwick HS, Fiddlers Creek, and
 Smith Orthodontics. Other specific folders can still be taught through numbered
 cleanup directions, such as `move 4 to Clarity/Vendor Name`.
 
+Gmail cleanup batches can also use existing mailbox labels as a read-only
+recommendation source:
+
+``` powershell
+python -m assistant.src.email_cleanup_batch --mailbox sesexton@gmail.com --gmail-labels
+```
+
+When `--gmail-labels` is used for a Gmail mailbox, Clarity reads the mailbox's
+current labels and treats existing `Clarity/*` labels as candidate filing
+destinations for the batch. Generic `Clarity/Review` and `Clarity/Noise` labels
+are ignored for specific-folder matching. This helps the initial recommendation
+pass reuse folders such as `Clarity/INTRUST` instead of suggesting or later
+creating a near-duplicate. Reading labels does not move, trash, or modify
+messages.
+
+Gmail label execution first looks for an exact label match, then a
+case-insensitive label match, before creating a new label. This lets
+`Clarity/Intrust` reuse an existing `Clarity/INTRUST` label instead of creating
+duplicates or failing on provider conflicts.
+
 Classification is intentionally conservative. Restricted mailbox sender and
 authentication checks run first. Then operational, account, family, security,
 and approval signals are kept for review. Only after those checks does Clarity
@@ -330,6 +350,15 @@ Numbered directions can be recorded as approved local actions with:
 ``` powershell
 python -m assistant.src.process_email_cleanup_batch --directions "delete 1, 3. move 2 to Clarity/Vendor Name" --execute
 ```
+
+Cleanup directions may also use group context from the current manifest. If the
+human gives explicit exceptions and then says `the remainder move`, `remaining
+move`, or `rest move`, Clarity applies the explicit commands first and then
+moves the remaining items in the same recommendation group to each item's
+manifest recommendation. For example, if items 1, 2, and 3 are in `Move To
+Specific Clarity Folders`, then `delete 1, 3, the remainder, move` deletes 1
+and 3 and moves item 2 to its recommended folder. This behavior should be
+preserved across chat, email, and Teams command surfaces.
 
 This does not call an email provider directly. It records approved actions in
 local memory so `assistant.src.execute_email_moves` can apply them. `Review`,

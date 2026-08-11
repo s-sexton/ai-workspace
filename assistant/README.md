@@ -7,6 +7,11 @@ approved information, separates signal from noise, organizes what needs
 attention, answers questions from approved context, and recommends next actions
 while keeping the human in control.
 
+Clarity's living job description is maintained in
+[`docs/clarity-rre.md`](../docs/clarity-rre.md). Use that RRE to decide whether
+new work belongs in Clarity and update it when Clarity's role, decision rights,
+scheduled work, or expectations change.
+
 ## Scope
 
 Clarity Assistant covers both work and personal domains.

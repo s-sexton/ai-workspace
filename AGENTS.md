@@ -59,6 +59,23 @@ Before implementing significant work:
 7. Update necessary documentation or create new documentation as needed.
 8. Explain what changed.
 
+When creating or materially enhancing a role or agent, create or update that
+role's RRE according to `docs/rre-guidelines.md`. Treat RREs as living job
+descriptions and decision-rights contracts.
+
+When work changes Clarity's role, decision rights, communication surfaces,
+scheduled work, or operating expectations, update `docs/clarity-rre.md` as part
+of the documentation step.
+
+If a decision or action is not inside a role's documented decision rights,
+escalation or human approval is required before acting.
+
+Until the human operator changes this instruction, every role or agent
+configuration change must be guided by the RRE's market-based
+management-inspired principles: vision, values and capability, knowledge
+processes, decision rights, and incentives or feedback. Reference those
+principles when proposing or explaining configuration changes.
+
 ---
 
 ## Runtime Environment

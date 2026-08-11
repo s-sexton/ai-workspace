@@ -122,6 +122,56 @@ def test_process_email_cleanup_batch_splits_comma_before_command_verb(tmp_path):
     assert targets["message-2"] == "Clarity/Review"
 
 
+def test_process_email_cleanup_batch_moves_remainder_from_recommendation_group(tmp_path):
+    memory_path = tmp_path / "logs" / "memory.duckdb"
+    manifest_path = tmp_path / "reports" / "email-cleanup-batch.json"
+    _write_config(tmp_path)
+    items = _seed_email_memory(memory_path, count=5)
+    _write_manifest(
+        manifest_path,
+        items,
+        recommendations={
+            1: ("Clarity/Experian", "specific_folder"),
+            2: ("Clarity/Monarch", "specific_folder"),
+            3: ("Clarity/Garmin", "specific_folder"),
+            4: ("Deleted Items", "delete"),
+            5: ("Clarity/Review", "review"),
+        },
+    )
+
+    result = process_email_cleanup_batch(
+        "delete 1, 3, the remainder, move",
+        root=tmp_path,
+        memory_path=memory_path,
+        manifest_path=manifest_path,
+        execute=True,
+    )
+
+    assert "# Email Cleanup Batch Execution" in result
+    assert "- Commands: 3" in result
+    assert "Item 1 -> Deleted Items: First item" in result
+    assert "Item 2 -> Clarity/Monarch: Second item" in result
+    assert "Item 3 -> Deleted Items: Third item" in result
+    assert "Item 4" not in result
+    assert "Item 5" not in result
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        approved_actions = store.actions_by_approval_status("approved")
+    finally:
+        store.close()
+
+    targets = {
+        action.item_external_id: action.action_target
+        for action in approved_actions
+    }
+    assert targets == {
+        "message-1": "Deleted Items",
+        "message-2": "Clarity/Monarch",
+        "message-3": "Deleted Items",
+    }
+
+
 def test_process_email_cleanup_batch_rejects_folder_outside_namespace(tmp_path):
     memory_path = tmp_path / "logs" / "memory.duckdb"
     manifest_path = tmp_path / "reports" / "email-cleanup-batch.json"
@@ -177,7 +227,7 @@ def _write_config(root):
     )
 
 
-def _seed_email_memory(memory_path):
+def _seed_email_memory(memory_path, *, count=3):
     memory_path.parent.mkdir(parents=True, exist_ok=True)
     store = DuckDbMemoryStore(memory_path)
     try:
@@ -189,7 +239,14 @@ def _seed_email_memory(memory_path):
             scope_label="scott.sexton@sendthisfile.com",
         )
         items = []
-        for index, subject in enumerate(("First item", "Second item", "Third item"), 1):
+        subjects = (
+            "First item",
+            "Second item",
+            "Third item",
+            "Fourth item",
+            "Fifth item",
+        )
+        for index, subject in enumerate(subjects[:count], 1):
             item = store.record_item_seen(
                 source_id=source.source_id,
                 external_id=f"message-{index}",
@@ -210,7 +267,8 @@ def _seed_email_memory(memory_path):
         store.close()
 
 
-def _write_manifest(path, items):
+def _write_manifest(path, items, *, recommendations=None):
+    recommendations = recommendations or {}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
@@ -229,6 +287,15 @@ def _write_manifest(path, items):
                         "updatedAt": item.updated_at,
                         "label": "review",
                         "reason": "Fixture item.",
+                        "recommendation": (
+                            {
+                                "targetFolder": recommendations[index][0],
+                                "reason": "Fixture recommendation.",
+                                "group": recommendations[index][1],
+                            }
+                            if index in recommendations
+                            else None
+                        ),
                     }
                     for index, item in enumerate(items, 1)
                 ],

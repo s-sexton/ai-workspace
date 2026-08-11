@@ -149,6 +149,33 @@ def test_google_gmail_read_transport_lists_inbox_metadata():
     assert parse_qs(parsed.query)["labelIds"] == ["INBOX"]
 
 
+def test_google_gmail_read_transport_lists_labels():
+    labels_url = "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/labels"
+    transport = FakeGoogleTransport(
+        {
+            labels_url: FakeGoogleResponse(
+                200,
+                {
+                    "labels": [
+                        {"id": "INBOX", "name": "INBOX"},
+                        {"id": "Label_INTRUST", "name": "Clarity/INTRUST"},
+                    ]
+                },
+            ),
+        }
+    )
+    client = GoogleGmailReadTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://gmail.example/gmail/v1",
+    )
+
+    labels = client.list_labels("sesexton@gmail.com")
+
+    assert labels == ("INBOX", "Clarity/INTRUST")
+    assert transport.get_calls[0][0] == labels_url
+
+
 def test_google_gmail_move_transport_trashes_deleted_items():
     trash_url = (
         "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/"
@@ -268,6 +295,96 @@ def test_google_gmail_move_transport_creates_label_and_archives():
     assert transport.post_calls[1][2] == {
         "removeLabelIds": ["INBOX"],
         "addLabelIds": ["Label_123"],
+    }
+
+
+def test_google_gmail_move_transport_reuses_label_case_insensitively():
+    labels_url = "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/labels"
+    modify_url = (
+        "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/"
+        "messages/msg-1/modify"
+    )
+    transport = FakeGoogleTransport(
+        {
+            labels_url: FakeGoogleResponse(
+                200,
+                {"labels": [{"id": "Label_INTRUST", "name": "Clarity/INTRUST"}]},
+            ),
+            modify_url: FakeGoogleResponse(200, {"id": "msg-1"}),
+        }
+    )
+    client = GoogleGmailMoveTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://gmail.example/gmail/v1",
+    )
+
+    client.move_message(
+        mailbox="sesexton@gmail.com",
+        message_id="msg-1",
+        target_folder="Clarity/Intrust",
+    )
+
+    assert len(transport.get_calls) == 1
+    assert len(transport.post_calls) == 1
+    assert transport.post_calls[0][2] == {
+        "removeLabelIds": ["INBOX"],
+        "addLabelIds": ["Label_INTRUST"],
+    }
+
+
+def test_google_gmail_move_transport_recovers_from_existing_label_conflict():
+    labels_url = "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/labels"
+    modify_url = (
+        "https://gmail.example/gmail/v1/users/sesexton%40gmail.com/"
+        "messages/msg-1/modify"
+    )
+    transport = FakeGoogleTransport(
+        {
+            labels_url: FakeGoogleResponse(200, {"labels": []}),
+            modify_url: FakeGoogleResponse(200, {"id": "msg-1"}),
+        }
+    )
+    label_responses = [
+        FakeGoogleResponse(200, {"labels": []}),
+        FakeGoogleResponse(
+            200,
+            {"labels": [{"id": "Label_INTRUST", "name": "Clarity/INTRUST"}]},
+        ),
+    ]
+
+    def fake_get(url, headers):
+        transport.get_calls.append((url, headers))
+        if url == labels_url:
+            return label_responses.pop(0)
+        return transport.responses[url]
+
+    def fake_post(url, headers, body):
+        transport.post_calls.append((url, headers, body))
+        if url == labels_url:
+            return FakeGoogleResponse(409, {"error": {"status": "ALREADY_EXISTS"}})
+        return transport.responses[url]
+
+    transport.get = fake_get
+    transport.post = fake_post
+    client = GoogleGmailMoveTransport(
+        access_token="access-token",
+        transport=transport,
+        base_url="https://gmail.example/gmail/v1",
+    )
+
+    client.move_message(
+        mailbox="sesexton@gmail.com",
+        message_id="msg-1",
+        target_folder="Clarity/Intrust",
+    )
+
+    assert len(transport.get_calls) == 2
+    assert len(transport.post_calls) == 2
+    assert transport.post_calls[0][0] == labels_url
+    assert transport.post_calls[1][2] == {
+        "removeLabelIds": ["INBOX"],
+        "addLabelIds": ["Label_INTRUST"],
     }
 
 

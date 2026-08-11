@@ -208,6 +208,18 @@ python -m assistant.src.send_daily_brief --days 7 --refresh-email --graph-email 
 
 The only external write in this variant is the final Teams webhook post.
 
+The preferred 7:00 AM Teams Day at a Glance command is the dedicated wrapper:
+
+``` powershell
+python -m assistant.src.send_day_at_glance_teams --execute
+```
+
+This command refreshes approved inboxes, calendars, and Jira before generating
+and posting the Teams brief. The generated daily brief manifest supports Teams
+reply commands such as `Clarity delete inbox 1-3 and execute`. Provider writes
+from Teams require explicit `and execute` phrasing and
+`assistant.teamsRelay.allowProviderWrites=true`.
+
 To print a Windows scheduled task for that email send workflow:
 
 ``` powershell

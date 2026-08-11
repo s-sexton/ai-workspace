@@ -215,6 +215,16 @@ def render_daily_brief(
         f"- Pending Clarity approvals: {len(pending_actions)}",
         "",
     ]
+    lines.extend(
+        _recommendations_section(
+            inbox_items=inbox_items,
+            calendar_items=calendar_items,
+            jira_items=jira_items,
+            open_tasks=open_tasks,
+            pending_actions=pending_actions,
+        )
+    )
+    lines.extend(("",))
     lines.extend(_email_attention_section(inbox_items, mailboxes=inbox_mailboxes))
     lines.extend(("",))
     lines.extend(
@@ -242,6 +252,8 @@ def render_daily_brief(
             "- Approve pending cleanup actions",
             "- Approve action ACTION_ID",
             "- Reject action ACTION_ID",
+            "- Delete inbox 1-3 and execute",
+            "- Move inbox 4 to Review",
             "",
             "Clarity will only process authenticated replies from approved senders.",
         )
@@ -528,6 +540,35 @@ def _open_tasks_section(tasks: Sequence[DelegatedTaskRecord]) -> list[str]:
         lines.append("")
     if lines[-1] == "":
         lines.pop()
+    return lines
+
+
+def _recommendations_section(
+    *,
+    inbox_items: Sequence[SourceMemoryRecord],
+    calendar_items: Sequence[SourceMemoryRecord],
+    jira_items: Sequence[SourceMemoryRecord],
+    open_tasks: Sequence[DelegatedTaskRecord],
+    pending_actions: Sequence[PendingActionRecord],
+) -> list[str]:
+    lines = ["## Recommendations", ""]
+    if inbox_items:
+        lines.append(
+            "- Triage Inbox Attention first. Use `delete inbox 1-3 and execute` "
+            "for approved bulk cleanup or `move inbox item 4 to Review` for "
+            "review-only filing."
+        )
+    if pending_actions:
+        lines.append(
+            "- Clear pending approvals. Use `approve pending cleanup actions` "
+            "to approve local cleanup proposals."
+        )
+    if calendar_items:
+        lines.append("- Review the calendar before committing to new work today.")
+    if jira_items or open_tasks:
+        lines.append("- Pick one open Jira ticket or task as the day's main focus.")
+    if len(lines) == 2:
+        lines.append("- No immediate action recommended from the refreshed sources.")
     return lines
 
 

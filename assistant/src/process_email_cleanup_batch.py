@@ -52,11 +52,11 @@ def process_email_cleanup_batch(
     if not resolved_memory_path.is_file():
         return f"No Clarity memory found at {resolved_memory_path}."
 
-    commands = _parse_directions(directions)
+    manifest = _load_manifest(resolved_manifest_path)
+    commands = _parse_directions(directions, manifest=manifest)
     if not commands:
         return "# Email Cleanup Batch Plan\n\nNo supported cleanup directions found."
 
-    manifest = _load_manifest(resolved_manifest_path)
     email_settings = load_workspace_config(
         workspace_root,
         include_process_env=False,
@@ -111,24 +111,67 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
 
-def _parse_directions(directions: str) -> tuple[dict[str, Any], ...]:
+def _parse_directions(
+    directions: str,
+    *,
+    manifest: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], ...]:
     commands: list[dict[str, Any]] = []
-    for raw_line in directions.splitlines():
+    normalized_directions = _normalize_remainder_phrasing(directions)
+    for raw_line in normalized_directions.splitlines():
         for raw_command in re.split(
-            r";+|[,.](?=\s*(?:move|file|delete|trash)\b)",
+            r";+|[,.](?=\s*(?:move|file|delete|trash|the remainder|the remaining|remaining|remainder|rest)\b)",
             raw_line,
             flags=re.IGNORECASE,
         ):
             line = " ".join(raw_command.strip().split())
             if not line:
                 continue
-            command = _parse_direction_line(line)
+            command = _parse_direction_line(
+                line,
+                manifest=manifest,
+                prior_commands=tuple(commands),
+            )
             if command is not None:
                 commands.extend(command)
     return tuple(commands)
 
 
-def _parse_direction_line(line: str) -> tuple[dict[str, Any], ...] | None:
+def _normalize_remainder_phrasing(directions: str) -> str:
+    return re.sub(
+        r"\b(the\s+)?(?P<scope>remaining|remainder|rest)\s*,\s*(?P<action>move|file|delete|trash)\b",
+        lambda match: (
+            f"{match.group(1) or ''}{match.group('scope')} {match.group('action')}"
+        ),
+        directions,
+        flags=re.IGNORECASE,
+    )
+
+
+def _parse_direction_line(
+    line: str,
+    *,
+    manifest: dict[str, Any] | None = None,
+    prior_commands: Sequence[dict[str, Any]] = (),
+) -> tuple[dict[str, Any], ...] | None:
+    remainder_match = re.search(
+        r"^(?:the\s+)?(?P<scope>remaining|remainder|rest)(?:\s+recommended\s+folder\s+items?)?(?:,\s*)?\s*(?P<action>move|file|delete|trash)(?:\s+(?:them|those|items?))?(?:\s+to\s+(?P<target>.+))?$",
+        line,
+        flags=re.IGNORECASE,
+    )
+    if remainder_match:
+        target = remainder_match.group("target")
+        action = remainder_match.group("action").lower()
+        if action in {"delete", "trash"}:
+            target = "trash"
+        elif target is None:
+            target = "recommendation"
+        numbers = _remaining_recommended_numbers(manifest, commands=prior_commands)
+        return tuple(
+            {"type": "move_item", "number": number, "target": target}
+            for number in numbers
+        )
+
     move_match = re.search(
         r"^(?:move|file)\s+(?:items?\s+)?(?P<numbers>.+?)\s+to\s+(?P<target>.+)$",
         line,
@@ -179,6 +222,69 @@ def _parse_number_list(value: str) -> tuple[int, ...]:
     return tuple(dict.fromkeys(numbers))
 
 
+def _remaining_recommended_numbers(
+    manifest: dict[str, Any] | None,
+    *,
+    commands: Sequence[dict[str, Any]],
+) -> tuple[int, ...]:
+    if manifest is None:
+        return ()
+    handled_numbers = {
+        command["number"]
+        for command in commands
+        if isinstance(command.get("number"), int)
+    }
+    recommended_group = _active_recommendation_group(
+        manifest,
+        handled_numbers=handled_numbers,
+    )
+    if recommended_group is None:
+        return ()
+    return tuple(
+        item["number"]
+        for item in _manifest_items(manifest)
+        if item.get("number") not in handled_numbers
+        and _manifest_recommendation_group(item) == recommended_group
+    )
+
+
+def _active_recommendation_group(
+    manifest: dict[str, Any],
+    *,
+    handled_numbers: set[int],
+) -> str | None:
+    handled_groups = {
+        group
+        for item in _manifest_items(manifest)
+        if item.get("number") in handled_numbers
+        for group in (_manifest_recommendation_group(item),)
+        if group is not None
+    }
+    if len(handled_groups) == 1:
+        return next(iter(handled_groups))
+    return None
+
+
+def _recommended_target(item: dict[str, Any]) -> str | None:
+    recommendation = item.get("recommendation")
+    if not isinstance(recommendation, dict):
+        return None
+    target = recommendation.get("targetFolder")
+    if not isinstance(target, str) or not target.strip():
+        return None
+    return target.strip()
+
+
+def _manifest_recommendation_group(item: dict[str, Any]) -> str | None:
+    recommendation = item.get("recommendation")
+    if not isinstance(recommendation, dict):
+        return None
+    group = recommendation.get("group")
+    if not isinstance(group, str) or not group.strip():
+        return None
+    return group.strip()
+
+
 def _number_range(start: int, end: int) -> range:
     if start <= end:
         return range(start, end + 1)
@@ -198,14 +304,19 @@ def _plan_or_record_command(
     item = _manifest_item(manifest, number=command["number"])
     if item is None:
         return _failed_item(command, "Batch item was not found.")
+    command_target = command["target"]
+    if command_target == "recommendation":
+        command_target = _recommended_target(item)
+        if command_target is None:
+            return _failed_item(command, "Batch item has no recommended target.")
     target_folder = _target_folder(
-        command["target"],
+        command_target,
         folder_policy=folder_policy,
         folder_namespace=folder_namespace,
     )
     if target_folder is None:
         return _failed_item(command, "Target folder is not allowed.")
-    label = _target_label(command["target"], target_folder=target_folder)
+    label = _target_label(command_target, target_folder=target_folder)
     if execute:
         store.record_assistant_action(
             run_id=run_id,
@@ -341,13 +452,17 @@ def _failed_item(command: dict[str, Any], result: str) -> CleanupCommandPlanItem
 
 
 def _manifest_item(manifest: dict[str, Any], *, number: int) -> dict[str, Any] | None:
-    raw_items = manifest.get("items", [])
-    if not isinstance(raw_items, list):
-        return None
-    for item in raw_items:
-        if isinstance(item, dict) and item.get("number") == number:
+    for item in _manifest_items(manifest):
+        if item.get("number") == number:
             return item
     return None
+
+
+def _manifest_items(manifest: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    raw_items = manifest.get("items", [])
+    if not isinstance(raw_items, list):
+        return ()
+    return tuple(item for item in raw_items if isinstance(item, dict))
 
 
 def _load_manifest(path: Path) -> dict[str, Any]:

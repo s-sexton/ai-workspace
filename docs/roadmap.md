@@ -4,6 +4,15 @@ Clarity helps the human get organized and focused by gathering approved context,
 separating signal from noise, recording local memory, and preparing safe next
 steps.
 
+Clarity's current role, responsibilities, expectations, and decision rights are
+maintained in `docs/clarity-rre.md`. Roadmap changes that alter Clarity's
+decision rights,
+communication surfaces, scheduled work, or operating expectations should update
+the RRE in the same change.
+Use the RRE's market-based management-inspired model when planning work: vision,
+values and capability, knowledge processes, decision rights, and incentives or
+feedback.
+
 The roadmap advances in small, testable slices. Each slice should preserve the
 local-first security model and keep writes behind explicit approval.
 

@@ -578,6 +578,127 @@ def test_process_teams_relay_text_action_can_execute_new_action_only(
     assert len(execute_calls[0]["action_ids"]) == 1
 
 
+def test_process_teams_relay_daily_brief_reply_can_execute_new_email_actions(
+    tmp_path,
+    monkeypatch,
+):
+    root = tmp_path
+    memory_path = root / "memory.duckdb"
+    manifest_path = root / "reports" / "clarity-daily-brief.json"
+    _write_multi_mailbox_config(root)
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        store.initialize_schema()
+        run = store.start_run(workflow="test")
+        source = store.record_source(
+            source_type="email",
+            display_name="Gmail",
+            scope_label="sesexton@gmail.com",
+            access_mode="read_write",
+        )
+        item = store.record_item_seen(
+            source_id=source.source_id,
+            external_id="gmail-message-1",
+            item_type="email_message",
+            subject="Brief message",
+            first_seen_run_id=run.run_id,
+        )
+        old_item = store.record_item_seen(
+            source_id=source.source_id,
+            external_id="old-message",
+            item_type="email_message",
+            subject="Old message",
+            first_seen_run_id=run.run_id,
+        )
+        store.record_assistant_action(
+            run_id=run.run_id,
+            item_id=old_item.item_id,
+            action_type="propose_email_move_trash",
+            approval_status="required",
+            action_target="Deleted Items",
+            result="Old pending action.",
+        )
+        store.finish_run(run.run_id, status="completed")
+    finally:
+        store.close()
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "briefDate": "2026-08-05",
+                "sections": {
+                    "inbox": [
+                        {
+                            "number": 1,
+                            "itemId": item.item_id,
+                            "externalId": "gmail-message-1",
+                            "sourceType": "email",
+                            "sourceScope": "sesexton@gmail.com",
+                            "itemType": "email_message",
+                            "subject": "Brief message",
+                            "senderOrOwner": "sender@example.invalid",
+                        }
+                    ],
+                    "outlook": [
+                        {
+                            "number": 1,
+                            "itemId": item.item_id,
+                            "externalId": "gmail-message-1",
+                            "sourceType": "email",
+                            "sourceScope": "sesexton@gmail.com",
+                            "itemType": "email_message",
+                            "subject": "Brief message",
+                            "senderOrOwner": "sender@example.invalid",
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    transport = object()
+    execute_calls = []
+
+    def fake_build_gmail_move_transport_from_config(**_):
+        return transport
+
+    def fake_execute_email_moves(**kwargs):
+        execute_calls.append(kwargs)
+        return "# Email Move Execution\n\nMoved brief message"
+
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.build_gmail_move_transport_from_config",
+        fake_build_gmail_move_transport_from_config,
+    )
+    monkeypatch.setattr(
+        "assistant.src.process_teams_relay.execute_email_moves",
+        fake_execute_email_moves,
+    )
+
+    result = process_teams_relay_payload(
+        _payload(text="Clarity delete inbox 1 and execute"),
+        allowed_senders=("scott@example.com",),
+        root=root,
+        memory_path=memory_path,
+    )
+
+    assert result.status == "completed"
+    assert "Daily Brief Reply Execution" in result.response_text
+    assert "Moved brief message" in result.response_text
+    assert len(execute_calls) == 1
+    assert execute_calls[0]["mailboxes"] == ("sesexton@gmail.com",)
+    assert len(execute_calls[0]["action_ids"]) == 1
+
+    store = DuckDbMemoryStore(memory_path)
+    try:
+        required = store.pending_actions(limit=10)
+        approved = store.actions_by_approval_status("approved", limit=10)
+    finally:
+        store.close()
+    assert any(action.item_external_id == "old-message" for action in required)
+    assert any(action.item_external_id == "gmail-message-1" for action in approved)
+
+
 def test_process_teams_relay_email_move_plan_returns_dry_run(tmp_path):
     root = tmp_path
     memory_path = root / "memory.duckdb"
