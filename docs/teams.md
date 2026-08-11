@@ -43,6 +43,26 @@ execute`, Clarity approves and applies only the new email move actions created
 from that Teams command, and only when `assistant.teamsRelay.allowProviderWrites`
 is true.
 
+Clarity may also relay human-authored Teams replies back to another workspace
+agent when the human explicitly asks for that relay. Relay messages must stay
+attributed to the human, must not be treated as provider-write approval, and
+must not cause Clarity to complete work outside its own RRE decision rights.
+
+When another workspace agent sends Clarity a handoff or completion notice,
+Clarity should introduce itself as the assistant responsible for making the
+human's day easier, post approved informational completion pings to Teams, and
+tell the originating agent when the relay has been completed.
+
+Azure Engineer should not post Teams notifications directly. For long-running
+Azure analysis tasks, Azure Engineer should hand Clarity an informational
+completion notice with the task description, whether Azure or repo state changed,
+and the report or backlog path. Clarity owns the Teams delivery decision and
+uses its approved Teams integration. If the human replies with a request for
+Azure writes, authentication changes, billing or reservation actions, provider
+writes, workflow transitions, or external notifications outside Clarity's relay,
+Clarity should relay the message only after explicit instruction and the Azure
+Engineer must still escalate for human approval before acting.
+
 When Jira tickets are posted to Teams, each ticket key must be a hyperlink to
 the actual Jira ticket. Use the browser-facing Jira ticket URL, not the
 Atlassian API gateway URL.
@@ -98,18 +118,20 @@ webhooks, and new Clarity wiring should use that path.
 
 ## Current Capability
 
-The current webhook is outbound only:
+Clarity's Teams surface has two parts:
 
--   Clarity can post to the `AI Workspace` / `Clarity` channel.
--   Clarity does not yet read Teams messages.
--   Clarity does not yet process Teams replies.
--   Clarity does not approve, move, delete, create, or transition anything from
-    Teams messages.
+-   Outbound Teams posts to the `AI Workspace` / `Clarity` channel through the
+    configured Teams Workflows webhook.
+-   Inbound Teams replies through the Teams Workflow plus Azure Storage Queue
+    relay. The local Clarity worker polls, validates, processes, audits, and
+    replies through the existing Teams notification surface.
 
-Two-way Teams communication should use the Teams Workflow plus Azure Storage
-Queue relay design before moving Clarity into a cloud runtime. Teams Workflow
-messages enter an inbound queue, and a local Clarity worker polls, validates,
-processes, audits, and replies through the existing Teams notification surface.
+Teams-originated provider writes remain constrained by Clarity's RRE decision
+rights. Commands that move or delete email require explicit human direction,
+validated sender identity, and `assistant.teamsRelay.allowProviderWrites=true`.
+Jira writes, calendar writes, infrastructure changes, billing changes, and other
+state-changing operations still require explicit human approval in the relevant
+workflow.
 
 See `docs/teams-relay-architecture.md`.
 

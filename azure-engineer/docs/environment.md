@@ -253,9 +253,12 @@ Actual cost status:
 
 - `az consumption usage list` returned usage rows but not usable cost values in
   this CLI context.
-- The `az costmanagement` command group was not installed locally.
+- The `az costmanagement` extension is now installed, but in this environment
+  it exposes export management rather than a `query` command.
 - Direct Cost Management REST queries were rate-limited with HTTP `429`.
 - Cost Management benefit recommendations returned no rows.
+- No Cost Management exports are currently configured on the accessible
+  subscriptions.
 
 Public list-price examples gathered on August 11, 2026:
 
@@ -268,10 +271,41 @@ Public list-price examples gathered on August 11, 2026:
 Cost follow-up:
 
 - Retry Cost Management actual-cost queries later.
-- Prefer a billing export for repeatable monthly resource-level cost analysis,
-  subject to human approval.
+- Prefer a Cost Management export for repeatable monthly resource-level cost
+  analysis, subject to human approval because creating an export is an Azure
+  configuration write.
 - Validate Advisor reservation opportunities against actual steady-state usage
   before purchasing reservations.
+
+Installed cost and analysis tooling:
+
+- `costmanagement`
+- `reservation`
+- `resource-graph`
+- `front-door`
+- `scheduled-query`
+- `storage-preview`
+- `storage-discovery`
+
+## Reserved Instance Notes
+
+Active VM reserved instances observed on August 11, 2026:
+
+- `VM_RI_09-13-2022_11-51_renewed`: `Standard_B1s`, quantity `2`,
+  East US, 3-year term, scoped to `stf-prod-sub`, expires
+  September 13, 2028, 100% utilization over 1, 7, and 30 day aggregates.
+- `VM_RI_09-13-2022_12-50_renewed`: `Standard_D4s_v3`, quantity `1`,
+  East US, 3-year term, scoped to `stf-prod-sub`, expires
+  September 13, 2028, 100% utilization over 1, 7, and 30 day aggregates.
+- `VM_RI_09-13-2022_12-56_renewed`: `Standard_D2s_v3`, quantity `1`,
+  East US, 3-year term, scoped to `stf-prod-sub`, expires
+  September 13, 2028, 100% utilization over 1, 7, and 30 day aggregates.
+
+The active reservations match the current `stf-prod-sub` running VM footprint:
+two `Standard_B1s` VMs, one `Standard_D4s_v3` VM, and one `Standard_D2s_v3`
+VM. Renew is currently off for the active reservations. If any of these VMs
+are retired, resized, or moved before 2028, reservation exchange/scope impact
+should be reviewed first.
 
 ## Questionable Or Owner-Review Items
 
@@ -293,12 +327,16 @@ Cost follow-up:
   `azure-engineer/reports/infrastructure-assessment-2026-08-11.md`
 - Cross-subscription baseline:
   `azure-engineer/reports/cross-subscription-baseline-2026-08-11.md`
+- Reservation and legacy VM follow-up:
+  `azure-engineer/reports/reservation-and-legacy-vm-followup-2026-08-11.md`
+- Cost tooling and Advisor follow-up:
+  `azure-engineer/reports/cost-tooling-and-advisor-followup-2026-08-11.md`
+- Backlog:
+  `azure-engineer/docs/backlog.md`
 
 ## Open Follow-Ups
 
-1. Should future reviews cover all accessible SendThisFile subscriptions by
-   default, or only one named subscription at a time?
-2. Should a billing export be configured for actual cost analysis?
-3. Should Azure Defender/Security Center access be expanded or verified?
-4. Should tag policy or naming standards be documented for ownership,
+1. Should a billing export be configured for actual cost analysis?
+2. Should Azure Defender/Security Center access be expanded or verified?
+3. Should tag policy or naming standards be documented for ownership,
    environment, cost center, and data classification?
