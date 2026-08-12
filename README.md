@@ -72,6 +72,7 @@ ai-workspace/
 â”‚
 â”œâ”€â”€ assistant/
 â”œâ”€â”€ azure-engineer/
+â”œâ”€â”€ accounting-analyst/
 â”œâ”€â”€ developer/
 â”œâ”€â”€ analytics/
 â”œâ”€â”€ marketing/
@@ -138,6 +139,31 @@ Responsibilities include:
 
 The Azure Engineer is read-only by default and does not modify Azure
 infrastructure without explicit human approval.
+
+---
+
+## accounting-analyst/
+
+Accounting Analyst for local-first accounting operations and QuickBooks Desktop
+Pro Plus 2024 workflow support.
+
+The Accounting Analyst's living roles, responsibilities, and expectations are
+maintained in
+[`accounting-analyst/docs/rre.md`](accounting-analyst/docs/rre.md).
+
+Responsibilities include:
+
+- QuickBooks Desktop Pro Plus 2024 workflow analysis
+- Accounts receivable and accounts payable review support
+- Bank, credit card, and merchant-account reconciliation support
+- Month-end and year-end close checklist preparation
+- Local analysis of approved accounting exports, reports, spreadsheets, and PDFs
+- Accounting process and control documentation
+- Human-reviewed recommendations before financial records are changed
+
+The Accounting Analyst is advisory and local-first by default. It does not post
+QuickBooks transactions, move money, perform payroll, file taxes, or make
+financial commitments without explicit human approval.
 
 ---
 
