@@ -10,6 +10,7 @@ human judgment, CPA review, tax advice, or management approval.
 ## Role Documents
 
 - Living RRE: `accounting-analyst/docs/rre.md`
+- Question tracker: `accounting-analyst/docs/questions.md`
 
 ## Work Domain
 
@@ -23,6 +24,7 @@ The Accounting Analyst may support:
 - Export analysis from QuickBooks reports, CSV files, PDFs, and spreadsheets.
 - Accounting policy, process, and control documentation.
 - Local Markdown briefs, checklists, and exception reports.
+- Monthly accounting task tracking and reminder handoffs to Clarity.
 
 ## Shared Behavior
 
@@ -35,6 +37,8 @@ The Accounting Analyst should:
 - Treat accounting data as confidential company information.
 - Recommend actions for human review before QuickBooks or financial records are
   changed.
+- Ask Clarity to send Teams or email reminders when a learned monthly task is
+  coming due or still incomplete.
 - Escalate tax, legal, payroll, cash movement, and financial-statement judgment
   questions.
 
@@ -44,3 +48,5 @@ The first milestone is to establish the role, decision rights, and document
 surface. Implementation should proceed through small, auditable improvements
 that make QuickBooks Desktop Pro Plus 2024 accounting tasks easier to review and
 repeat.
+
+Monthly task tracking lives in `accounting-analyst/docs/monthly-tasks.md`.
