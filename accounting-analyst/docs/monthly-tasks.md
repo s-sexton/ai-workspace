@@ -40,8 +40,8 @@ the template item state at intake, not the current month's completion.
 | --- | --- | --- | --- | --- | --- |
 | AM-001 | open | Everyday | Manage `accounting@` and `billing@` emails in support CRM system | | |
 | AM-002 | open | Day 1 | Send invoices | [Create Monthly Invoices with SaasAnt Transactions](https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/94306305/Create+Monthly+Invoices+with+SaasAnt+Transactions); [Local workflow note](workflows/monthly-invoices.md) | Remember to use Coupa for NASDAQ invoice. |
-| AM-003 | open | Day 1 | Run `A/R Aging Detail w/ AccountID` report and determine who needs to get emailed | | |
-| AM-004 | open | Day 1 | Send statements | [Create Statements](https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/10158103/Create+Statements) | |
+| AM-003 | replaced | Day 1 | Verify QBDT payment reminders configuration and review/send process | [Local workflow note](workflows/qbdt-payment-reminders.md) | Replaces manual `A/R Aging Detail w/ AccountID` email-decision task. QBDT prompts the user to review and send escalating unpaid-invoice reminders at 31, 61, 91, and 121 days after due date. |
+| AM-004 | replaced | Day 1 | Verify QBDT payment reminders configuration instead of sending statements | [Create Statements](https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/10158103/Create+Statements); [Local workflow note](workflows/qbdt-payment-reminders.md) | Manual statements are retired because QBDT payment reminders have been more effective. |
 | AM-005 | open | Day 1 | Record Unearned Revenue | [Recording Unearned Revenue](https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/9928707/Recording+Unearned+Revenue) | |
 | AM-006 | open | Day 1 | Process refunds and chargebacks | [Enter Refunds Charge Backs](https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/11141121/Enter+Refunds+Charge+Backs) | |
 | AM-007 | open | Day 1 | Enter Pre-paid Expenses | [Enter Pre-paid Expenses](https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/11829249/Enter+Pre-paid+Expenses) | |
@@ -117,3 +117,26 @@ Use this section to record what was done and when the human reports completion.
 - The related Confluence page for the new merchant-based reconciliation process
   is linked from AM-008. Keep this register limited to sanitized guidance and
   links.
+
+## Retired Or Replaced Manual Tasks
+
+### AM-003 A/R Aging Email Review
+
+- The prior manual task was to run `A/R Aging Detail w/ AccountID` and determine
+  who needed to be emailed.
+- This has been replaced by QuickBooks Desktop payment reminders with
+  escalating language. QBDT prompts the user to review and send; reminders are
+  not treated as fully autonomous sends.
+- Current observed schedule: all customers, 31/61/91/121 days after due date.
+- Keep a lightweight monthly control check to verify the reminder schedule is
+  enabled and unchanged, and that recent check deposits have been received or
+  considered before reminders are sent.
+
+### AM-004 Send Statements
+
+- The prior manual task was to send statements.
+- This has also been replaced by QuickBooks Desktop payment reminders because
+  payment reminders have been more effective than statements.
+- Keep the historical Confluence statement how-to link for reference, but do not
+  treat statement sending as an active monthly task unless the human operator
+  reactivates it.
