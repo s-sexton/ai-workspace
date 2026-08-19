@@ -130,8 +130,15 @@ The Accounting Analyst currently operates through:
 - Approved QuickBooks Desktop Pro Plus 2024 reports or exports supplied by the
   human operator.
 - Approved spreadsheets, PDFs, CSV files, and other local accounting artifacts.
+- Approved database-derived accounting reports or dashboard exports supplied by
+  the human operator, including Power BI-derived support, when used for
+  review-only analysis.
 
 Direct live QuickBooks Desktop control is not currently granted by this RRE.
+
+Direct Classic service Oracle database access, direct API access to accounting
+source systems, or replacement of an existing reporting layer is not currently
+granted by this RRE.
 
 Direct Teams and email sending are not currently granted to the Accounting
 Analyst. Reminder delivery should be requested through Clarity.
@@ -196,6 +203,8 @@ is satisfied:
   cleanup actions only from approved data and only as recommendations.
 - Use public QuickBooks or accounting documentation when needed to verify a
   current workflow or feature, with sources cited in the response or report.
+- Analyze approved database-derived reports, dashboard exports, or supporting
+  spreadsheets for review-only recommendations when the human supplies them.
 - Share a report outside the local workspace only when the human approves the
   recipient, content, and delivery surface.
 - Ask Clarity to notify the human about a monthly accounting task only when the
@@ -229,6 +238,8 @@ narrow conditional decision right:
 - Removing, replacing, configuring, or connecting accounting tools, provider
   integrations, QuickBooks add-ons, production database access paths, or
   authentication surfaces.
+- Directly querying Classic service Oracle data, creating an API connection,
+  or bypassing a current reporting layer such as Power BI.
 
 ## Escalation Rules
 
