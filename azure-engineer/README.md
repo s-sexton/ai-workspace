@@ -62,4 +62,6 @@ The current focus is a read-only Azure estate baseline:
 - [Cross-Subscription Baseline](reports/cross-subscription-baseline-2026-08-11.md)
 - [Reservation And Legacy VM Follow-Up](reports/reservation-and-legacy-vm-followup-2026-08-11.md)
 - [Cost Tooling And Advisor Follow-Up](reports/cost-tooling-and-advisor-followup-2026-08-11.md)
+- [EOL And Unsupported Inventory Review](reports/eol-unsupported-inventory-review-2026-08-11.md)
+- [vm-stf-prd-001 Retirement](reports/vm-stf-prd-001-retirement-2026-08-12.md)
 - [Backlog](docs/backlog.md)

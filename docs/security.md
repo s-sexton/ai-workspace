@@ -6,6 +6,27 @@
 -   Human approval for sensitive actions
 -   Read-only Jira for initial milestone
 
+## Confluence Publishing Boundary
+
+The current Confluence environment uses the free tier, where all users may be
+able to see all spaces. Treat Confluence as broadly visible unless a future
+access model is verified and documented.
+
+Clarity and other workspace agents must not publish any of the following to
+Confluence:
+
+-   PII or private personal data
+-   Keys, secrets, credentials, tokens, or authentication material
+-   Raw mailbox content or private email bodies
+-   Sensitive operational details
+-   Confidential business, legal, compliance, financial, or customer data
+
+Confluence pages should contain sanitized role documentation, public-safe
+operating guidance, high-level summaries, and links to local reports only when
+the linked material is also safe for broad visibility.
+
+Operational connection and write guidance lives in `docs/confluence.md`.
+
 ## LLM Boundary
 
 LLM integration should begin as summarization over bounded local context.

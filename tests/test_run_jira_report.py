@@ -180,6 +180,35 @@ def test_generate_local_jira_report_live_mode_uses_local_credentials(tmp_path):
     assert result.auth_mode == "basic"
 
 
+def test_generate_local_jira_report_live_mode_prefers_oauth(tmp_path, monkeypatch):
+    _write_config(tmp_path)
+    _write_env(
+        tmp_path,
+        extra=(
+            "JIRA_OAUTH_CLIENT_ID=oauth-client\n"
+            "JIRA_OAUTH_CLIENT_SECRET=oauth-secret\n"
+        ),
+    )
+    transport = RecordingTransport(payload={"issues": []})
+
+    monkeypatch.setattr(
+        "common.jira.urlopen",
+        lambda request, timeout: _FakeOAuthResponse(),
+    )
+
+    result = generate_local_jira_report(
+        root=tmp_path,
+        output_path=tmp_path / "reports" / "oauth.md",
+        generated_at=datetime(2026, 7, 9, 8, 30),
+        transport=transport,
+        use_live_jira=True,
+    )
+
+    _, headers = transport.calls[0]
+    assert headers["Authorization"] == "Bearer oauth-access-token"
+    assert result.auth_mode == "oauth"
+
+
 def test_generate_local_jira_report_applies_jql_override(tmp_path):
     _write_config(tmp_path)
     _write_env(tmp_path)
@@ -258,6 +287,17 @@ class RecordingTransport:
         return StaticJiraResponse(status_code=200, payload=self.payload)
 
 
+class _FakeOAuthResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return b'{"access_token": "oauth-access-token"}'
+
+
 def _write_config(root):
     config_dir = root / "config"
     config_dir.mkdir()
@@ -285,12 +325,13 @@ def _write_config(root):
     )
 
 
-def _write_env(root):
+def _write_env(root, *, extra: str = ""):
     (root / "config" / ".env").write_text(
         "JIRA_CLOUD_ID=company-example\n"
         "JIRA_SITE_URL=https://company-example.atlassian.net\n"
         "JIRA_EMAIL=user@example.com\n"
         "JIRA_API_TOKEN=secret-token\n"
-        "JIRA_ACCESS_TOKEN=access-token\n",
+        "JIRA_ACCESS_TOKEN=access-token\n"
+        + extra,
         encoding="utf-8",
     )

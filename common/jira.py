@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -14,6 +14,7 @@ from common.configuration import JiraCredentials, JiraSettings
 
 
 JIRA_SEARCH_PATH = "/rest/api/3/search/jql"
+JIRA_OAUTH_TOKEN_URL = "https://auth.atlassian.com/oauth/token"
 
 
 class JiraClientError(RuntimeError):
@@ -88,6 +89,48 @@ class UrllibJiraTransport:
         return UrllibJiraResponse(status_code=status_code, body=body)
 
 
+def fetch_jira_oauth_access_token(
+    credentials: JiraCredentials,
+    *,
+    timeout_seconds: float = 30.0,
+) -> str:
+    """Exchange service-account OAuth credentials for a short-lived access token."""
+
+    if not credentials.oauth_client_id or not credentials.oauth_client_secret:
+        raise JiraClientError("Jira OAuth client ID and secret are required.")
+
+    body = urlencode(
+        {
+            "client_id": credentials.oauth_client_id,
+            "client_secret": credentials.oauth_client_secret,
+            "grant_type": "client_credentials",
+        }
+    ).encode("utf-8")
+    request = Request(
+        JIRA_OAUTH_TOKEN_URL,
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise JiraClientError(
+            f"Jira OAuth token request failed with status {int(exc.code)}."
+        ) from exc
+    except (URLError, json.JSONDecodeError) as exc:
+        raise JiraClientError("Jira OAuth token request failed.") from exc
+
+    if not isinstance(payload, Mapping):
+        raise JiraClientError("Jira OAuth token response must be a JSON object.")
+    access_token = payload.get("access_token")
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise JiraClientError("Jira OAuth token response missing access_token.")
+    return access_token
+
+
 @dataclass(frozen=True)
 class JiraUser:
     """Normalized Jira user details used in reports."""
@@ -127,6 +170,10 @@ class JiraClient:
     jql: str | None = None
     use_cloud_route: bool = True
     use_bearer_auth: bool = False
+    oauth_token_provider: Callable[[JiraCredentials], str] = field(
+        default=fetch_jira_oauth_access_token,
+        repr=False,
+    )
 
     def fetch_report_issues(self) -> JiraIssueSearchResult:
         """Fetch and normalize the Jira issues needed for the first report."""
@@ -165,8 +212,16 @@ class JiraClient:
                 "Authorization": f"Bearer {self.credentials.access_token}",
             }
 
+        if self.use_cloud_route and self.credentials.is_oauth_complete:
+            return {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.oauth_token_provider(self.credentials)}",
+            }
+
         if not self.credentials.email or not self.credentials.api_token:
-            raise JiraClientError("Jira email and API token are required for Basic auth.")
+            raise JiraClientError(
+                "Jira OAuth credentials or email/API token are required."
+            )
         token = f"{self.credentials.email}:{self.credentials.api_token}".encode("utf-8")
         return {
             "Accept": "application/json",

@@ -28,12 +28,14 @@ class JiraCredentials:
     email: str | None = None
     api_token: str | None = field(default=None, repr=False)
     access_token: str | None = field(default=None, repr=False)
+    oauth_client_id: str | None = field(default=None, repr=False)
+    oauth_client_secret: str | None = field(default=None, repr=False)
 
     @property
     def is_complete(self) -> bool:
         """Return whether all required Jira credential values are present."""
 
-        return self.is_cloud_route_complete
+        return self.is_cloud_route_complete or self.is_oauth_complete
 
     @property
     def is_basic_auth_complete(self) -> bool:
@@ -52,6 +54,28 @@ class JiraCredentials:
         """Return whether Bearer-auth Jira credentials are present."""
 
         return all((self.cloud_id, self.access_token))
+
+    @property
+    def is_oauth_complete(self) -> bool:
+        """Return whether service-account OAuth credentials are present."""
+
+        return all((self.cloud_id, self.oauth_client_id, self.oauth_client_secret))
+
+
+@dataclass(frozen=True)
+class ConfluenceCredentials:
+    """Local Confluence credentials loaded from environment values."""
+
+    cloud_id: str | None = None
+    site_url: str | None = None
+    oauth_client_id: str | None = field(default=None, repr=False)
+    oauth_client_secret: str | None = field(default=None, repr=False)
+
+    @property
+    def is_oauth_complete(self) -> bool:
+        """Return whether service-account OAuth credentials are present."""
+
+        return all((self.cloud_id, self.oauth_client_id, self.oauth_client_secret))
 
 
 @dataclass(frozen=True)
@@ -251,6 +275,19 @@ class WorkspaceConfig:
             email=self.env.get("JIRA_EMAIL"),
             api_token=self.env.get("JIRA_API_TOKEN"),
             access_token=self.env.get("JIRA_ACCESS_TOKEN"),
+            oauth_client_id=self.env.get("JIRA_OAUTH_CLIENT_ID"),
+            oauth_client_secret=self.env.get("JIRA_OAUTH_CLIENT_SECRET"),
+        )
+
+    @property
+    def confluence_credentials(self) -> ConfluenceCredentials:
+        """Return Confluence credentials from local environment values."""
+
+        return ConfluenceCredentials(
+            cloud_id=self.env.get("CONFLUENCE_CLOUD_ID") or self.env.get("JIRA_CLOUD_ID"),
+            site_url=self.env.get("CONFLUENCE_SITE_URL") or self.env.get("JIRA_SITE_URL"),
+            oauth_client_id=self.env.get("CONFLUENCE_OAUTH_CLIENT_ID"),
+            oauth_client_secret=self.env.get("CONFLUENCE_OAUTH_CLIENT_SECRET"),
         )
 
     @property
@@ -376,10 +413,27 @@ class WorkspaceConfig:
         *,
         use_cloud_route: bool = True,
         use_bearer_auth: bool = False,
+        use_oauth_auth: bool = False,
     ) -> JiraCredentials:
         """Return Jira credentials or raise when required values are missing."""
 
         credentials = self.jira_credentials
+        if use_bearer_auth and use_oauth_auth:
+            raise ConfigurationError("Choose either Jira Bearer auth or OAuth auth, not both.")
+
+        if use_oauth_auth:
+            required = (
+                ("JIRA_CLOUD_ID", credentials.cloud_id),
+                ("JIRA_OAUTH_CLIENT_ID", credentials.oauth_client_id),
+                ("JIRA_OAUTH_CLIENT_SECRET", credentials.oauth_client_secret),
+            )
+            missing = [key for key, value in required if not value]
+            if missing:
+                raise ConfigurationError(
+                    "Missing required Jira environment values: " + ", ".join(missing)
+                )
+            return credentials
+
         required = (
             (
                 ("JIRA_CLOUD_ID", credentials.cloud_id),
@@ -401,6 +455,13 @@ class WorkspaceConfig:
             )
         )
         missing = [key for key, value in required if not value]
+        if (
+            missing
+            and use_cloud_route
+            and not use_bearer_auth
+            and credentials.is_oauth_complete
+        ):
+            return credentials
         if missing:
             raise ConfigurationError(
                 "Missing required Jira environment values: " + ", ".join(missing)
@@ -429,6 +490,23 @@ class WorkspaceConfig:
         if missing:
             raise ConfigurationError(
                 "Missing required Graph environment values: " + ", ".join(missing)
+            )
+
+        return credentials
+
+    def require_confluence_credentials(self) -> ConfluenceCredentials:
+        """Return Confluence OAuth credentials or raise when values are missing."""
+
+        credentials = self.confluence_credentials
+        required = (
+            ("CONFLUENCE_CLOUD_ID or JIRA_CLOUD_ID", credentials.cloud_id),
+            ("CONFLUENCE_OAUTH_CLIENT_ID", credentials.oauth_client_id),
+            ("CONFLUENCE_OAUTH_CLIENT_SECRET", credentials.oauth_client_secret),
+        )
+        missing = [name for name, value in required if not value]
+        if missing:
+            raise ConfigurationError(
+                "Missing required Confluence environment values: " + ", ".join(missing)
             )
 
         return credentials

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from assistant.src.generate_daily_brief import DEFAULT_DAILY_BRIEF_PATH
 from assistant.src.run_jira_report import (
@@ -29,6 +29,54 @@ class DayAtGlanceTeamsResult:
     daily_brief: SendDailyBriefResult
 
 
+@dataclass
+class _LazyEmailTransport:
+    """Defer live email transport construction until the refresh loop uses it."""
+
+    factory: Callable[[], object]
+    _transport: object | None = None
+    _error: Exception | None = None
+
+    def list_messages(self, mailbox: str, limit: int):  # type: ignore[no-untyped-def]
+        transport = self._resolve()
+        return transport.list_messages(mailbox, limit)
+
+    def _resolve(self):
+        if self._error is not None:
+            raise self._error
+        if self._transport is None:
+            try:
+                self._transport = self.factory()
+            except Exception as exc:  # pragma: no cover - defensive cache
+                self._error = exc
+                raise
+        return self._transport
+
+
+@dataclass
+class _LazyCalendarTransport:
+    """Defer live calendar transport construction until the refresh loop uses it."""
+
+    factory: Callable[[], object]
+    _transport: object | None = None
+    _error: Exception | None = None
+
+    def list_events(self, calendar: str, date: str, limit: int):  # type: ignore[no-untyped-def]
+        transport = self._resolve()
+        return transport.list_events(calendar, date, limit)
+
+    def _resolve(self):
+        if self._error is not None:
+            raise self._error
+        if self._transport is None:
+            try:
+                self._transport = self.factory()
+            except Exception as exc:  # pragma: no cover - defensive cache
+                self._error = exc
+                raise
+        return self._transport
+
+
 def send_day_at_glance_teams(
     *,
     memory_path: Path | str = DEFAULT_MEMORY_PATH,
@@ -44,16 +92,22 @@ def send_day_at_glance_teams(
     """Refresh Clarity sources and optionally post the brief to Teams."""
 
     graph_email_transport = (
-        build_graph_read_transport_from_config() if refresh_email else None
+        _LazyEmailTransport(build_graph_read_transport_from_config)
+        if refresh_email
+        else None
     )
-    gmail_transport = build_gmail_read_transport_from_config() if refresh_email else None
+    gmail_transport = (
+        _LazyEmailTransport(build_gmail_read_transport_from_config)
+        if refresh_email
+        else None
+    )
     graph_calendar_transport = (
-        build_graph_calendar_read_transport_from_config()
+        _LazyCalendarTransport(build_graph_calendar_read_transport_from_config)
         if refresh_calendars
         else None
     )
     google_calendar_transport = (
-        build_google_calendar_read_transport_from_config()
+        _LazyCalendarTransport(build_google_calendar_read_transport_from_config)
         if refresh_calendars
         else None
     )

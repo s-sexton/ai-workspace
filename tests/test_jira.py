@@ -11,11 +11,13 @@ import pytest
 from common.configuration import JiraCredentials, JiraSettings
 from common.jira import (
     JIRA_SEARCH_PATH,
+    JIRA_OAUTH_TOKEN_URL,
     JiraClient,
     JiraClientError,
     UrllibJiraResponse,
     UrllibJiraTransport,
     build_report_jql,
+    fetch_jira_oauth_access_token,
     normalize_search_result,
 )
 
@@ -85,6 +87,22 @@ def test_fetch_report_issues_can_use_bearer_auth_with_cloud_route():
 
     _, headers = transport.calls[0]
     assert headers["Authorization"] == "Bearer access-token"
+
+
+def test_fetch_report_issues_prefers_service_account_oauth():
+    transport = FakeTransport(FakeResponse(200, {"issues": []}))
+    credentials = _credentials(oauth_client_id="oauth-client")
+    client = JiraClient(
+        settings=_settings(),
+        credentials=credentials,
+        transport=transport,
+        oauth_token_provider=lambda passed_credentials: "oauth-access-token",
+    )
+
+    client.fetch_report_issues()
+
+    _, headers = transport.calls[0]
+    assert headers["Authorization"] == "Bearer oauth-access-token"
 
 
 def test_fetch_report_issues_accepts_jql_override():
@@ -243,6 +261,41 @@ def test_urllib_jira_transport_wraps_network_error(monkeypatch):
         )
 
 
+def test_fetch_jira_oauth_access_token_exchanges_client_credentials(monkeypatch):
+    calls = []
+
+    class FakeHttpResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"access_token": "oauth-access-token", "expires_in": 3600}'
+
+    def fake_urlopen(request, timeout):
+        calls.append((request, timeout))
+        return FakeHttpResponse()
+
+    monkeypatch.setattr("common.jira.urlopen", fake_urlopen)
+
+    token = fetch_jira_oauth_access_token(
+        _credentials(oauth_client_id="oauth-client"),
+        timeout_seconds=5,
+    )
+
+    assert token == "oauth-access-token"
+    request, timeout = calls[0]
+    assert request.full_url == JIRA_OAUTH_TOKEN_URL
+    assert request.get_method() == "POST"
+    assert request.get_header("Content-type") == "application/x-www-form-urlencoded"
+    assert b"grant_type=client_credentials" in request.data
+    assert b"client_id=oauth-client" in request.data
+    assert b"client_secret=oauth-secret" in request.data
+    assert timeout == 5
+
+
 def test_urllib_jira_response_requires_json_object():
     with pytest.raises(JiraClientError):
         UrllibJiraResponse(status_code=200, body=b"[]").json()
@@ -264,11 +317,17 @@ def _settings(
     )
 
 
-def _credentials(api_token: str = "token") -> JiraCredentials:
+def _credentials(
+    api_token: str = "token",
+    *,
+    oauth_client_id: str | None = None,
+) -> JiraCredentials:
     return JiraCredentials(
         cloud_id="example-cloud-id",
         site_url="https://example.atlassian.net",
         email="user@example.com",
         api_token=api_token,
         access_token="access-token",
+        oauth_client_id=oauth_client_id,
+        oauth_client_secret="oauth-secret" if oauth_client_id else None,
     )

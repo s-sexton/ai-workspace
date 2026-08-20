@@ -848,8 +848,10 @@ python -m assistant.src.ensure_email_folders --mailbox clarity@sendthisfile.ai -
 This only creates non-trash folders from `assistant.email.folderPolicy`, such as
 `Clarity/Review` and `Clarity/Noise`.
 
-To read from Jira Cloud instead, configure `config/.env` with
-`JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`, then pass `--live`:
+To read from Jira Cloud instead, configure `config/.env` with `JIRA_CLOUD_ID`
+and either service-account OAuth credentials
+(`JIRA_OAUTH_CLIENT_ID`, `JIRA_OAUTH_CLIENT_SECRET`) or API-token fallback
+credentials (`JIRA_EMAIL`, `JIRA_API_TOKEN`), then pass `--live`:
 
 ``` powershell
 python -m assistant.src.run_jira_report --live

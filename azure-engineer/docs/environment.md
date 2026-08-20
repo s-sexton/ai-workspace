@@ -1,6 +1,6 @@
 # Azure Environment
 
-Last updated: August 11, 2026, Central time
+Last updated: August 12, 2026, Central time
 
 Maintained by: Azure Infrastructure Expert
 
@@ -58,7 +58,7 @@ the human operator explicitly narrows the scope.
 
 | Subscription | Resource groups | Resources | Notes |
 | --- | ---: | ---: | --- |
-| `stf-prd` | 8 | 98 | Main production app subscription analyzed in the first baseline. |
+| `stf-prd` | 8 | 91 | Main production app subscription analyzed in the first baseline. WordPress VM `vm-stf-prd-001` retired August 12, 2026. |
 | `stf-prod-sub` | 9 | 34 | Legacy/classic production-style resources, including four running public-IP VMs. |
 | `stf-dev-sub` | 4 | 36 | Legacy dev network/storage/VM resources, including two running public-IP VMs. |
 | `stf-dev` | 3 | 18 | Dev app resources, Function Apps, PostgreSQL, storage, API Management. |
@@ -103,16 +103,20 @@ Resource groups observed in `stf-prd`:
 
 Virtual machines:
 
-- `vm-stf-prd-001`: Linux, `Standard_B2s`, running, WordPress workload tag,
-  private IP `10.0.6.4`, public IP `20.124.114.228`.
 - `vm-stf-prd-002`: Linux, `Standard_B1s`, running, Mautic workload tag,
   private IP `10.0.6.5`, public IP `52.255.158.136`.
 - `vm-stf-prd-003`: Linux, `Standard_B2s`, running, Plausible/Docker workload
   tag, private IP `10.0.6.6`, public IP `20.25.73.81`.
 
+Retired virtual machines:
+
+- `vm-stf-prd-001`: retired August 12, 2026 after the WordPress marketing
+  workload moved to Cloudflare. Removed resources included the VM, OS disk,
+  NIC, public IP `20.124.114.228`, VM-specific NSG, and VM-specific SSH public
+  key. Azure Backup recovery points were intentionally retained.
+
 VM CPU metrics for August 4-11, 2026:
 
-- `vm-stf-prd-001`: average `0.741%`, max `2.134%`.
 - `vm-stf-prd-002`: average `0.603%`, max `3.482%`.
 - `vm-stf-prd-003`: average `1.259%`, max `2.204%`.
 
@@ -174,8 +178,6 @@ Azure Front Door:
 
 Network security groups:
 
-- `vm-stf-prd-001-nsg`: allows Azure Front Door backend traffic to
-  `10.0.6.4` on ports 80 and 443.
 - `vm-stf-prd-002-nsg`: allows Azure Front Door backend traffic to
   `10.0.6.5` on ports 80 and 443.
 - `vm-stf-prd-003-nsg`: allows Azure Front Door backend traffic to
@@ -331,6 +333,10 @@ should be reviewed first.
   `azure-engineer/reports/reservation-and-legacy-vm-followup-2026-08-11.md`
 - Cost tooling and Advisor follow-up:
   `azure-engineer/reports/cost-tooling-and-advisor-followup-2026-08-11.md`
+- EOL and unsupported inventory review:
+  `azure-engineer/reports/eol-unsupported-inventory-review-2026-08-11.md`
+- VM retirement report:
+  `azure-engineer/reports/vm-stf-prd-001-retirement-2026-08-12.md`
 - Backlog:
   `azure-engineer/docs/backlog.md`
 

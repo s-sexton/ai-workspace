@@ -19,8 +19,12 @@ The template documents required local environment keys without storing values.
 For the first Jira milestone, the expected keys are:
 
 -   `JIRA_CLOUD_ID`
--   `JIRA_EMAIL`
--   `JIRA_API_TOKEN`
+-   Either service-account OAuth credentials:
+    -   `JIRA_OAUTH_CLIENT_ID`
+    -   `JIRA_OAUTH_CLIENT_SECRET`
+-   Or API-token fallback credentials:
+    -   `JIRA_EMAIL`
+    -   `JIRA_API_TOKEN`
 
 `JIRA_CLOUD_ID` is the Atlassian cloud ID used to build the live Jira API URL:
 
@@ -28,14 +32,32 @@ For the first Jira milestone, the expected keys are:
 https://api.atlassian.com/ex/jira/{JIRA_CLOUD_ID}/rest/api/3/...
 ```
 
-`JIRA_EMAIL` and `JIRA_API_TOKEN` are used for Basic auth on that route,
-matching the working Atlassian request shape.
+When `JIRA_OAUTH_CLIENT_ID` and `JIRA_OAUTH_CLIENT_SECRET` are present, Jira
+calls use Atlassian service-account OAuth client credentials. Clarity exchanges
+those values for a short-lived access token at
+`https://auth.atlassian.com/oauth/token`, then calls Jira with
+`Authorization: Bearer ...`.
+
+`JIRA_EMAIL` and `JIRA_API_TOKEN` remain supported as a fallback Basic-auth
+path on the same cloud ID route.
 
 Optional values may still be stored for fallback, comparison, or future auth
 modes:
 
 -   `JIRA_SITE_URL`
 -   `JIRA_ACCESS_TOKEN`
+
+Confluence runtime wiring uses the same Atlassian cloud/site values as Jira and
+a separate OAuth credential pair so Confluence work can be granted and rotated
+independently from Jira work:
+
+-   `CONFLUENCE_OAUTH_CLIENT_ID`
+-   `CONFLUENCE_OAUTH_CLIENT_SECRET`
+
+Confluence calls use `JIRA_CLOUD_ID` for the Atlassian API gateway. Human-facing
+Confluence links use `JIRA_SITE_URL` with the `/wiki` path. Do not add separate
+Confluence cloud or site values unless Confluence moves to a different
+Atlassian cloud/site and that change is explicitly approved.
 
 Microsoft Graph runtime wiring uses these local values:
 
@@ -107,6 +129,8 @@ The loader:
 -   Avoids importing unrelated process environment variables
 -   Keeps Jira API tokens out of object representations
 -   Keeps Jira access tokens out of object representations
+-   Keeps Jira OAuth client secrets out of object representations
+-   Keeps Confluence OAuth client secrets out of object representations
 -   Keeps Graph client secrets out of object representations
 -   Keeps Graph access tokens out of object representations
 -   Keeps Google client secrets out of object representations
@@ -123,6 +147,7 @@ Use these public objects from `common.configuration`:
 -   `WorkspaceConfig`
 -   `JiraSettings`
 -   `JiraCredentials`
+-   `ConfluenceCredentials`
 -   `GraphCredentials`
 -   `GoogleCredentials`
 -   `EmailSettings`
@@ -141,6 +166,11 @@ recipients, and subject prefix.
 `WorkspaceConfig.require_jira_credentials()` returns Jira credentials when all
 required values are present. It raises `ConfigurationError` with missing key
 names when values are incomplete. Error messages must not include secret values.
+
+`WorkspaceConfig.require_confluence_credentials()` returns Confluence OAuth
+credentials when all required values are present. It raises
+`ConfigurationError` with missing key names when values are incomplete. Error
+messages must not include secret values.
 
 `WorkspaceConfig.require_graph_credentials()` returns Microsoft Graph
 credentials for client-secret token acquisition or Bearer-token experiments. It

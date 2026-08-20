@@ -28,6 +28,11 @@ posting to Teams. It writes the normal daily brief Markdown and JSON manifest
 under `reports/`, so Teams replies can resolve numbered inbox, Jira, and
 pending approval items back to local Clarity memory.
 
+The scheduled runner defers live provider authentication until the refresh loop
+actually reads each source. That keeps a temporary auth or socket failure from
+blocking the Teams post entirely; the brief should still be generated with a
+refresh warning when one provider cannot connect.
+
 The post includes a compact `Recommendations` section. Supported Teams replies
 against the latest Day at a Glance manifest include:
 

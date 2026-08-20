@@ -1,12 +1,61 @@
 # Azure Engineer Backlog
 
-Last updated: August 11, 2026, Central time
+Last updated: August 12, 2026, Central time
 
 This backlog tracks to-do and research items found during read-only Azure
 analysis. Items are recommendations for human review, not approval to change
 Azure.
 
+## Completed
+
+### Retire `vm-stf-prd-001`
+
+Status: Completed August 12, 2026
+
+Outcome:
+
+- WordPress marketing VM `vm-stf-prd-001` was removed after staged validation.
+- Public `sendthisfile.com` and `www.sendthisfile.com` continued serving from
+  Cloudflare before and after deletion.
+- Removed resources included the VM, OS disk, NIC, public IP, VM-specific NSG,
+  and VM-specific SSH public key.
+- Azure Backup recovery points were intentionally retained.
+
+Reference:
+
+- Jira: `STF-3616`
+- Report:
+  `azure-engineer/reports/vm-stf-prd-001-retirement-2026-08-12.md`
+
 ## Priority 1
+
+### Establish Azure EOL And Unsupported Resource Register
+
+Status: Open
+
+Evidence:
+
+- Initial EOL review found active retirement or unsupported-version exposure in
+  Redis, Application Insights URL ping tests, Azure Maps Gen1, Storage TLS
+  1.0/1.1, CentOS VM images, B-series v1 VM sizes, Node.js 20 on one Function
+  App, and MySQL 8.0 standard support horizon.
+- Azure Advisor provides service retirement recommendations, but Microsoft
+  documents that the Service Retirement workbook is a subset view and Azure
+  Updates remains the broader lifecycle source.
+
+Research questions:
+
+- Which owner should approve migration planning for Redis, Azure Maps,
+  Application Insights availability tests, legacy VMs, and MySQL?
+- Should EOL review run monthly and feed Clarity a completion notice?
+- Should we create a normalized local EOL register that maps Azure resource
+  types, SKUs, runtimes, and database versions to known lifecycle dates?
+
+Required approval:
+
+- Any migration, runtime change, SKU change, storage TLS change, or retirement
+  remediation is an Azure/application change and requires explicit human
+  approval.
 
 ### Establish Actual Cost Export For Repeatable Analysis
 

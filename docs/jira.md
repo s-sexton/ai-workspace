@@ -61,9 +61,26 @@ In live mode, the client uses the Atlassian cloud ID route:
 https://api.atlassian.com/ex/jira/{JIRA_CLOUD_ID}/rest/api/3/search/jql
 ```
 
-By default, this route uses Basic auth from `JIRA_EMAIL` and `JIRA_API_TOKEN`,
-matching the working `curl --user email:api_token` request shape. Bearer auth
-can be selected explicitly with `--bearer` when `JIRA_ACCESS_TOKEN` is present.
+By default, this route prefers service-account OAuth when
+`JIRA_OAUTH_CLIENT_ID` and `JIRA_OAUTH_CLIENT_SECRET` are configured. Clarity
+exchanges those credentials for a short-lived token at:
+
+``` text
+https://auth.atlassian.com/oauth/token
+```
+
+The Jira request then uses `Authorization: Bearer ...`.
+
+The OAuth service account must also have Jira product and project permissions.
+Scopes are necessary but not sufficient. For Clarity's current STF workflow,
+the service account needs permission to browse STF issues, create STF issues,
+assign issues, transition issues, and use the Jira Software board endpoint that
+adds issues to board `4`.
+
+If OAuth credentials are not configured, the route falls back to Basic auth
+from `JIRA_EMAIL` and `JIRA_API_TOKEN`, matching the working
+`curl --user email:api_token` request shape. Bearer auth can still be selected
+explicitly with `--bearer` when `JIRA_ACCESS_TOKEN` is present.
 
 ## Normalized Issue Shape
 
@@ -127,7 +144,9 @@ python -m assistant.src.run_jira_report --live
 ```
 
 Live mode requires `JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` from
-`config/.env` or expected process environment values.
+`config/.env` or expected process environment values, unless service-account
+OAuth credentials are configured. With OAuth, live mode requires
+`JIRA_CLOUD_ID`, `JIRA_OAUTH_CLIENT_ID`, and `JIRA_OAUTH_CLIENT_SECRET`.
 
 ### Safe Diagnostics
 

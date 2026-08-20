@@ -42,6 +42,10 @@ Never log authentication data.
 
 Never modify environment configuration without approval.
 
+Treat Confluence as broadly visible in the current free-tier setup. Do not
+publish PII, keys, secrets, credentials, raw mailbox content, sensitive
+operational details, or private personal/business data to Confluence.
+
 Security takes priority over convenience.
 
 ---
@@ -134,7 +138,8 @@ Always obtain approval before:
 - Workflow transitions
 
 When creating a Jira ticket, always return the created ticket number to the
-human operator.
+human operator. Add the `clarity` label to every Jira ticket created by
+Clarity unless the human operator explicitly requests otherwise.
 
 When sending Jira tickets to the human operator by Teams or email, render each
 ticket key as a hyperlink to the actual Jira ticket.

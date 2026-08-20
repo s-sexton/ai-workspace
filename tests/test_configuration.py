@@ -15,7 +15,7 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
         encoding="utf-8",
     )
     (config_dir / ".env").write_text(
-        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\nGRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=graph-secret\nGRAPH_ACCESS_TOKEN=graph-access\nGOOGLE_CLIENT_ID=google-client\nGOOGLE_CLIENT_SECRET=google-secret\nGOOGLE_REFRESH_TOKEN=google-refresh\nGOOGLE_ACCESS_TOKEN=google-access\nOPENAI_API_KEY=openai-secret\nOPENAI_MODEL=gpt-test\nOPENAI_BASE_URL=https://openai.example/v1\n",
+        "JIRA_CLOUD_ID=test-cloud\nJIRA_SITE_URL=https://test.atlassian.net\nJIRA_EMAIL=user@example.com\nJIRA_API_TOKEN=secret\nJIRA_ACCESS_TOKEN=access-secret\nJIRA_OAUTH_CLIENT_ID=oauth-client\nJIRA_OAUTH_CLIENT_SECRET=oauth-secret\nCONFLUENCE_CLOUD_ID=confluence-cloud\nCONFLUENCE_SITE_URL=https://wiki.example.invalid\nCONFLUENCE_OAUTH_CLIENT_ID=confluence-client\nCONFLUENCE_OAUTH_CLIENT_SECRET=confluence-secret\nGRAPH_TENANT_ID=tenant\nGRAPH_CLIENT_ID=client\nGRAPH_CLIENT_SECRET=graph-secret\nGRAPH_ACCESS_TOKEN=graph-access\nGOOGLE_CLIENT_ID=google-client\nGOOGLE_CLIENT_SECRET=google-secret\nGOOGLE_REFRESH_TOKEN=google-refresh\nGOOGLE_ACCESS_TOKEN=google-access\nOPENAI_API_KEY=openai-secret\nOPENAI_MODEL=gpt-test\nOPENAI_BASE_URL=https://openai.example/v1\n",
         encoding="utf-8",
     )
 
@@ -28,7 +28,14 @@ def test_load_workspace_config_reads_json_and_env_file(tmp_path):
     assert config.jira_credentials.email == "user@example.com"
     assert config.jira_credentials.api_token == "secret"
     assert config.jira_credentials.access_token == "access-secret"
+    assert config.jira_credentials.oauth_client_id == "oauth-client"
+    assert config.jira_credentials.oauth_client_secret == "oauth-secret"
     assert config.jira_credentials.is_complete
+    assert config.confluence_credentials.cloud_id == "confluence-cloud"
+    assert config.confluence_credentials.site_url == "https://wiki.example.invalid"
+    assert config.confluence_credentials.oauth_client_id == "confluence-client"
+    assert config.confluence_credentials.oauth_client_secret == "confluence-secret"
+    assert config.confluence_credentials.is_oauth_complete
     assert config.graph_credentials.tenant_id == "tenant"
     assert config.graph_credentials.client_id == "client"
     assert config.graph_credentials.client_secret == "graph-secret"
@@ -793,6 +800,61 @@ def test_require_jira_credentials_can_validate_bearer_auth_values(tmp_path):
     assert config.require_jira_credentials(use_bearer_auth=True).is_bearer_auth_complete
 
 
+def test_require_jira_credentials_can_validate_oauth_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "JIRA_CLOUD_ID=test-cloud\n"
+        "JIRA_OAUTH_CLIENT_ID=oauth-client\n"
+        "JIRA_OAUTH_CLIENT_SECRET=oauth-secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    assert config.require_jira_credentials(use_oauth_auth=True).is_oauth_complete
+    assert config.require_jira_credentials().is_oauth_complete
+
+
+def test_require_confluence_credentials_can_validate_oauth_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "JIRA_CLOUD_ID=shared-cloud\n"
+        "CONFLUENCE_OAUTH_CLIENT_ID=confluence-client\n"
+        "CONFLUENCE_OAUTH_CLIENT_SECRET=confluence-secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    credentials = config.require_confluence_credentials()
+
+    assert credentials.cloud_id == "shared-cloud"
+    assert credentials.is_oauth_complete
+
+
+def test_require_confluence_credentials_reports_missing_values_without_secret_values(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "config.json").write_text("{}", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "CONFLUENCE_OAUTH_CLIENT_ID=confluence-client\n"
+        "CONFLUENCE_OAUTH_CLIENT_SECRET=super-secret\n",
+        encoding="utf-8",
+    )
+
+    config = load_workspace_config(tmp_path, include_process_env=False)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        config.require_confluence_credentials()
+
+    assert "CONFLUENCE_CLOUD_ID or JIRA_CLOUD_ID" in str(exc_info.value)
+    assert "super-secret" not in str(exc_info.value)
+
+
 def test_require_graph_credentials_returns_complete_client_secret_values(tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
@@ -945,12 +1007,18 @@ def test_secret_values_are_not_in_object_repr(tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     (config_dir / "config.json").write_text("{}", encoding="utf-8")
-    (config_dir / ".env").write_text("JIRA_API_TOKEN=super-secret\n", encoding="utf-8")
+    (config_dir / ".env").write_text(
+        "JIRA_API_TOKEN=super-secret\n"
+        "CONFLUENCE_OAUTH_CLIENT_SECRET=confluence-super-secret\n",
+        encoding="utf-8",
+    )
 
     config = load_workspace_config(tmp_path, include_process_env=False)
 
     assert "super-secret" not in repr(config)
     assert "super-secret" not in repr(config.jira_credentials)
+    assert "confluence-super-secret" not in repr(config)
+    assert "confluence-super-secret" not in repr(config.confluence_credentials)
 
 
 def test_settings_mapping_is_read_only(tmp_path):

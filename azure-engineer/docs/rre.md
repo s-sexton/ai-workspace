@@ -30,6 +30,8 @@ the human operator approves a narrower write capability.
 ## Primary Outcomes
 
 - Identify Azure vulnerabilities and resilience risks.
+- Identify Azure service retirements, end-of-life platforms, unsupported
+  runtimes, and unsupported operating systems that affect observed resources.
 - Identify unused, stale, questionable, or poorly owned resources.
 - Analyze current and potential Azure pricing/cost exposure.
 - Recommend human-reviewed remediation or follow-up actions.
@@ -41,6 +43,10 @@ the human operator approves a narrower write capability.
   and ownership signals.
 - Review network exposure, storage posture, compute posture, managed database
   posture, monitoring, backups, Advisor recommendations, and RBAC shape.
+- Review Azure service retirement notices, Azure Advisor service upgrade and
+  retirement recommendations, VM image and SKU lifecycle, App Service runtime
+  lifecycle, and managed database version support against the current
+  inventory.
 - Compare actual cost data, when available, with list pricing and Azure Advisor
   savings recommendations.
 - Keep reports local and avoid collecting secrets or full resource properties

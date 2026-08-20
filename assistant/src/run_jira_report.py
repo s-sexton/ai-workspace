@@ -169,7 +169,11 @@ def generate_local_jira_report(
         base_url=client._base_url(),
         max_results=config.jira_settings.max_results,
         fields=config.jira_settings.report_fields,
-        auth_mode="bearer" if use_bearer_auth else "basic",
+        auth_mode=_jira_auth_mode(
+            credentials=credentials,
+            use_live_jira=use_live_jira,
+            use_bearer_auth=use_bearer_auth,
+        ),
     )
 
 
@@ -199,6 +203,21 @@ def _default_transport(use_live_jira: bool) -> JiraTransport:
     if use_live_jira:
         return UrllibJiraTransport()
     return StaticJiraTransport()
+
+
+def _jira_auth_mode(
+    *,
+    credentials: JiraCredentials,
+    use_live_jira: bool,
+    use_bearer_auth: bool,
+) -> str:
+    if not use_live_jira:
+        return "sample"
+    if use_bearer_auth:
+        return "bearer"
+    if credentials.is_oauth_complete:
+        return "oauth"
+    return "basic"
 
 
 def _record_jira_report_memory(

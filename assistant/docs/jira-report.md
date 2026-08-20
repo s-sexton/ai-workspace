@@ -83,9 +83,12 @@ Live mode:
 -   Loads Jira settings from `config/config.json`
 -   Loads Jira credentials from `config/.env` or expected process environment
     values
--   Uses `JIRA_CLOUD_ID`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`
+-   Uses `JIRA_CLOUD_ID` with service-account OAuth credentials when
+    `JIRA_OAUTH_CLIENT_ID` and `JIRA_OAUTH_CLIENT_SECRET` are configured
+-   Falls back to `JIRA_EMAIL` and `JIRA_API_TOKEN` when OAuth credentials are
+    not configured
 -   Calls `https://api.atlassian.com/ex/jira/{JIRA_CLOUD_ID}/...`
--   Uses Basic auth by default, matching the working Atlassian curl request
+-   Uses short-lived OAuth Bearer tokens by default when available
 -   Uses the standard-library Jira transport in `common.jira`
 -   Writes the Markdown report to `reports/jira-report.md`
 -   Records local Clarity memory in `logs/clarity-memory.duckdb`
