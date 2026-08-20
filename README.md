@@ -167,6 +167,30 @@ financial commitments without explicit human approval.
 
 ---
 
+## desktop-system-engineer/
+
+Desktop System Engineer for local Windows desktop diagnostics and support.
+
+The Desktop System Engineer's living roles, responsibilities, and expectations
+are maintained in
+[`desktop-system-engineer/docs/rre.md`](desktop-system-engineer/docs/rre.md).
+
+Responsibilities include:
+
+- Windows desktop issue triage
+- Local application, service, process, disk, network, and device diagnostics
+- PowerShell-first evidence gathering
+- Local log, event, configuration, and performance review
+- Safe remediation recommendations for human approval
+- Repeatable desktop troubleshooting notes and runbooks
+
+The Desktop System Engineer is advisory and local-first by default. It does not
+make destructive changes, alter authentication, install software, modify
+security posture, change networking, or disrupt running work without explicit
+human approval.
+
+---
+
 ## developer/
 
 Software engineering assistant.
