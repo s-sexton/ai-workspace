@@ -70,6 +70,115 @@ bank details, or production database records in this file.
 | AQ-059 | BofA checking reconciliation | What should be on the expected AM-008 source checklist? | answered | BofA checking statement PDF, `887` statement, `888` statement, AMEX statement, Revenues Worksheet, Deposits folder, and final reconciliation report after completion. |
 | AQ-060 | BofA checking reconciliation | Which AM-008 sources are usually ready on Day 1 versus later? | answered | BofA checking is most likely ready on the 1st. Merchant statements may be ready on the 1st but can take a couple days. |
 | AQ-061 | BofA checking reconciliation | How should the Day 1 AM-008 reminder be worded? | answered | Say `start checking source availability`, not that reconciliation is ready. |
+| AQ-062 | Emprise Bank checking | Is AM-009 still an active monthly task? | answered | No; the SendThisFile Emprise Bank account has been closed. |
+| AQ-063 | Emprise Bank checking | Is there a Confluence page for AM-009? | answered | No. |
+| AQ-064 | Emprise Bank checking | Where are Emprise Bank statements stored? | answered | Emprise Bank folder. |
+| AQ-065 | Emprise Bank checking | Is any current reconciliation completion check needed? | answered | No active task; historical information remains in QBDT. |
+| AQ-066 | PayPal reconciliation | Is AM-010 still an active monthly task? | answered | Yes. |
+| AQ-067 | PayPal reconciliation | Is the related PayPal Confluence page current? | answered | Yes. |
+| AQ-068 | PayPal reconciliation | Where are PayPal source reports stored? | answered | PayPal folder. |
+| AQ-069 | PayPal reconciliation | What is the PayPal source of truth? | answered | The report in the PayPal folder. |
+| AQ-070 | PayPal reconciliation | What is the AM-010 completion check? | answered | PayPal account reconciled in QBDT. |
+| AQ-071 | PayPal reconciliation | What common PayPal exception should be remembered? | answered | Occasionally money is transferred from PayPal to BofA checking, typically leaving about `$1,000` in PayPal. |
+| AQ-072 | Investment reconciliation | Is AM-011 still active? | answered | Yes; current investment is LiveOakBank only. |
+| AQ-073 | Investment reconciliation | Is the investment reconciliation Confluence page current? | answered | Yes. |
+| AQ-074 | Investment reconciliation | Which investment account/provider is in scope? | answered | Only LiveOakBank. |
+| AQ-075 | Investment reconciliation | Where are investment statements and reconciliations stored? | answered | Monthly folder under `Investment Accounts`; holds both original statement and QBDT reconciliation. |
+| AQ-076 | Investment reconciliation | What is the investment reconciliation source of truth? | answered | PDF statement. |
+| AQ-077 | Investment reconciliation | What is the AM-011 completion check? | answered | LiveOakBank account reconciled in QBDT. |
+| AQ-078 | Classic refund review | Is AM-012 still active and what is its real purpose? | answered | Active as a review/control of the Classic refund process. |
+| AQ-079 | Classic refund review | Which refunds are included? | answered | Specific Classic customer refunds. App refunds are requested via support. |
+| AQ-080 | Classic refund review | What creates the refund reports? | answered | Automated process emails pending/completed refund reports to accounting@, feeding JSM. |
+| AQ-081 | Classic refund review | What causes automated Classic refunds to pause? | answered | Single refund over `$50` or a single account with more than one refund. |
+| AQ-082 | Classic refund review | How are paused automated refunds reviewed? | answered | Manually pull up customer/account to understand what happened; usually push through but sometimes not correct. |
+| AQ-083 | Classic refund review | What systems issue refunds? | answered | Classic system pushes refunds through Cybersource; App refunds are processed directly in Chargebee. |
+| AQ-084 | Classic refund review | What is the completion check? | answered | Refunds are clear and completed refunds email has hit accounting@ JSM queue. |
+| AQ-085 | Contractor vendor payments | Is AM-013 still active? | answered | Yes. |
+| AQ-086 | Contractor vendor payments | Is the contractor vendor payments Confluence page current? | answered | Yes. |
+| AQ-087 | Contractor vendor payments | Where do contractor invoices arrive? | answered | Usually email to `accounting@` or directly to Scott. |
+| AQ-088 | Contractor vendor payments | Who approves contractor invoices? | answered | Scott. |
+| AQ-089 | Contractor vendor payments | Are contractor invoices entered as bills in QBDT first? | answered | Yes. |
+| AQ-090 | Contractor vendor payments | What is the AM-013 completion check? | answered | Payment has been made. |
+| AQ-091 | Enterprise failed billing | Is AM-014 still active? | answered | Yes. |
+| AQ-092 | Enterprise failed billing | Does the list still come from internal-alert email? | answered | Yes. |
+| AQ-093 | Enterprise failed billing | Who receives the internal-alert distribution list? | answered | Scott and a developer. |
+| AQ-094 | Enterprise failed billing | What happens after Scott receives the failed billing list? | answered | Scott forwards it to support, and support reaches out to each customer to help update their credit card. |
+| AQ-095 | Enterprise failed billing | Is AM-014 a support handoff? | answered | Yes; hand-off to support. |
+| AQ-096 | Hartford insurance premium | Is AM-015 an active manual payment task? | answered | No; Hartford is auto-drafted from checking on the 10th. |
+| AQ-097 | Hartford insurance premium | What should AM-015 reminders do? | answered | Verify auto-draft and remind Scott to download the invoice. |
+| AQ-098 | Hartford insurance premium | When is the Hartford invoice usually generated? | answered | Around the 20th of the month. |
+| AQ-099 | BofA credit card reconciliation | When does the BofA credit card billing cycle close and when is the statement usually ready? | answered | Billing cycle closes on the 6th; statement is usually ready by the 7th. |
+| AQ-100 | BofA credit card reconciliation | Is the related Confluence page current? | answered | Yes, but it probably needs to be reviewed/revived. |
+| AQ-101 | BofA credit card reconciliation | Where are BofA credit card statements stored? | answered | Current-year folder path pattern: `YYYY\Bank of America\Credit Card Statement`. |
+| AQ-102 | BofA credit card reconciliation | Where are current-month credit card invoices and receipts stored? | answered | Current-month folder path pattern: `YYYY\YYYYMM\Invoices and Receipts`. |
+| AQ-103 | BofA credit card reconciliation | Are there multiple credit cards or cardholders? | answered | Yes. There are four credit cards, but they roll up into one master account and one statement. |
+| AQ-104 | BofA credit card reconciliation | What is the AM-016 completion check? | answered | QBDT reconciliation completed. |
+| AQ-105 | Financial statements | Is AM-017 still an active Day 7 task? | answered | It should be active, but is often pushed back. The date needs to be made firmer. |
+| AQ-106 | Financial statements | What reports are included in the shareholder financial statement package? | answered | P&L, balance sheet, and whatever else might be requested. |
+| AQ-107 | Financial statements | What source systems feed the financial statement package? | answered | Mostly QBDT, possibly a spreadsheet too. Automation is desired. |
+| AQ-108 | Financial statements | Where should the final financial statement package be stored? | answered | The `YYYYMM` monthly folder. |
+| AQ-109 | Financial statements | How are statements currently delivered and what should be improved? | answered | Usually email today, but a better delivery method is needed. |
+| AQ-110 | Financial statements | What is the AM-017 completion check? | answered | Reports delivered and questions answered. |
+| AQ-111 | Payroll processing | Is AM-018 still an active Day 10 task? | answered | Yes. |
+| AQ-112 | Payroll processing | Is the Confluence payroll page current? | answered | Yes; use `Processing Payroll`. |
+| AQ-113 | Payroll processing | Which payroll setup is used? | answered | Believed to be QBDT Enhanced Payroll with direct deposit. |
+| AQ-114 | Payroll processing | How many business days before payday must payroll be submitted for direct deposit? | answered | The top section of the Confluence payroll page describes the current rule. |
+| AQ-115 | Payroll processing | What reports or approvals are needed before payroll is submitted? | answered | No separate reports or approvals; manually review each paycheck, then submit. |
+| AQ-116 | Payroll processing | What is the AM-018 completion check? | answered | Confirmation received. |
+| AQ-117 | Monthly distribution | Is AM-019 still an active monthly review task? | answered | Yes. |
+| AQ-118 | Monthly distribution | What triggers a distribution review? | answered | Cash balance, profitability, shareholder decision, tax planning, and related considerations. |
+| AQ-119 | Monthly distribution | Who decides whether a distribution is needed? | answered | Majority shareholder. |
+| AQ-120 | Monthly distribution | How is the distribution recorded in QBDT? | answered | Use the memorized transaction named `Monthly Distribution`. |
+| AQ-121 | Monthly distribution | How is the distribution paid? | answered | Manually through the BofA portal. |
+| AQ-122 | Monthly distribution | What is the AM-019 completion evidence? | answered | Saved PDF captures of successful BofA transfers, one per shareholder, stored in monthly `Invoices and Receipts` using `XXX-DIST-MMDDYYYY.pdf`. |
+| AQ-123 | Payroll tax deposits | Is AM-020 still active and when should it be done? | answered | Yes; after payroll and before the QBDT Payroll Center Pay Liabilities due dates. |
+| AQ-124 | Payroll tax deposits | Is AM-020 tied to the same payroll Confluence page? | answered | Yes; use the `Make Payroll Tax Deposits` section. |
+| AQ-125 | Payroll tax deposits | Which payroll tax filings/deposits are paid monthly? | answered | Federal 941, Kansas KW-5, and Missouri MO-941 are all paid monthly. |
+| AQ-126 | Payroll tax deposits | Which portals are used for payroll tax payments? | answered | EFTPS.gov, KDOR, and mytax.mo.gov. |
+| AQ-127 | Payroll tax deposits | Can payroll tax deposits be done immediately after payroll? | answered | Yes, if funds are available and each filing/payment is completed before its QBDT Pay Liabilities due date. |
+| AQ-128 | Payroll tax deposits | What is the AM-020 completion evidence and naming convention? | answered | Save each filing/payment confirmation PDF in monthly `Invoices and Receipts` using the documented federal, Kansas, and Missouri filename patterns. |
+| AQ-129 | PPQ integrity check | Is AM-021 still an active Day 10 task? | answered | Kinda; it was created for an earlier issue and may now be overlooked, but its purpose is Classic payment queue integrity. |
+| AQ-130 | PPQ integrity check | Does PPQ stand for `paymentprocessingqueue`? | answered | Yes. |
+| AQ-131 | PPQ integrity check | What system or database is checked for outstanding PPQ records? | answered | Classic Oracle DB. |
+| AQ-132 | PPQ integrity check | What makes a PPQ record outstanding or not processed? | answered | It has an action date before today, which should not happen. |
+| AQ-133 | PPQ integrity check | What action is taken when outstanding records are found? | answered | Research, then manually adjust. |
+| AQ-134 | PPQ integrity check | What is the AM-021 completion check? | answered | Clean PPQ query. |
+| AQ-135 | Pay stubs | Is AM-022 still an active Day 15 task? | answered | Not really; employees can get pay stubs through the QuickBooks portal or request a one-off copy from Scott. |
+| AQ-136 | AMEX chargebacks and cancellations | Is AM-023 still active on Day 15? | answered | Maybe; primarily a reminder to check if no notification arrived by email or mail. |
+| AQ-137 | AMEX chargebacks and cancellations | Is AM-023 separate from AMEX merchant-statement reconciliation work? | answered | Yes; it is separate because it gives an opportunity to challenge a cardholder chargeback. |
+| AQ-138 | AMEX chargebacks and cancellations | Where do AMEX chargeback/cancellation notices arrive? | answered | AMEX portal, email, or mail. |
+| AQ-139 | AMEX chargebacks and cancellations | What action is taken for AMEX chargebacks? | answered | Review and challenge if necessary; usually accept and make sure the customer is actually canceled in the system. |
+| AQ-140 | AMEX chargebacks and cancellations | Are AMEX chargebacks only Classic customers? | answered | Yes. |
+| AQ-141 | AMEX chargebacks and cancellations | What is the AM-023 completion check? | answered | Review completed. |
+| AQ-142 | BCBS payment | Is AM-024 still active around Day 25? | answered | Yes. |
+| AQ-143 | BCBS payment | Is the BCBS Confluence page current? | answered | Yes; use `Paying BCBS`. |
+| AQ-144 | BCBS payment | How is BCBS paid? | answered | Manually through the portal. |
+| AQ-145 | BCBS payment | When is the BCBS invoice usually available? | answered | Around the 12th of the month. |
+| AQ-146 | BCBS payment | Where are BCBS invoice and payment confirmation saved? | answered | Monthly `Invoices and Receipts` folder using `BCBS - INV - MMDDYYYY.pdf` and `BCBS - RCPT - MMDDYYYY.pdf`. |
+| AQ-147 | BCBS payment | What is the AM-024 completion check? | answered | Payment confirmation saved, with vendor bill and vendor payment still recorded in QBDT for tracking. |
+| AQ-148 | Chargeback and cancellation review | Is AM-025 a separate workflow from AM-023? | answered | No; they should be the same thing. The goal was to check twice per month, once mid-month and once near month end. |
+| AQ-149 | Inactive Classic invoice customers | Is AM-026 still active on the last day? | answered | Yes; it is another check to make sure canceled or non-paying customers are removed from PPQ. |
+| AQ-150 | Inactive Classic invoice customers | What is the purpose of AM-026? | answered | Prevent canceled/non-paying Classic invoice customers from staying in PPQ, which drives automated billing and provides invoice information for QBDT import via SaasAnt Transactions. |
+| AQ-151 | Inactive Classic invoice customers | What forms are marked inactive and where are they managed? | answered | Classic enterprise forms (`EP forms`) can be inactivated through the admin app while trying to collect payment. |
+| AQ-152 | Inactive Classic invoice customers | Which customers are in scope? | answered | Only Classic invoice customers. |
+| AQ-153 | Inactive Classic invoice customers | How can cancellation/removal be done? | answered | From Classic admin or manually by querying the Classic database. |
+| AQ-154 | Inactive Classic invoice customers | What is the accounting purpose of this step? | answered | Prevent another invoice from being generated. |
+| AQ-155 | Inactive Classic invoice customers | Does AM-026 still require logging outstanding invoices as bad debt, and if so what is the QBDT process? | open | Old checklist says to log outstanding invoices as bad debt, but current explanation focused on preventing future invoices. |
+| AQ-156 | BIRT data integrity report | Is AM-027 still active on the last day? | answered | Not as an ideal manual task; it is a prime candidate for automation/notification. |
+| AQ-157 | BIRT data integrity report | Is the Data Integrity Report Confluence page current? | answered | Yes. |
+| AQ-158 | BIRT data integrity report | What does the BIRT integrity report check? | answered | PPQ record anomalies. |
+| AQ-159 | BIRT data integrity report | Which billing run does the report protect? | answered | Classic. |
+| AQ-160 | BIRT data integrity report | What action is taken when the report finds issues? | answered | Usually manual follow-up. |
+| AQ-161 | BIRT data integrity report | What is the AM-027 completion check? | answered | Today it is a checkbox that it was done; if automated, proof that it ran should be captured. |
+| AQ-162 | SaasAnt invoice catch-all | Is AM-028 still active as a last-day task? | answered | It can probably go away as a monthly catch-all. |
+| AQ-163 | SaasAnt invoice catch-all | What was the purpose of AM-028? | answered | Catch cases where a Classic customer migrated to invoices instead of automatic payment and the invoice did not get into QBDT. |
+| AQ-164 | SaasAnt invoice catch-all | Which customers does AM-028 impact? | answered | Classic only. |
+| AQ-165 | SaasAnt invoice catch-all | Where should this process happen instead? | answered | During the manual invoice-customer setup process, covered by the `Invoice Customers` Confluence page. |
+| AQ-166 | Blacklisted paid plans | Should AM-029 remain separate? | answered | No; roll it into the integrity check that needs automation. |
+| AQ-167 | Blacklisted paid plans | Is the related Confluence page current/useful? | answered | Yes; `Query for blacklisted paid plans` identifies how to find the accounts. |
+| AQ-168 | Blacklisted paid plans | What does blacklisted mean? | answered | Someone was found abusing the service and manually placed in a Blacklist table. |
+| AQ-169 | Blacklisted paid plans | What system/customer set is in scope? | answered | Classic; historically a manual step. |
+| AQ-170 | Blacklisted paid plans | What is the desired future-state artifact? | answered | Automation should generate an artifact proving the check was performed and showing sanitized result status. |
 
 ## Answered Questions
 
@@ -134,3 +243,111 @@ bank details, or production database records in this file.
 | AQ-059 | BofA checking reconciliation | Expected AM-008 source checklist: BofA checking statement PDF in yearly folder, `887` BofA merchant statement, `888` BofA merchant statement, AMEX merchant statement, `Revenues Worksheet - MMYYYY.xlsx`, monthly `Deposits` folder, and final BofA checking reconciliation report after completion. | 2026-08-19 |
 | AQ-060 | BofA checking reconciliation | BofA checking is most likely ready on the 1st. Merchant statements may also be ready on the 1st, but they can take a couple of days before they are accessible. | 2026-08-19 |
 | AQ-061 | BofA checking reconciliation | The Day 1 AM-008 reminder should say to start checking source availability rather than implying the full reconciliation is ready. | 2026-08-19 |
+| AQ-062 | Emprise Bank checking | AM-009 is retired because the SendThisFile Emprise Bank account has been closed. | 2026-08-19 |
+| AQ-063 | Emprise Bank checking | There is no Confluence page for this retired workflow. | 2026-08-19 |
+| AQ-064 | Emprise Bank checking | Emprise Bank statements are stored in the Emprise Bank folder, which is the historical statement source of truth. | 2026-08-19 |
+| AQ-065 | Emprise Bank checking | No current reconciliation completion check is needed because the account is closed; historical information remains in QBDT. | 2026-08-19 |
+| AQ-066 | PayPal reconciliation | AM-010 is an active monthly task. | 2026-08-19 |
+| AQ-067 | PayPal reconciliation | The `Reconcile PayPal Statements` Confluence page is current. | 2026-08-19 |
+| AQ-068 | PayPal reconciliation | PayPal statements/reports are stored in the PayPal folder. | 2026-08-19 |
+| AQ-069 | PayPal reconciliation | The source of truth is the report in the PayPal folder. | 2026-08-19 |
+| AQ-070 | PayPal reconciliation | AM-010 is complete once the PayPal account has been reconciled in QBDT. | 2026-08-19 |
+| AQ-071 | PayPal reconciliation | Occasionally money is transferred from the PayPal account to BofA checking. When this happens, the practice is typically to leave about `$1,000` in PayPal. | 2026-08-19 |
+| AQ-072 | Investment reconciliation | AM-011 is active. The only current investment is LiveOakBank. | 2026-08-19 |
+| AQ-073 | Investment reconciliation | The `Reconcile Investment Statements` Confluence page is current. | 2026-08-19 |
+| AQ-074 | Investment reconciliation | Only LiveOakBank is in scope for current investment reconciliation. | 2026-08-19 |
+| AQ-075 | Investment reconciliation | Investment statements are stored in the monthly folders under `Investment Accounts`. That folder holds both the original statement and the QBDT reconciliation output. | 2026-08-19 |
+| AQ-076 | Investment reconciliation | The PDF statement is the source of truth. | 2026-08-19 |
+| AQ-077 | Investment reconciliation | AM-011 is complete once the LiveOakBank account is reconciled in QBDT. | 2026-08-19 |
+| AQ-078 | Classic refund review | AM-012 should be treated as a review/control of the Classic refund process rather than a generic refund-cancellations task. | 2026-08-19 |
+| AQ-079 | Classic refund review | AM-012 concerns specific Classic customer refunds. App refunds are requested via support. | 2026-08-19 |
+| AQ-080 | Classic refund review | An automated cron job attempts to process refunds for Classic annual customers. It emails reports for pending refunds that hit a threshold and completed refunds to `accounting@`, which feeds into JSM. | 2026-08-19 |
+| AQ-081 | Classic refund review | The automated Classic refund job pauses and does not process refunds when a single refund is over `$50` or a single account has more than one refund. Those cases require review and manual processing. | 2026-08-19 |
+| AQ-082 | Classic refund review | For paused automated refunds, Scott manually pulls up the customer/account to see what happened. Sometimes customers signed up more than once, generating multiple refunds. Most are pushed through, but some have been incorrect. | 2026-08-19 |
+| AQ-083 | Classic refund review | Classic refunds are pushed through Cybersource by the Classic system. App refunds are done directly in Chargebee. | 2026-08-19 |
+| AQ-084 | Classic refund review | AM-012 is complete when refunds are clear and a completed refunds email has hit the `accounting@` JSM queue. | 2026-08-19 |
+| AQ-085 | Contractor vendor payments | AM-013 remains active for Days 1-7. | 2026-08-19 |
+| AQ-086 | Contractor vendor payments | The `Contractor Vendor Payments` Confluence page is current. | 2026-08-19 |
+| AQ-087 | Contractor vendor payments | Contractor invoices usually arrive by email to `accounting@` or directly to Scott. | 2026-08-19 |
+| AQ-088 | Contractor vendor payments | Scott approves contractor invoices. | 2026-08-19 |
+| AQ-089 | Contractor vendor payments | Contractor invoices are entered as bills in QuickBooks Desktop before payment. | 2026-08-19 |
+| AQ-090 | Contractor vendor payments | AM-013 is complete when payment has been made. | 2026-08-19 |
+| AQ-091 | Enterprise failed billing | AM-014 remains active around Day 4. | 2026-08-19 |
+| AQ-092 | Enterprise failed billing | The failed billing list still comes from the internal-alert email. | 2026-08-19 |
+| AQ-093 | Enterprise failed billing | The internal-alert distribution list has two members: Scott and a developer. | 2026-08-19 |
+| AQ-094 | Enterprise failed billing | Scott forwards the failed billing list to the support person, who reaches out to each customer and helps them update their credit card. | 2026-08-19 |
+| AQ-095 | Enterprise failed billing | AM-014 is a hand-off to support. | 2026-08-19 |
+| AQ-096 | Hartford insurance premium | AM-015 is not a manual pay task. Hartford is set up to auto-draft from checking on the 10th. | 2026-08-19 |
+| AQ-097 | Hartford insurance premium | AM-015 should be a verification step and a reminder to download the invoice. | 2026-08-19 |
+| AQ-098 | Hartford insurance premium | The Hartford invoice is usually generated around the 20th of the month. | 2026-08-19 |
+| AQ-099 | BofA credit card reconciliation | The BofA credit card billing cycle closes on the 6th of the month and the statement is usually ready by the 7th. | 2026-08-19 |
+| AQ-100 | BofA credit card reconciliation | The `Reconcile Bank of America Credit Cards` Confluence page is still current, but probably needs to be reviewed/revived. | 2026-08-19 |
+| AQ-101 | BofA credit card reconciliation | BofA credit card statements are stored in the current-year `Bank of America\Credit Card Statement` folder, for example `2026\Bank of America\Credit Card Statement`. | 2026-08-19 |
+| AQ-102 | BofA credit card reconciliation | Current-month credit card invoices and receipts are stored in the monthly `Invoices and Receipts` folder, for example `2026\202608\Invoices and Receipts`. | 2026-08-19 |
+| AQ-103 | BofA credit card reconciliation | There are four credit cards, but they roll up into a master account, so there is only one statement. | 2026-08-19 |
+| AQ-104 | BofA credit card reconciliation | AM-016 completion is the QBDT reconciliation. | 2026-08-19 |
+| AQ-105 | Financial statements | AM-017 should be an active Day 7 task, but it often gets pushed back. The monthly close process needs to be firmer about this date. | 2026-08-19 |
+| AQ-106 | Financial statements | The shareholder financial statement package usually includes P&L, balance sheet, and any other requested reports. | 2026-08-19 |
+| AQ-107 | Financial statements | Reports are mostly generated from QBDT, but a spreadsheet may also be involved. Scott would like to automate this if practical. | 2026-08-19 |
+| AQ-108 | Financial statements | Final financial statement packages should be stored in the monthly `YYYYMM` folder. | 2026-08-19 |
+| AQ-109 | Financial statements | Statements are usually delivered by email today, but a better delivery method is needed. | 2026-08-19 |
+| AQ-110 | Financial statements | AM-017 is complete when the reports have been delivered and questions answered. | 2026-08-19 |
+| AQ-111 | Payroll processing | AM-018 remains an active Day 10 task. | 2026-08-20 |
+| AQ-112 | Payroll processing | The `Processing Payroll` Confluence page is current: `https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/20414465/Processing+Payroll`. | 2026-08-20 |
+| AQ-113 | Payroll processing | Payroll is believed to use QuickBooks Desktop Enhanced Payroll with direct deposit. | 2026-08-20 |
+| AQ-114 | Payroll processing | The top section of the `Processing Payroll` Confluence page describes the direct-deposit submission timing rule. Use that page as the timing source rather than hard-coding a lead time until reviewed. | 2026-08-20 |
+| AQ-115 | Payroll processing | No separate reports or approvals are needed before submitting payroll. Scott manually reviews each paycheck, then submits payroll. | 2026-08-20 |
+| AQ-116 | Payroll processing | AM-018 is complete when payroll confirmation is received. | 2026-08-20 |
+| AQ-117 | Monthly distribution | AM-019 remains an active monthly review task. | 2026-08-20 |
+| AQ-118 | Monthly distribution | Distribution review considers cash balance, profitability, shareholder decision, tax planning, and related factors. | 2026-08-20 |
+| AQ-119 | Monthly distribution | The majority shareholder decides whether a distribution is needed. | 2026-08-20 |
+| AQ-120 | Monthly distribution | Distributions are recorded in QBDT using the memorized transaction named `Monthly Distribution`. | 2026-08-20 |
+| AQ-121 | Monthly distribution | Distributions are paid manually through the BofA portal. | 2026-08-20 |
+| AQ-122 | Monthly distribution | Completion evidence is saved PDF captures of successful BofA transfers, one per shareholder, stored in the monthly `Invoices and Receipts` directory using the format `XXX-DIST-MMDDYYYY.pdf`, where `XXX` is the shareholder initials. | 2026-08-20 |
+| AQ-123 | Payroll tax deposits | AM-020 remains active and should be done after payroll. Actual due dates are displayed in QBDT Payroll Center > Pay Liabilities. | 2026-08-20 |
+| AQ-124 | Payroll tax deposits | AM-020 is tied to the `Processing Payroll` Confluence page, specifically the `Make Payroll Tax Deposits` section for Federal 941, Kansas KW-5, and Missouri MO-941. | 2026-08-20 |
+| AQ-125 | Payroll tax deposits | Federal 941 deposits, Kansas KW-5, and Missouri MO-941 are all paid monthly. | 2026-08-20 |
+| AQ-126 | Payroll tax deposits | Payment portals are EFTPS.gov for federal, KDOR for Kansas, and mytax.mo.gov for Missouri. | 2026-08-20 |
+| AQ-127 | Payroll tax deposits | Payroll tax deposits can be done immediately after payroll as long as funds are available and each filing/payment is completed before the due date shown in QBDT Payroll Center > Pay Liabilities. | 2026-08-20 |
+| AQ-128 | Payroll tax deposits | Save each filing/payment PDF in the monthly `Invoices and Receipts` folder. Federal: `EFTPS - RCPT - MMDDYYYY.pdf`. Kansas: `KS Withholding - RCPT - MMDDYYYY.pdf` and `KS Withholding - RCPT2 - MMDDYYYY.pdf` because Kansas is reported semi-monthly. Missouri: `MO-941 - MMDDYYYY.pdf`, `MO-941 - RCPT - MMDDYYYY.pdf`, and `MO-941 - RCPT2 - MMDDYYYY.pdf`. | 2026-08-20 |
+| AQ-129 | PPQ integrity check | AM-021 is still somewhat active. It was created because of an earlier issue and may not be a common problem now, but its purpose is to maintain Classic payment processing queue integrity. | 2026-08-20 |
+| AQ-130 | PPQ integrity check | PPQ means `paymentprocessingqueue`. | 2026-08-20 |
+| AQ-131 | PPQ integrity check | Outstanding PPQ records are checked in the Classic Oracle DB. | 2026-08-20 |
+| AQ-132 | PPQ integrity check | A PPQ record is outstanding/not processed if it has an action date before today. This should not happen. | 2026-08-20 |
+| AQ-133 | PPQ integrity check | If outstanding PPQ records are found, research first, then manually adjust as appropriate. Manual adjustment remains a human-controlled action. | 2026-08-20 |
+| AQ-134 | PPQ integrity check | AM-021 is complete when the PPQ query is clean. | 2026-08-20 |
+| AQ-135 | Pay stubs | AM-022 should not be treated as a monthly pay-stub send task. Employees can log into the QuickBooks portal to get pay stubs, or request a one-off copy from Scott. | 2026-08-20 |
+| AQ-136 | AMEX chargebacks and cancellations | AM-023 is maybe active as a Day 15 reminder/review. It is primarily a reminder to check if no AMEX chargeback/cancellation notification has arrived by email or mail. | 2026-08-20 |
+| AQ-137 | AMEX chargebacks and cancellations | AM-023 is separate from AMEX merchant-statement reconciliation. This review gives SendThisFile an opportunity to challenge a chargeback submitted by a cardholder. | 2026-08-20 |
+| AQ-138 | AMEX chargebacks and cancellations | AMEX chargeback/cancellation notices may arrive through the AMEX portal, email, or mail. | 2026-08-20 |
+| AQ-139 | AMEX chargebacks and cancellations | For an AMEX chargeback, review and challenge if necessary. Most times the chargeback is accepted, but it is critical to make sure the customer is actually canceled in the Classic system; otherwise billing could continue. Chargebacks can negatively affect merchant ranking and increase fees. | 2026-08-20 |
+| AQ-140 | AMEX chargebacks and cancellations | AMEX chargebacks are Classic-only because only Classic SendThisFile accepts AMEX. | 2026-08-20 |
+| AQ-141 | AMEX chargebacks and cancellations | AM-023 completion is the review. | 2026-08-20 |
+| AQ-142 | BCBS payment | AM-024 remains active around Day 25. | 2026-08-20 |
+| AQ-143 | BCBS payment | The `Paying BCBS` Confluence page is current: `https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/42532865/Paying+BCBS`. | 2026-08-20 |
+| AQ-144 | BCBS payment | BCBS is paid manually through the portal. | 2026-08-20 |
+| AQ-145 | BCBS payment | The BCBS invoice is usually available around the 12th of the month. | 2026-08-20 |
+| AQ-146 | BCBS payment | Save BCBS files in the monthly `Invoices and Receipts` folder. Invoice format: `BCBS - INV - MMDDYYYY.pdf`. Payment confirmation format: `BCBS - RCPT - MMDDYYYY.pdf`. | 2026-08-20 |
+| AQ-147 | BCBS payment | AM-024 completion evidence is payment confirmation. The vendor bill and vendor payment still have to be made in QBDT for tracking. | 2026-08-20 |
+| AQ-148 | Chargeback and cancellation review | AM-025 should be treated as the same chargeback/cancellation review as AM-023. The likely original goal was to check twice per month: once in the middle of the month and once near the end. | 2026-08-20 |
+| AQ-149 | Inactive Classic invoice customers | AM-026 remains active on the last day of the month. | 2026-08-20 |
+| AQ-150 | Inactive Classic invoice customers | AM-026 exists as another check to make sure canceled or non-paying Classic invoice customers are removed from PPQ. PPQ drives automated billing and provides invoice information for QBDT import through SaasAnt Transactions. | 2026-08-20 |
+| AQ-151 | Inactive Classic invoice customers | When trying to collect payment, Classic enterprise forms (`EP forms`) can be inactivated through the admin app with the hope that the customer reaches out and submits payment. | 2026-08-20 |
+| AQ-152 | Inactive Classic invoice customers | AM-026 applies only to Classic invoice customers. | 2026-08-20 |
+| AQ-153 | Inactive Classic invoice customers | The customer can be handled from Classic admin or manually by querying the Classic database. Manual database changes remain human-controlled. | 2026-08-20 |
+| AQ-154 | Inactive Classic invoice customers | This is a preventative step so another invoice is not generated. | 2026-08-20 |
+| AQ-156 | BIRT data integrity report | AM-027 should not remain only a manual last-day task if it can be automated. It is a prime candidate for automation/notification. | 2026-08-20 |
+| AQ-157 | BIRT data integrity report | The `Data Integrity Report` Confluence page is current. | 2026-08-20 |
+| AQ-158 | BIRT data integrity report | The BIRT integrity report checks PPQ for record anomalies. | 2026-08-20 |
+| AQ-159 | BIRT data integrity report | The report protects Classic credit-card billing. | 2026-08-20 |
+| AQ-160 | BIRT data integrity report | If the report finds issues, follow-up is usually manual. | 2026-08-20 |
+| AQ-161 | BIRT data integrity report | Current completion is checking that it was done. If automated, completion should be proof that the check was performed. | 2026-08-20 |
+| AQ-162 | SaasAnt invoice catch-all | AM-028 can probably be retired as a last-day monthly catch-all. | 2026-08-20 |
+| AQ-163 | SaasAnt invoice catch-all | AM-028 was a catch-all for cases where a Classic customer was migrated to invoice billing instead of automatic payment and the invoice did not get into QBDT. | 2026-08-20 |
+| AQ-164 | SaasAnt invoice catch-all | AM-028 only impacts Classic. | 2026-08-20 |
+| AQ-165 | SaasAnt invoice catch-all | This should be handled during the manual process of setting up the customer, covered by the `Invoice Customers` Confluence page: `https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/111706113/Invoice+Customers`. | 2026-08-20 |
+| AQ-166 | Blacklisted paid plans | AM-029 should be rolled into the Classic integrity check that needs automation. | 2026-08-20 |
+| AQ-167 | Blacklisted paid plans | The `Query for blacklisted paid plans` Confluence page identifies how to find the accounts: `https://sendthisfile.atlassian.net/wiki/spaces/BIZ/pages/44662785/Query+for+blacklisted+paid+plans`. | 2026-08-20 |
+| AQ-168 | Blacklisted paid plans | Blacklisted means SendThisFile found someone abusing the service and manually placed them in a Blacklist table. | 2026-08-20 |
+| AQ-169 | Blacklisted paid plans | This has historically been a manual Classic step, but it can be improved. | 2026-08-20 |
+| AQ-170 | Blacklisted paid plans | There is currently no artifact. Future automation should generate an artifact proving the check was performed and showing sanitized result status. | 2026-08-20 |
