@@ -106,6 +106,10 @@ class EmailMessage:
     received_at: str | None = None
     preview: str | None = None
     categories: tuple[str, ...] = ()
+    flag_status: str | None = None
+    flag_start_at: str | None = None
+    flag_due_at: str | None = None
+    flag_completed_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -388,6 +392,13 @@ def graph_message_to_email_payload(
         "received_at": _optional_string(payload.get("receivedDateTime")),
         "preview": body_text or preview,
         "categories": _string_tuple(payload.get("categories", ())),
+        "flag_status": _graph_flag_status(payload.get("flag")),
+        "flag_start_at": _graph_flag_datetime(payload.get("flag"), "startDateTime"),
+        "flag_due_at": _graph_flag_datetime(payload.get("flag"), "dueDateTime"),
+        "flag_completed_at": _graph_flag_datetime(
+            payload.get("flag"),
+            "completedDateTime",
+        ),
     }
 
 
@@ -413,6 +424,27 @@ def _graph_body_text(body: Any) -> str | None:
     if isinstance(content_type, str) and content_type.strip().lower() == "html":
         return _html_to_text(content)
     return content
+
+
+def _graph_flag_status(flag: Any) -> str | None:
+    if not isinstance(flag, Mapping):
+        return None
+    return _optional_string(flag.get("flagStatus"))
+
+
+def _graph_flag_datetime(flag: Any, key: str) -> str | None:
+    if not isinstance(flag, Mapping):
+        return None
+    value = flag.get(key)
+    if not isinstance(value, Mapping):
+        return None
+    date_time = _optional_string(value.get("dateTime"))
+    if date_time is None or not date_time.strip():
+        return None
+    time_zone = _optional_string(value.get("timeZone"))
+    if time_zone is None or not time_zone.strip():
+        return date_time
+    return f"{date_time} {time_zone}"
 
 
 def _html_to_text(value: str) -> str:
@@ -633,6 +665,10 @@ def _normalize_message(payload: Mapping[str, Any], *, mailbox: str) -> EmailMess
         received_at=_optional_string(payload.get("received_at")),
         preview=_optional_string(payload.get("preview")),
         categories=_string_tuple(payload.get("categories", ())),
+        flag_status=_optional_string(payload.get("flag_status")),
+        flag_start_at=_optional_string(payload.get("flag_start_at")),
+        flag_due_at=_optional_string(payload.get("flag_due_at")),
+        flag_completed_at=_optional_string(payload.get("flag_completed_at")),
     )
 
 

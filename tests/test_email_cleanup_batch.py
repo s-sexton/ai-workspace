@@ -41,6 +41,7 @@ def test_generate_email_cleanup_batch_numbers_current_mailbox_items(tmp_path):
     assert "Recommendation: Move to Clarity/Noise" in batch
     assert "Item 2: Date: 2026-07-17T07:55:00-05:00" in batch
     assert "Subject: Customer escalation" in batch
+    assert "Follow-up: flagged, due 2026-07-18T17:00:00 UTC" in batch
     assert "Recommendation: Move to Clarity/Review" in batch
     assert "other-mailbox-message" not in batch
     assert "duplicate older copy" not in batch
@@ -314,6 +315,8 @@ def _seed_email_memory(memory_path):
             sender_or_owner="customer@example.invalid",
             updated_at="2026-07-17T07:55:00-05:00",
             first_seen_run_id=run.run_id,
+            flag_status="flagged",
+            flag_due_at="2026-07-18T17:00:00 UTC",
         )
         store.record_classification(
             item_id=review_item.item_id,

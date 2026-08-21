@@ -484,6 +484,10 @@ mailbox, and recommendations point to `Clarity/Review`, `Clarity/Noise`,
 JSON manifest keeps those numbers machine-readable so later approval commands
 can target the current batch instead of historical pending actions.
 
+For Outlook mailboxes, Clarity also records Microsoft Graph follow-up flag
+metadata when available. Flagged items show a compact `Follow-up` line in the
+cleanup batch with the Outlook flag status and due/completed date metadata.
+
 For Gmail mailboxes, the batch is grouped for fast cleanup:
 
 -   `Move To Specific Clarity Folders` for learned or known personal folders,

@@ -543,6 +543,17 @@ def test_graph_message_payload_maps_headers_into_email_metadata():
             "receivedDateTime": "2026-07-09T15:30:00Z",
             "bodyPreview": "Please review this.",
             "categories": ["clarity"],
+            "flag": {
+                "flagStatus": "flagged",
+                "startDateTime": {
+                    "dateTime": "2026-07-09T15:30:00",
+                    "timeZone": "UTC",
+                },
+                "dueDateTime": {
+                    "dateTime": "2026-07-10T17:00:00",
+                    "timeZone": "UTC",
+                },
+            },
             "internetMessageHeaders": [
                 {
                     "name": "Return-Path",
@@ -580,6 +591,9 @@ def test_graph_message_payload_maps_headers_into_email_metadata():
     assert message.received_at == "2026-07-09T15:30:00Z"
     assert message.preview == "Please review this."
     assert message.categories == ("clarity",)
+    assert message.flag_status == "flagged"
+    assert message.flag_start_at == "2026-07-09T15:30:00 UTC"
+    assert message.flag_due_at == "2026-07-10T17:00:00 UTC"
     assert message.spf == "pass"
     assert message.dkim == "pass"
     assert message.dmarc == "pass"

@@ -84,6 +84,9 @@ class ItemSeenRecord:
     content_hash: str | None
     first_seen_run_id: str
     last_seen_run_id: str
+    flag_status: str | None = None
+    flag_due_at: str | None = None
+    flag_completed_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -198,6 +201,9 @@ class SourceMemoryRecord:
     updated_at: str | None
     label: str | None
     reason: str | None
+    flag_status: str | None = None
+    flag_due_at: str | None = None
+    flag_completed_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -290,6 +296,24 @@ class DuckDbMemoryStore:
                 first_seen_run_id VARCHAR NOT NULL,
                 last_seen_run_id VARCHAR NOT NULL
             )
+            """
+        )
+        self._connection.execute(
+            """
+            ALTER TABLE items_seen
+            ADD COLUMN IF NOT EXISTS flag_status VARCHAR
+            """
+        )
+        self._connection.execute(
+            """
+            ALTER TABLE items_seen
+            ADD COLUMN IF NOT EXISTS flag_due_at VARCHAR
+            """
+        )
+        self._connection.execute(
+            """
+            ALTER TABLE items_seen
+            ADD COLUMN IF NOT EXISTS flag_completed_at VARCHAR
             """
         )
         self._connection.execute(
@@ -537,6 +561,9 @@ class DuckDbMemoryStore:
         updated_at: str | None = None,
         content_hash: str | None = None,
         last_seen_run_id: str | None = None,
+        flag_status: str | None = None,
+        flag_due_at: str | None = None,
+        flag_completed_at: str | None = None,
     ) -> ItemSeenRecord:
         """Record metadata for a processed source item."""
 
@@ -550,6 +577,9 @@ class DuckDbMemoryStore:
             content_hash,
             first_seen_run_id,
             last_seen_run_id,
+            flag_status,
+            flag_due_at,
+            flag_completed_at,
         )
         record = ItemSeenRecord(
             item_id=_new_id(),
@@ -562,15 +592,19 @@ class DuckDbMemoryStore:
             content_hash=content_hash,
             first_seen_run_id=_required_text(first_seen_run_id, "first_seen_run_id"),
             last_seen_run_id=last_seen_run_id or first_seen_run_id,
+            flag_status=flag_status,
+            flag_due_at=flag_due_at,
+            flag_completed_at=flag_completed_at,
         )
         self._connection.execute(
             """
             INSERT INTO items_seen
             (
                 item_id, source_id, external_id, item_type, subject, sender_or_owner,
-                updated_at, content_hash, first_seen_run_id, last_seen_run_id
+                updated_at, content_hash, first_seen_run_id, last_seen_run_id,
+                flag_status, flag_due_at, flag_completed_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 record.item_id,
@@ -583,6 +617,9 @@ class DuckDbMemoryStore:
                 record.content_hash,
                 record.first_seen_run_id,
                 record.last_seen_run_id,
+                record.flag_status,
+                record.flag_due_at,
+                record.flag_completed_at,
             ],
         )
         return record
@@ -596,7 +633,7 @@ class DuckDbMemoryStore:
             """
             SELECT item_id, source_id, external_id, item_type, subject,
                    sender_or_owner, updated_at, content_hash, first_seen_run_id,
-                   last_seen_run_id
+                   last_seen_run_id, flag_status, flag_due_at, flag_completed_at
             FROM items_seen
             WHERE item_id = ? OR external_id = ?
             ORDER BY item_id DESC
@@ -1280,7 +1317,8 @@ class DuckDbMemoryStore:
                 """
                 SELECT i.item_id, i.external_id, s.source_type, s.display_name,
                        s.scope_label, i.item_type, i.subject, i.sender_or_owner,
-                       i.updated_at, c.label, c.reason
+                       i.updated_at, c.label, c.reason, i.flag_status,
+                       i.flag_due_at, i.flag_completed_at
                 FROM items_seen i
                 JOIN sources s ON s.source_id = i.source_id
                 LEFT JOIN classifications c ON c.item_id = i.item_id
@@ -1295,7 +1333,8 @@ class DuckDbMemoryStore:
                 """
                 SELECT i.item_id, i.external_id, s.source_type, s.display_name,
                        s.scope_label, i.item_type, i.subject, i.sender_or_owner,
-                       i.updated_at, c.label, c.reason
+                       i.updated_at, c.label, c.reason, i.flag_status,
+                       i.flag_due_at, i.flag_completed_at
                 FROM items_seen i
                 JOIN sources s ON s.source_id = i.source_id
                 JOIN classifications c ON c.item_id = i.item_id

@@ -856,6 +856,7 @@ class GraphEmailReadTransport:
             "receivedDateTime",
             "bodyPreview",
             "categories",
+            "flag",
         ]
         if self.include_body_text:
             selected_fields.append("body")

@@ -856,7 +856,7 @@ def test_graph_email_read_transport_lists_messages_and_fetches_headers():
         "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
         "mailFolders/inbox/messages?"
         "%24top=2&%24orderby=receivedDateTime+desc&%24select="
-        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories"
+        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories%2Cflag"
     )
     headers_url = (
         "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/messages/"
@@ -879,6 +879,13 @@ def test_graph_email_read_transport_lists_messages_and_fetches_headers():
                             "receivedDateTime": "2026-07-09T15:30:00Z",
                             "bodyPreview": "Review this.",
                             "categories": ["clarity"],
+                            "flag": {
+                                "flagStatus": "flagged",
+                                "dueDateTime": {
+                                    "dateTime": "2026-07-10T17:00:00",
+                                    "timeZone": "UTC",
+                                },
+                            },
                         }
                     ]
                 },
@@ -910,6 +917,8 @@ def test_graph_email_read_transport_lists_messages_and_fetches_headers():
     assert message["mailbox"] == "clarity@sendthisfile.ai"
     assert message["subject"] == "Please review"
     assert message["sender"] == "scott.sexton@sendthisfile.com"
+    assert message["flag_status"] == "flagged"
+    assert message["flag_due_at"] == "2026-07-10T17:00:00 UTC"
     assert message["authentication_results"] == (
         "mx.example; spf=pass; dkim=pass; dmarc=pass",
     )
@@ -924,7 +933,7 @@ def test_graph_email_read_transport_uses_mailbox_identity_override():
         "https://graph.example/v1.0/users/scott.dk%40sendthisfile1.onmicrosoft.com/"
         "mailFolders/inbox/messages?"
         "%24top=1&%24orderby=receivedDateTime+desc&%24select="
-        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories"
+        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories%2Cflag"
     )
     headers_url = (
         "https://graph.example/v1.0/users/scott.dk%40sendthisfile1.onmicrosoft.com/"
@@ -976,7 +985,7 @@ def test_graph_email_read_transport_can_include_body_text():
         "mailFolders/inbox/messages?"
         "%24top=1&%24orderby=receivedDateTime+desc&%24select="
         "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2C"
-        "bodyPreview%2Ccategories%2Cbody"
+        "bodyPreview%2Ccategories%2Cflag%2Cbody"
     )
     headers_url = (
         "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/messages/"
@@ -1046,7 +1055,7 @@ def test_graph_email_read_transport_rejects_missing_value_list():
         "https://graph.example/v1.0/users/clarity%40sendthisfile.ai/"
         "mailFolders/inbox/messages?"
         "%24top=1&%24orderby=receivedDateTime+desc&%24select="
-        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories"
+        "id%2Csubject%2Cfrom%2Csender%2CreceivedDateTime%2CbodyPreview%2Ccategories%2Cflag"
     )
     client = GraphEmailReadTransport(
         access_token="access-token",

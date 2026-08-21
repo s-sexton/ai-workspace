@@ -328,6 +328,9 @@ def _record_email_memory(
                 updated_at=message.received_at,
                 content_hash=_message_hash(message),
                 first_seen_run_id=run.run_id,
+                flag_status=message.flag_status,
+                flag_due_at=message.flag_due_at,
+                flag_completed_at=message.flag_completed_at,
             )
             store.record_item_learning_features(
                 item_id=item.item_id,
@@ -489,6 +492,9 @@ def _message_hash(message: EmailMessage) -> str:
             message.dkim or "",
             message.dmarc or "",
             message.received_at or "",
+            message.flag_status or "",
+            message.flag_due_at or "",
+            message.flag_completed_at or "",
             message.preview or "",
         )
     )
@@ -524,6 +530,10 @@ def _safe_memory_message(message: EmailMessage) -> EmailMessage:
         dkim=message.dkim,
         dmarc=message.dmarc,
         exchange_auth_as=message.exchange_auth_as,
+        flag_status=message.flag_status,
+        flag_start_at=message.flag_start_at,
+        flag_due_at=message.flag_due_at,
+        flag_completed_at=message.flag_completed_at,
     )
 
 

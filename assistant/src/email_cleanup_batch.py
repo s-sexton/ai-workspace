@@ -494,7 +494,8 @@ def _latest_mailbox_run_records(
         """
         SELECT i.item_id, i.external_id, s.source_type, s.display_name,
                s.scope_label, i.item_type, i.subject, i.sender_or_owner,
-               i.updated_at, c.label, c.reason
+               i.updated_at, c.label, c.reason, i.flag_status, i.flag_due_at,
+               i.flag_completed_at
         FROM items_seen i
         JOIN sources s ON s.source_id = i.source_id
         LEFT JOIN classifications c ON c.item_id = i.item_id
@@ -663,13 +664,29 @@ def _record_lines(
     *,
     recommendation: BatchRecommendation,
 ) -> list[str]:
-    return [
+    lines = [
         f"Item {index}: Date: {record.updated_at or 'Unknown'}",
         f"   From: {record.sender_or_owner or 'Unknown'}",
         f"   Subject: {record.subject}",
         f"   Recommendation: {_recommendation_text(recommendation)}",
         f"   Why: {recommendation.reason}",
     ]
+    follow_up = _follow_up_text(record)
+    if follow_up is not None:
+        lines.insert(3, f"   Follow-up: {follow_up}")
+    return lines
+
+
+def _follow_up_text(record: SourceMemoryRecord) -> str | None:
+    status = (record.flag_status or "").strip()
+    if not status or status.casefold() == "notflagged":
+        return None
+    parts = [status]
+    if record.flag_due_at:
+        parts.append(f"due {record.flag_due_at}")
+    if record.flag_completed_at:
+        parts.append(f"completed {record.flag_completed_at}")
+    return ", ".join(parts)
 
 
 def _recommendation_text(recommendation: BatchRecommendation) -> str:
